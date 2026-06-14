@@ -1,0 +1,155 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Company {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  logo      String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users         User[]
+  sedes         Sede[]
+  professionals Professional[]
+  plans         Plan[]
+  holidays      Holiday[]
+  subscription  Subscription?
+  payments      Payment[]
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  password  String
+  image     String?
+  role      String   @default("USER") // SUPER_ADMIN | COMPANY_ADMIN | USER
+  companyId String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company Company?  @relation(fields: [companyId], references: [id])
+}
+
+model Subscription {
+  id                String   @id @default(cuid())
+  companyId         String   @unique
+  planName          String   @default("BASIC") // BASIC | PRO | ENTERPRISE
+  billingMethod     String   @default("MONTHLY") // MONTHLY | QUARTERLY | ANNUAL
+  price             Float    @default(29.99)
+  currency          String   @default("EUR")
+  status            String   @default("TRIAL") // ACTIVE | PAST_DUE | CANCELLED | TRIAL
+  trialEndsAt       DateTime?
+  currentPeriodStart DateTime @default(now())
+  currentPeriodEnd  DateTime @default(now())
+  maxProfessionals  Int      @default(5)
+  maxSedes          Int      @default(3)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  company  Company   @relation(fields: [companyId], references: [id])
+  payments Payment[]
+}
+
+model Payment {
+  id            String   @id @default(cuid())
+  subscriptionId String
+  companyId     String
+  amount        Float
+  currency      String   @default("EUR")
+  status        String   @default("PENDING") // PENDING | PAID | FAILED | REFUNDED
+  paymentDate   DateTime?
+  dueDate       DateTime
+  method        String   @default("CARD") // CARD | TRANSFER | CASH
+  invoiceNumber String?
+  notes         String?
+  createdAt     DateTime @default(now())
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id])
+  company      Company     @relation(fields: [companyId], references: [id])
+}
+
+model Sede {
+  id               String   @id @default(cuid())
+  companyId        String
+  name             String
+  city             String   @default("")
+  province         String   @default("")
+  task             String   @default("")
+  email            String   @default("")
+  phone            String   @default("")
+  morningEnabled   Boolean  @default(true)
+  afternoonEnabled Boolean  @default(true)
+  color            String   @default("#3b82f6")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  plans   Plan[]
+
+  @@index([companyId])
+}
+
+model Professional {
+  id            String   @id @default(cuid())
+  companyId     String
+  firstName     String
+  lastName      String
+  alias         String
+  type          String   @default("USER") // USER | ADMINISTRADOR
+  category      String   @default("")
+  username      String   @default("")
+  email         String   @default("")
+  phone         String   @default("")
+  permissions   String   @default("") // comma-separated tasks
+  assignedSedes String   @default("") // comma-separated sede names
+  startDate     DateTime?
+  endDate       String   @default("INDEFINIDO")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, alias])
+  @@index([companyId])
+}
+
+model Plan {
+  id                String   @id @default(cuid())
+  companyId         String
+  sedeId            String
+  date              String   // YYYY-MM-DD
+  turn              String   // MANANA | TARDE
+  professionalAlias String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  sede    Sede    @relation(fields: [sedeId], references: [id], onDelete: Cascade)
+
+  @@unique([sedeId, date, turn])
+  @@index([companyId, date])
+  @@index([companyId, sedeId])
+}
+
+model Holiday {
+  id        String   @id @default(cuid())
+  companyId String
+  province  String
+  date      String   // YYYY-MM-DD
+  createdAt DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, province, date])
+  @@index([companyId])
+}

@@ -1,0 +1,1846 @@
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[log] [HMR] connected
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 635ms
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 329ms
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 265ms
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[log] [HMR] connected
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 146ms
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 162ms
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 190ms
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 124ms
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 125ms
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 119ms
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 202ms
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 147ms
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 157ms
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 145ms
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 149ms
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 142ms
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 146ms
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 146ms
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 146ms
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 144ms
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 143ms
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 146ms
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 162ms
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 140ms
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 145ms
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 144ms
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 146ms
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 165ms
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 155ms
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 165ms
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 57ms
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 143ms
+[log] [Fast Refresh] rebuilding
+[error] ./src/app/page.tsx:4:1
+Module not found: Can't resolve '@/components/AppShell'
+  2 |
+  3 | import { SessionProvider } from "next-auth/react";
+> 4 | import AppShell from "@/components/AppShell";
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  5 |
+  6 | export default function Home() {
+  7 |   return (
+
+Import map: aliased to relative './src/components/AppShell' inside of [project]/
+
+Import traces:
+  Client Component Browser:
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+[log] [Fast Refresh] rebuilding
+[error] ./src/components/AppShell.tsx:7:1
+Module not found: Can't resolve '@/components/CompanyDashboard'
+   5 | import LoginForm from "@/components/LoginForm";
+   6 | import SuperAdminDashboard from "@/components/SuperAdminDashboard";
+>  7 | import CompanyDashboard from "@/components/CompanyDashboard";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import UserView from "@/components/UserView";
+   9 |
+  10 | export default function AppShell() {
+
+Import map: aliased to relative './src/components/CompanyDashboard' inside of [project]/
+
+Import traces:
+  Client Component Browser:
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+[error] ./src/components/AppShell.tsx:5:1
+Module not found: Can't resolve '@/components/LoginForm'
+  3 | import { useSession, signIn, signOut } from "next-auth/react";
+  4 | import { useState, useEffect, useCallback } from "react";
+> 5 | import LoginForm from "@/components/LoginForm";
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 | import SuperAdminDashboard from "@/components/SuperAdminDashboard";
+  7 | import CompanyDashboard from "@/components/CompanyDashboard";
+  8 | import UserView from "@/components/UserView";
+
+Import map: aliased to relative './src/components/LoginForm' inside of [project]/
+
+Import traces:
+  Client Component Browser:
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+[error] ./src/components/AppShell.tsx:6:1
+Module not found: Can't resolve '@/components/SuperAdminDashboard'
+  4 | import { useState, useEffect, useCallback } from "react";
+  5 | import LoginForm from "@/components/LoginForm";
+> 6 | import SuperAdminDashboard from "@/components/SuperAdminDashboard";
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  7 | import CompanyDashboard from "@/components/CompanyDashboard";
+  8 | import UserView from "@/components/UserView";
+  9 |
+
+Import map: aliased to relative './src/components/SuperAdminDashboard' inside of [project]/
+
+Import traces:
+  Client Component Browser:
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+[error] ./src/components/AppShell.tsx:8:1
+Module not found: Can't resolve '@/components/UserView'
+   6 | import SuperAdminDashboard from "@/components/SuperAdminDashboard";
+   7 | import CompanyDashboard from "@/components/CompanyDashboard";
+>  8 | import UserView from "@/components/UserView";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export default function AppShell() {
+  11 |   const { data: session, status } = useSession();
+
+Import map: aliased to relative './src/components/UserView' inside of [project]/
+
+Import traces:
+  Client Component Browser:
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+[log] [Fast Refresh] rebuilding
+[error] ./src/components/AppShell.tsx:7:1
+Module not found: Can't resolve '@/components/CompanyDashboard'
+   5 | import LoginForm from "@/components/LoginForm";
+   6 | import SuperAdminDashboard from "@/components/SuperAdminDashboard";
+>  7 | import CompanyDashboard from "@/components/CompanyDashboard";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import UserView from "@/components/UserView";
+   9 |
+  10 | export default function AppShell() {
+
+Import map: aliased to relative './src/components/CompanyDashboard' inside of [project]/
+
+Import traces:
+  Client Component Browser:
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+[error] ./src/components/AppShell.tsx:6:1
+Module not found: Can't resolve '@/components/SuperAdminDashboard'
+  4 | import { useState, useEffect, useCallback } from "react";
+  5 | import LoginForm from "@/components/LoginForm";
+> 6 | import SuperAdminDashboard from "@/components/SuperAdminDashboard";
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  7 | import CompanyDashboard from "@/components/CompanyDashboard";
+  8 | import UserView from "@/components/UserView";
+  9 |
+
+Import map: aliased to relative './src/components/SuperAdminDashboard' inside of [project]/
+
+Import traces:
+  Client Component Browser:
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+[error] ./src/components/AppShell.tsx:8:1
+Module not found: Can't resolve '@/components/UserView'
+   6 | import SuperAdminDashboard from "@/components/SuperAdminDashboard";
+   7 | import CompanyDashboard from "@/components/CompanyDashboard";
+>  8 | import UserView from "@/components/UserView";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export default function AppShell() {
+  11 |   const { data: session, status } = useSession();
+
+Import map: aliased to relative './src/components/UserView' inside of [project]/
+
+Import traces:
+  Client Component Browser:
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+[error] ./src/components/AppShell.tsx:7:1
+Module not found: Can't resolve '@/components/CompanyDashboard'
+   5 | import LoginForm from "@/components/LoginForm";
+   6 | import SuperAdminDashboard from "@/components/SuperAdminDashboard";
+>  7 | import CompanyDashboard from "@/components/CompanyDashboard";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import UserView from "@/components/UserView";
+   9 |
+  10 | export default function AppShell() {
+
+Import map: aliased to relative './src/components/CompanyDashboard' inside of [project]/
+
+Import traces:
+  Client Component Browser:
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+[error] ./src/components/AppShell.tsx:6:1
+Module not found: Can't resolve '@/components/SuperAdminDashboard'
+  4 | import { useState, useEffect, useCallback } from "react";
+  5 | import LoginForm from "@/components/LoginForm";
+> 6 | import SuperAdminDashboard from "@/components/SuperAdminDashboard";
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  7 | import CompanyDashboard from "@/components/CompanyDashboard";
+  8 | import UserView from "@/components/UserView";
+  9 |
+
+Import map: aliased to relative './src/components/SuperAdminDashboard' inside of [project]/
+
+Import traces:
+  Client Component Browser:
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+[error] ./src/components/AppShell.tsx:8:1
+Module not found: Can't resolve '@/components/UserView'
+   6 | import SuperAdminDashboard from "@/components/SuperAdminDashboard";
+   7 | import CompanyDashboard from "@/components/CompanyDashboard";
+>  8 | import UserView from "@/components/UserView";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export default function AppShell() {
+  11 |   const { data: session, status } = useSession();
+
+Import map: aliased to relative './src/components/UserView' inside of [project]/
+
+Import traces:
+  Client Component Browser:
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] rebuilding
+[error] ./src/components/AppShell.tsx:7:1
+Module not found: Can't resolve '@/components/CompanyDashboard'
+   5 | import LoginForm from "@/components/LoginForm";
+   6 | import SuperAdminDashboard from "@/components/SuperAdminDashboard";
+>  7 | import CompanyDashboard from "@/components/CompanyDashboard";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import UserView from "@/components/UserView";
+   9 |
+  10 | export default function AppShell() {
+
+Import map: aliased to relative './src/components/CompanyDashboard' inside of [project]/
+
+Import traces:
+  Client Component Browser:
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+[error] ./src/components/AppShell.tsx:8:1
+Module not found: Can't resolve '@/components/UserView'
+   6 | import SuperAdminDashboard from "@/components/SuperAdminDashboard";
+   7 | import CompanyDashboard from "@/components/CompanyDashboard";
+>  8 | import UserView from "@/components/UserView";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export default function AppShell() {
+  11 |   const { data: session, status } = useSession();
+
+Import map: aliased to relative './src/components/UserView' inside of [project]/
+
+Import traces:
+  Client Component Browser:
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+[log] [Fast Refresh] rebuilding
+[error] ./src/components/CompanyDashboard.tsx:7:1
+Module not found: Can't resolve '@/components/CalendariosTab'
+   5 | import ProfesionalTab from "@/components/ProfesionalTab";
+   6 | import SedesTab from "@/components/SedesTab";
+>  7 | import CalendariosTab from "@/components/CalendariosTab";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import DiarioTab from "@/components/DiarioTab";
+   9 | import MensualTab from "@/components/MensualTab";
+  10 |
+
+Import map: aliased to relative './src/components/CalendariosTab' inside of [project]/
+
+Import traces:
+  Client Component Browser:
+    ./src/components/CompanyDashboard.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/CompanyDashboard.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+[error] ./src/components/CompanyDashboard.tsx:8:1
+Module not found: Can't resolve '@/components/DiarioTab'
+   6 | import SedesTab from "@/components/SedesTab";
+   7 | import CalendariosTab from "@/components/CalendariosTab";
+>  8 | import DiarioTab from "@/components/DiarioTab";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import MensualTab from "@/components/MensualTab";
+  10 |
+  11 | export default function CompanyDashboard() {
+
+Import map: aliased to relative './src/components/DiarioTab' inside of [project]/
+
+Import traces:
+  Client Component Browser:
+    ./src/components/CompanyDashboard.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/CompanyDashboard.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+[error] ./src/components/CompanyDashboard.tsx:9:1
+Module not found: Can't resolve '@/components/MensualTab'
+   7 | import CalendariosTab from "@/components/CalendariosTab";
+   8 | import DiarioTab from "@/components/DiarioTab";
+>  9 | import MensualTab from "@/components/MensualTab";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  10 |
+  11 | export default function CompanyDashboard() {
+  12 |   const { data: session } = useSession();
+
+Import map: aliased to relative './src/components/MensualTab' inside of [project]/
+
+Import traces:
+  Client Component Browser:
+    ./src/components/CompanyDashboard.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/CompanyDashboard.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+[error] ./src/components/CompanyDashboard.tsx:5:1
+Module not found: Can't resolve '@/components/ProfesionalTab'
+  3 | import { useState, useEffect, useCallback } from "react";
+  4 | import { useSession } from "next-auth/react";
+> 5 | import ProfesionalTab from "@/components/ProfesionalTab";
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  6 | import SedesTab from "@/components/SedesTab";
+  7 | import CalendariosTab from "@/components/CalendariosTab";
+  8 | import DiarioTab from "@/components/DiarioTab";
+
+Import map: aliased to relative './src/components/ProfesionalTab' inside of [project]/
+
+Import traces:
+  Client Component Browser:
+    ./src/components/CompanyDashboard.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/CompanyDashboard.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+[error] ./src/components/CompanyDashboard.tsx:6:1
+Module not found: Can't resolve '@/components/SedesTab'
+  4 | import { useSession } from "next-auth/react";
+  5 | import ProfesionalTab from "@/components/ProfesionalTab";
+> 6 | import SedesTab from "@/components/SedesTab";
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  7 | import CalendariosTab from "@/components/CalendariosTab";
+  8 | import DiarioTab from "@/components/DiarioTab";
+  9 | import MensualTab from "@/components/MensualTab";
+
+Import map: aliased to relative './src/components/SedesTab' inside of [project]/
+
+Import traces:
+  Client Component Browser:
+    ./src/components/CompanyDashboard.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/CompanyDashboard.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+[error] ./src/components/AppShell.tsx:8:1
+Module not found: Can't resolve '@/components/UserView'
+   6 | import SuperAdminDashboard from "@/components/SuperAdminDashboard";
+   7 | import CompanyDashboard from "@/components/CompanyDashboard";
+>  8 | import UserView from "@/components/UserView";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export default function AppShell() {
+  11 |   const { data: session, status } = useSession();
+
+Import map: aliased to relative './src/components/UserView' inside of [project]/
+
+Import traces:
+  Client Component Browser:
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+[log] [Fast Refresh] rebuilding
+[error] ./src/components/CompanyDashboard.tsx:7:1
+Module not found: Can't resolve '@/components/CalendariosTab'
+   5 | import ProfesionalTab from "@/components/ProfesionalTab";
+   6 | import SedesTab from "@/components/SedesTab";
+>  7 | import CalendariosTab from "@/components/CalendariosTab";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import DiarioTab from "@/components/DiarioTab";
+   9 | import MensualTab from "@/components/MensualTab";
+  10 |
+
+Import map: aliased to relative './src/components/CalendariosTab' inside of [project]/
+
+Import traces:
+  Client Component Browser:
+    ./src/components/CompanyDashboard.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/CompanyDashboard.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+[error] ./src/components/CompanyDashboard.tsx:8:1
+Module not found: Can't resolve '@/components/DiarioTab'
+   6 | import SedesTab from "@/components/SedesTab";
+   7 | import CalendariosTab from "@/components/CalendariosTab";
+>  8 | import DiarioTab from "@/components/DiarioTab";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import MensualTab from "@/components/MensualTab";
+  10 |
+  11 | export default function CompanyDashboard() {
+
+Import map: aliased to relative './src/components/DiarioTab' inside of [project]/
+
+Import traces:
+  Client Component Browser:
+    ./src/components/CompanyDashboard.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/CompanyDashboard.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+[error] ./src/components/CompanyDashboard.tsx:9:1
+Module not found: Can't resolve '@/components/MensualTab'
+   7 | import CalendariosTab from "@/components/CalendariosTab";
+   8 | import DiarioTab from "@/components/DiarioTab";
+>  9 | import MensualTab from "@/components/MensualTab";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  10 |
+  11 | export default function CompanyDashboard() {
+  12 |   const { data: session } = useSession();
+
+Import map: aliased to relative './src/components/MensualTab' inside of [project]/
+
+Import traces:
+  Client Component Browser:
+    ./src/components/CompanyDashboard.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/CompanyDashboard.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+[error] ./src/components/CompanyDashboard.tsx:6:1
+Module not found: Can't resolve '@/components/SedesTab'
+  4 | import { useSession } from "next-auth/react";
+  5 | import ProfesionalTab from "@/components/ProfesionalTab";
+> 6 | import SedesTab from "@/components/SedesTab";
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  7 | import CalendariosTab from "@/components/CalendariosTab";
+  8 | import DiarioTab from "@/components/DiarioTab";
+  9 | import MensualTab from "@/components/MensualTab";
+
+Import map: aliased to relative './src/components/SedesTab' inside of [project]/
+
+Import traces:
+  Client Component Browser:
+    ./src/components/CompanyDashboard.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/CompanyDashboard.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+[error] ./src/components/AppShell.tsx:8:1
+Module not found: Can't resolve '@/components/UserView'
+   6 | import SuperAdminDashboard from "@/components/SuperAdminDashboard";
+   7 | import CompanyDashboard from "@/components/CompanyDashboard";
+>  8 | import UserView from "@/components/UserView";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export default function AppShell() {
+  11 |   const { data: session, status } = useSession();
+
+Import map: aliased to relative './src/components/UserView' inside of [project]/
+
+Import traces:
+  Client Component Browser:
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+[log] [Fast Refresh] rebuilding
+[error] ./src/components/CompanyDashboard.tsx:7:1
+Module not found: Can't resolve '@/components/CalendariosTab'
+   5 | import ProfesionalTab from "@/components/ProfesionalTab";
+   6 | import SedesTab from "@/components/SedesTab";
+>  7 | import CalendariosTab from "@/components/CalendariosTab";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   8 | import DiarioTab from "@/components/DiarioTab";
+   9 | import MensualTab from "@/components/MensualTab";
+  10 |
+
+Import map: aliased to relative './src/components/CalendariosTab' inside of [project]/
+
+Import traces:
+  Client Component Browser:
+    ./src/components/CompanyDashboard.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/CompanyDashboard.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+[error] ./src/components/CompanyDashboard.tsx:8:1
+Module not found: Can't resolve '@/components/DiarioTab'
+   6 | import SedesTab from "@/components/SedesTab";
+   7 | import CalendariosTab from "@/components/CalendariosTab";
+>  8 | import DiarioTab from "@/components/DiarioTab";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import MensualTab from "@/components/MensualTab";
+  10 |
+  11 | export default function CompanyDashboard() {
+
+Import map: aliased to relative './src/components/DiarioTab' inside of [project]/
+
+Import traces:
+  Client Component Browser:
+    ./src/components/CompanyDashboard.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/CompanyDashboard.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+[error] ./src/components/CompanyDashboard.tsx:9:1
+Module not found: Can't resolve '@/components/MensualTab'
+   7 | import CalendariosTab from "@/components/CalendariosTab";
+   8 | import DiarioTab from "@/components/DiarioTab";
+>  9 | import MensualTab from "@/components/MensualTab";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  10 |
+  11 | export default function CompanyDashboard() {
+  12 |   const { data: session } = useSession();
+
+Import map: aliased to relative './src/components/MensualTab' inside of [project]/
+
+Import traces:
+  Client Component Browser:
+    ./src/components/CompanyDashboard.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/CompanyDashboard.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+[error] ./src/components/AppShell.tsx:8:1
+Module not found: Can't resolve '@/components/UserView'
+   6 | import SuperAdminDashboard from "@/components/SuperAdminDashboard";
+   7 | import CompanyDashboard from "@/components/CompanyDashboard";
+>  8 | import UserView from "@/components/UserView";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export default function AppShell() {
+  11 |   const { data: session, status } = useSession();
+
+Import map: aliased to relative './src/components/UserView' inside of [project]/
+
+Import traces:
+  Client Component Browser:
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+[log] [Fast Refresh] rebuilding
+[error] ./src/components/CompanyDashboard.tsx:8:1
+Module not found: Can't resolve '@/components/DiarioTab'
+   6 | import SedesTab from "@/components/SedesTab";
+   7 | import CalendariosTab from "@/components/CalendariosTab";
+>  8 | import DiarioTab from "@/components/DiarioTab";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 | import MensualTab from "@/components/MensualTab";
+  10 |
+  11 | export default function CompanyDashboard() {
+
+Import map: aliased to relative './src/components/DiarioTab' inside of [project]/
+
+Import traces:
+  Client Component Browser:
+    ./src/components/CompanyDashboard.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/CompanyDashboard.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+[error] ./src/components/CompanyDashboard.tsx:9:1
+Module not found: Can't resolve '@/components/MensualTab'
+   7 | import CalendariosTab from "@/components/CalendariosTab";
+   8 | import DiarioTab from "@/components/DiarioTab";
+>  9 | import MensualTab from "@/components/MensualTab";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  10 |
+  11 | export default function CompanyDashboard() {
+  12 |   const { data: session } = useSession();
+
+Import map: aliased to relative './src/components/MensualTab' inside of [project]/
+
+Import traces:
+  Client Component Browser:
+    ./src/components/CompanyDashboard.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/CompanyDashboard.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+[error] ./src/components/AppShell.tsx:8:1
+Module not found: Can't resolve '@/components/UserView'
+   6 | import SuperAdminDashboard from "@/components/SuperAdminDashboard";
+   7 | import CompanyDashboard from "@/components/CompanyDashboard";
+>  8 | import UserView from "@/components/UserView";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export default function AppShell() {
+  11 |   const { data: session, status } = useSession();
+
+Import map: aliased to relative './src/components/UserView' inside of [project]/
+
+Import traces:
+  Client Component Browser:
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+[log] [Fast Refresh] rebuilding
+[error] ./src/components/CompanyDashboard.tsx:9:1
+Module not found: Can't resolve '@/components/MensualTab'
+   7 | import CalendariosTab from "@/components/CalendariosTab";
+   8 | import DiarioTab from "@/components/DiarioTab";
+>  9 | import MensualTab from "@/components/MensualTab";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  10 |
+  11 | export default function CompanyDashboard() {
+  12 |   const { data: session } = useSession();
+
+Import map: aliased to relative './src/components/MensualTab' inside of [project]/
+
+Import traces:
+  Client Component Browser:
+    ./src/components/CompanyDashboard.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/CompanyDashboard.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+[error] ./src/components/AppShell.tsx:8:1
+Module not found: Can't resolve '@/components/UserView'
+   6 | import SuperAdminDashboard from "@/components/SuperAdminDashboard";
+   7 | import CompanyDashboard from "@/components/CompanyDashboard";
+>  8 | import UserView from "@/components/UserView";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export default function AppShell() {
+  11 |   const { data: session, status } = useSession();
+
+Import map: aliased to relative './src/components/UserView' inside of [project]/
+
+Import traces:
+  Client Component Browser:
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+[log] [Fast Refresh] rebuilding
+[error] ./src/components/AppShell.tsx:8:1
+Module not found: Can't resolve '@/components/UserView'
+   6 | import SuperAdminDashboard from "@/components/SuperAdminDashboard";
+   7 | import CompanyDashboard from "@/components/CompanyDashboard";
+>  8 | import UserView from "@/components/UserView";
+     | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   9 |
+  10 | export default function AppShell() {
+  11 |   const { data: session, status } = useSession();
+
+Import map: aliased to relative './src/components/UserView' inside of [project]/
+
+Import traces:
+  Client Component Browser:
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+[log] [Fast Refresh] rebuilding
+[warning] [Fast Refresh] performing full reload
+
+Fast Refresh will perform a full reload when you edit a file that's imported by modules outside of the React rendering tree.
+You might have a file which exports a React component but also exports a value that is imported by a non-React component file.
+Consider migrating the non-React component export to a separate file and importing it into both files.
+
+It is also possible the parent component of the component you edited is a class component, which disables Fast Refresh.
+Fast Refresh requires at least one parent function component in your React tree.
+[log] [Fast Refresh] done in 227ms
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 114ms
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[log] [HMR] connected
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 125ms
+[log] [Fast Refresh] rebuilding
+[error] ./src/components/CalendariosTab.tsx:17:27
+Parsing ecmascript source code failed
+  15 |     ]);
+  16 |     if (hRes.ok) setHolidays(await hRes.json());
+> 17 |     if (sRes.ok) setSedes(await sRes.json());
+     |                           ^^^^^
+  18 |   });
+  19 |
+  20 |   useEffect(() => { _load(); });
+
+await isn't allowed in non-async function
+
+Import traces:
+  Client Component Browser:
+    ./src/components/CalendariosTab.tsx [Client Component Browser]
+    ./src/components/CompanyDashboard.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/CalendariosTab.tsx [Client Component SSR]
+    ./src/components/CompanyDashboard.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+[error] ./src/components/DiarioTab.tsx:24:30
+Parsing ecmascript source code failed
+  22 |     if (pRes.ok) setProfessionals(await pRes.json());
+  23 |     if (plRes.ok) setPlans(await plRes.json());
+> 24 |     if (hRes.ok) setHolidays(await hRes.json());
+     |                              ^^^^^
+  25 |   });
+  26 |
+  27 |   useEffect(() => { _load(); });
+
+await isn't allowed in non-async function
+
+Import traces:
+  Client Component Browser:
+    ./src/components/DiarioTab.tsx [Client Component Browser]
+    ./src/components/CompanyDashboard.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/DiarioTab.tsx [Client Component SSR]
+    ./src/components/CompanyDashboard.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+[error] ./src/components/MensualTab.tsx:28:30
+Parsing ecmascript source code failed
+  26 |     if (pRes.ok) { const p = await pRes.json(); setProfessionals(p); if (selectedPros.size === 0) setSelectedPros(new Set(p.map((x: any) => x.alias))); }
+  27 |     if (plRes.ok) setPlans(await plRes.json());
+> 28 |     if (hRes.ok) setHolidays(await hRes.json());
+     |                              ^^^^^
+  29 |   });
+  30 |
+  31 |   useEffect(() => { _load(); });
+
+await isn't allowed in non-async function
+
+Import traces:
+  Client Component Browser:
+    ./src/components/MensualTab.tsx [Client Component Browser]
+    ./src/components/CompanyDashboard.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/MensualTab.tsx [Client Component SSR]
+    ./src/components/CompanyDashboard.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+[error] ./src/components/ProfesionalTab.tsx:22:27
+Parsing ecmascript source code failed
+  20 |     const [pRes, sRes] = await Promise.all([fetch("/api/company/professionals"), fetch("/api/company/sedes")]);
+  21 |     if (pRes.ok) setPros(await pRes.json());
+> 22 |     if (sRes.ok) setSedes(await sRes.json());
+     |                           ^^^^^
+  23 |   }, []);
+  24 |
+  25 |   useEffect(() => { _load(); });
+
+await isn't allowed in non-async function
+
+Import traces:
+  Client Component Browser:
+    ./src/components/ProfesionalTab.tsx [Client Component Browser]
+    ./src/components/CompanyDashboard.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/ProfesionalTab.tsx [Client Component SSR]
+    ./src/components/CompanyDashboard.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+[error] ./src/components/SedesTab.tsx:14:26
+Parsing ecmascript source code failed
+  12 |   // const fetchData = async function _load() {
+  13 |     const res = await fetch("/api/company/sedes");
+> 14 |     if (res.ok) setSedes(await res.json());
+     |                          ^^^^^
+  15 |   }, []);
+  16 |
+  17 |   useEffect(() => { _load(); });
+
+await isn't allowed in non-async function
+
+Import traces:
+  Client Component Browser:
+    ./src/components/SedesTab.tsx [Client Component Browser]
+    ./src/components/CompanyDashboard.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/SedesTab.tsx [Client Component SSR]
+    ./src/components/CompanyDashboard.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+[error] ./src/components/SuperAdminDashboard.tsx:34:6
+Parsing ecmascript source code failed
+  32 |     const res = await fetch("/api/admin/stats");
+  33 |     if (res.ok) setStats(await res.json());
+> 34 |   }, []);
+     |      ^^
+  35 |
+  36 |   useEffect(() => {
+  37 |     setLoading(true);
+
+'const' declarations must be initialized
+
+Import traces:
+  Client Component Browser:
+    ./src/components/SuperAdminDashboard.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/SuperAdminDashboard.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+[error] ./src/components/SuperAdminDashboard.tsx:34:8
+Parsing ecmascript source code failed
+  32 |     const res = await fetch("/api/admin/stats");
+  33 |     if (res.ok) setStats(await res.json());
+> 34 |   }, []);
+     |        ^
+  35 |
+  36 |   useEffect(() => {
+  37 |     setLoading(true);
+
+Expected a semicolon
+
+Import traces:
+  Client Component Browser:
+    ./src/components/SuperAdminDashboard.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/SuperAdminDashboard.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+[error] ./src/components/UserView.tsx:22:30
+Parsing ecmascript source code failed
+  20 |     if (plRes.ok) setPlans(await plRes.json());
+  21 |     if (sRes.ok) setSedes(await sRes.json());
+> 22 |     if (hRes.ok) setHolidays(await hRes.json());
+     |                              ^^^^^
+  23 |   });
+  24 |
+  25 |   useEffect(() => { _load(); });
+
+await isn't allowed in non-async function
+
+Import traces:
+  Client Component Browser:
+    ./src/components/UserView.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/UserView.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+[log] [Fast Refresh] rebuilding
+[error] ./src/components/CalendariosTab.tsx:17:27
+Parsing ecmascript source code failed
+  15 |     ]);
+  16 |     if (hRes.ok) setHolidays(await hRes.json());
+> 17 |     if (sRes.ok) setSedes(await sRes.json());
+     |                           ^^^^^
+  18 |   });
+  19 |
+  20 |   useEffect(() => { _load(); });
+
+await isn't allowed in non-async function
+
+Import traces:
+  Client Component Browser:
+    ./src/components/CalendariosTab.tsx [Client Component Browser]
+    ./src/components/CompanyDashboard.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/CalendariosTab.tsx [Client Component SSR]
+    ./src/components/CompanyDashboard.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+[error] ./src/components/DiarioTab.tsx:24:30
+Parsing ecmascript source code failed
+  22 |     if (pRes.ok) setProfessionals(await pRes.json());
+  23 |     if (plRes.ok) setPlans(await plRes.json());
+> 24 |     if (hRes.ok) setHolidays(await hRes.json());
+     |                              ^^^^^
+  25 |   });
+  26 |
+  27 |   useEffect(() => { _load(); });
+
+await isn't allowed in non-async function
+
+Import traces:
+  Client Component Browser:
+    ./src/components/DiarioTab.tsx [Client Component Browser]
+    ./src/components/CompanyDashboard.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/DiarioTab.tsx [Client Component SSR]
+    ./src/components/CompanyDashboard.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+[error] ./src/components/MensualTab.tsx:28:30
+Parsing ecmascript source code failed
+  26 |     if (pRes.ok) { const p = await pRes.json(); setProfessionals(p); if (selectedPros.size === 0) setSelectedPros(new Set(p.map((x: any) => x.alias))); }
+  27 |     if (plRes.ok) setPlans(await plRes.json());
+> 28 |     if (hRes.ok) setHolidays(await hRes.json());
+     |                              ^^^^^
+  29 |   });
+  30 |
+  31 |   useEffect(() => { _load(); });
+
+await isn't allowed in non-async function
+
+Import traces:
+  Client Component Browser:
+    ./src/components/MensualTab.tsx [Client Component Browser]
+    ./src/components/CompanyDashboard.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/MensualTab.tsx [Client Component SSR]
+    ./src/components/CompanyDashboard.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+[error] ./src/components/SedesTab.tsx:14:26
+Parsing ecmascript source code failed
+  12 |   // const fetchData = async function _load() {
+  13 |     const res = await fetch("/api/company/sedes");
+> 14 |     if (res.ok) setSedes(await res.json());
+     |                          ^^^^^
+  15 |   }, []);
+  16 |
+  17 |   useEffect(() => { _load(); });
+
+await isn't allowed in non-async function
+
+Import traces:
+  Client Component Browser:
+    ./src/components/SedesTab.tsx [Client Component Browser]
+    ./src/components/CompanyDashboard.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/SedesTab.tsx [Client Component SSR]
+    ./src/components/CompanyDashboard.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+[error] ./src/components/SuperAdminDashboard.tsx:34:6
+Parsing ecmascript source code failed
+  32 |     const res = await fetch("/api/admin/stats");
+  33 |     if (res.ok) setStats(await res.json());
+> 34 |   }, []);
+     |      ^^
+  35 |
+  36 |   useEffect(() => {
+  37 |     setLoading(true);
+
+'const' declarations must be initialized
+
+Import traces:
+  Client Component Browser:
+    ./src/components/SuperAdminDashboard.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/SuperAdminDashboard.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+[error] ./src/components/SuperAdminDashboard.tsx:34:8
+Parsing ecmascript source code failed
+  32 |     const res = await fetch("/api/admin/stats");
+  33 |     if (res.ok) setStats(await res.json());
+> 34 |   }, []);
+     |        ^
+  35 |
+  36 |   useEffect(() => {
+  37 |     setLoading(true);
+
+Expected a semicolon
+
+Import traces:
+  Client Component Browser:
+    ./src/components/SuperAdminDashboard.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/SuperAdminDashboard.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+[error] ./src/components/UserView.tsx:22:30
+Parsing ecmascript source code failed
+  20 |     if (plRes.ok) setPlans(await plRes.json());
+  21 |     if (sRes.ok) setSedes(await sRes.json());
+> 22 |     if (hRes.ok) setHolidays(await hRes.json());
+     |                              ^^^^^
+  23 |   });
+  24 |
+  25 |   useEffect(() => { _load(); });
+
+await isn't allowed in non-async function
+
+Import traces:
+  Client Component Browser:
+    ./src/components/UserView.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/UserView.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+[log] [Fast Refresh] rebuilding
+[error] ./src/components/CalendariosTab.tsx:17:27
+Parsing ecmascript source code failed
+  15 |     ]);
+  16 |     if (hRes.ok) setHolidays(await hRes.json());
+> 17 |     if (sRes.ok) setSedes(await sRes.json());
+     |                           ^^^^^
+  18 |   });
+  19 |
+  20 |   useEffect(() => { _load(); });
+
+await isn't allowed in non-async function
+
+Import traces:
+  Client Component Browser:
+    ./src/components/CalendariosTab.tsx [Client Component Browser]
+    ./src/components/CompanyDashboard.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/CalendariosTab.tsx [Client Component SSR]
+    ./src/components/CompanyDashboard.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+[error] ./src/components/DiarioTab.tsx:24:30
+Parsing ecmascript source code failed
+  22 |     if (pRes.ok) setProfessionals(await pRes.json());
+  23 |     if (plRes.ok) setPlans(await plRes.json());
+> 24 |     if (hRes.ok) setHolidays(await hRes.json());
+     |                              ^^^^^
+  25 |   });
+  26 |
+  27 |   useEffect(() => { _load(); });
+
+await isn't allowed in non-async function
+
+Import traces:
+  Client Component Browser:
+    ./src/components/DiarioTab.tsx [Client Component Browser]
+    ./src/components/CompanyDashboard.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/DiarioTab.tsx [Client Component SSR]
+    ./src/components/CompanyDashboard.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+[error] ./src/components/MensualTab.tsx:28:30
+Parsing ecmascript source code failed
+  26 |     if (pRes.ok) { const p = await pRes.json(); setProfessionals(p); if (selectedPros.size === 0) setSelectedPros(new Set(p.map((x: any) => x.alias))); }
+  27 |     if (plRes.ok) setPlans(await plRes.json());
+> 28 |     if (hRes.ok) setHolidays(await hRes.json());
+     |                              ^^^^^
+  29 |   });
+  30 |
+  31 |   useEffect(() => { _load(); });
+
+await isn't allowed in non-async function
+
+Import traces:
+  Client Component Browser:
+    ./src/components/MensualTab.tsx [Client Component Browser]
+    ./src/components/CompanyDashboard.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/MensualTab.tsx [Client Component SSR]
+    ./src/components/CompanyDashboard.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+[error] ./src/components/SuperAdminDashboard.tsx:34:6
+Parsing ecmascript source code failed
+  32 |     const res = await fetch("/api/admin/stats");
+  33 |     if (res.ok) setStats(await res.json());
+> 34 |   }, []);
+     |      ^^
+  35 |
+  36 |   useEffect(() => {
+  37 |     setLoading(true);
+
+'const' declarations must be initialized
+
+Import traces:
+  Client Component Browser:
+    ./src/components/SuperAdminDashboard.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/SuperAdminDashboard.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+[error] ./src/components/SuperAdminDashboard.tsx:34:8
+Parsing ecmascript source code failed
+  32 |     const res = await fetch("/api/admin/stats");
+  33 |     if (res.ok) setStats(await res.json());
+> 34 |   }, []);
+     |        ^
+  35 |
+  36 |   useEffect(() => {
+  37 |     setLoading(true);
+
+Expected a semicolon
+
+Import traces:
+  Client Component Browser:
+    ./src/components/SuperAdminDashboard.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/SuperAdminDashboard.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+[error] ./src/components/UserView.tsx:22:30
+Parsing ecmascript source code failed
+  20 |     if (plRes.ok) setPlans(await plRes.json());
+  21 |     if (sRes.ok) setSedes(await sRes.json());
+> 22 |     if (hRes.ok) setHolidays(await hRes.json());
+     |                              ^^^^^
+  23 |   });
+  24 |
+  25 |   useEffect(() => { _load(); });
+
+await isn't allowed in non-async function
+
+Import traces:
+  Client Component Browser:
+    ./src/components/UserView.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/UserView.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+[log] [Fast Refresh] rebuilding
+[error] ./src/components/DiarioTab.tsx:24:30
+Parsing ecmascript source code failed
+  22 |     if (pRes.ok) setProfessionals(await pRes.json());
+  23 |     if (plRes.ok) setPlans(await plRes.json());
+> 24 |     if (hRes.ok) setHolidays(await hRes.json());
+     |                              ^^^^^
+  25 |   });
+  26 |
+  27 |   useEffect(() => { _load(); });
+
+await isn't allowed in non-async function
+
+Import traces:
+  Client Component Browser:
+    ./src/components/DiarioTab.tsx [Client Component Browser]
+    ./src/components/CompanyDashboard.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/DiarioTab.tsx [Client Component SSR]
+    ./src/components/CompanyDashboard.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+[error] ./src/components/MensualTab.tsx:28:30
+Parsing ecmascript source code failed
+  26 |     if (pRes.ok) { const p = await pRes.json(); setProfessionals(p); if (selectedPros.size === 0) setSelectedPros(new Set(p.map((x: any) => x.alias))); }
+  27 |     if (plRes.ok) setPlans(await plRes.json());
+> 28 |     if (hRes.ok) setHolidays(await hRes.json());
+     |                              ^^^^^
+  29 |   });
+  30 |
+  31 |   useEffect(() => { _load(); });
+
+await isn't allowed in non-async function
+
+Import traces:
+  Client Component Browser:
+    ./src/components/MensualTab.tsx [Client Component Browser]
+    ./src/components/CompanyDashboard.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/MensualTab.tsx [Client Component SSR]
+    ./src/components/CompanyDashboard.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+[error] ./src/components/SuperAdminDashboard.tsx:34:6
+Parsing ecmascript source code failed
+  32 |     const res = await fetch("/api/admin/stats");
+  33 |     if (res.ok) setStats(await res.json());
+> 34 |   }, []);
+     |      ^^
+  35 |
+  36 |   useEffect(() => {
+  37 |     setLoading(true);
+
+'const' declarations must be initialized
+
+Import traces:
+  Client Component Browser:
+    ./src/components/SuperAdminDashboard.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/SuperAdminDashboard.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+[error] ./src/components/SuperAdminDashboard.tsx:34:8
+Parsing ecmascript source code failed
+  32 |     const res = await fetch("/api/admin/stats");
+  33 |     if (res.ok) setStats(await res.json());
+> 34 |   }, []);
+     |        ^
+  35 |
+  36 |   useEffect(() => {
+  37 |     setLoading(true);
+
+Expected a semicolon
+
+Import traces:
+  Client Component Browser:
+    ./src/components/SuperAdminDashboard.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/SuperAdminDashboard.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+[error] ./src/components/UserView.tsx:22:30
+Parsing ecmascript source code failed
+  20 |     if (plRes.ok) setPlans(await plRes.json());
+  21 |     if (sRes.ok) setSedes(await sRes.json());
+> 22 |     if (hRes.ok) setHolidays(await hRes.json());
+     |                              ^^^^^
+  23 |   });
+  24 |
+  25 |   useEffect(() => { _load(); });
+
+await isn't allowed in non-async function
+
+Import traces:
+  Client Component Browser:
+    ./src/components/UserView.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/UserView.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+[log] [Fast Refresh] rebuilding
+[error] ./src/components/MensualTab.tsx:28:30
+Parsing ecmascript source code failed
+  26 |     if (pRes.ok) { const p = await pRes.json(); setProfessionals(p); if (selectedPros.size === 0) setSelectedPros(new Set(p.map((x: any) => x.alias))); }
+  27 |     if (plRes.ok) setPlans(await plRes.json());
+> 28 |     if (hRes.ok) setHolidays(await hRes.json());
+     |                              ^^^^^
+  29 |   });
+  30 |
+  31 |   useEffect(() => { _load(); });
+
+await isn't allowed in non-async function
+
+Import traces:
+  Client Component Browser:
+    ./src/components/MensualTab.tsx [Client Component Browser]
+    ./src/components/CompanyDashboard.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/MensualTab.tsx [Client Component SSR]
+    ./src/components/CompanyDashboard.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+[error] ./src/components/SuperAdminDashboard.tsx:34:6
+Parsing ecmascript source code failed
+  32 |     const res = await fetch("/api/admin/stats");
+  33 |     if (res.ok) setStats(await res.json());
+> 34 |   }, []);
+     |      ^^
+  35 |
+  36 |   useEffect(() => {
+  37 |     setLoading(true);
+
+'const' declarations must be initialized
+
+Import traces:
+  Client Component Browser:
+    ./src/components/SuperAdminDashboard.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/SuperAdminDashboard.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+[error] ./src/components/SuperAdminDashboard.tsx:34:8
+Parsing ecmascript source code failed
+  32 |     const res = await fetch("/api/admin/stats");
+  33 |     if (res.ok) setStats(await res.json());
+> 34 |   }, []);
+     |        ^
+  35 |
+  36 |   useEffect(() => {
+  37 |     setLoading(true);
+
+Expected a semicolon
+
+Import traces:
+  Client Component Browser:
+    ./src/components/SuperAdminDashboard.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/SuperAdminDashboard.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+[error] ./src/components/UserView.tsx:22:30
+Parsing ecmascript source code failed
+  20 |     if (plRes.ok) setPlans(await plRes.json());
+  21 |     if (sRes.ok) setSedes(await sRes.json());
+> 22 |     if (hRes.ok) setHolidays(await hRes.json());
+     |                              ^^^^^
+  23 |   });
+  24 |
+  25 |   useEffect(() => { _load(); });
+
+await isn't allowed in non-async function
+
+Import traces:
+  Client Component Browser:
+    ./src/components/UserView.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/UserView.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+[log] [Fast Refresh] rebuilding
+[error] ./src/components/SuperAdminDashboard.tsx:34:6
+Parsing ecmascript source code failed
+  32 |     const res = await fetch("/api/admin/stats");
+  33 |     if (res.ok) setStats(await res.json());
+> 34 |   }, []);
+     |      ^^
+  35 |
+  36 |   useEffect(() => {
+  37 |     setLoading(true);
+
+'const' declarations must be initialized
+
+Import traces:
+  Client Component Browser:
+    ./src/components/SuperAdminDashboard.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/SuperAdminDashboard.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+[error] ./src/components/SuperAdminDashboard.tsx:34:8
+Parsing ecmascript source code failed
+  32 |     const res = await fetch("/api/admin/stats");
+  33 |     if (res.ok) setStats(await res.json());
+> 34 |   }, []);
+     |        ^
+  35 |
+  36 |   useEffect(() => {
+  37 |     setLoading(true);
+
+Expected a semicolon
+
+Import traces:
+  Client Component Browser:
+    ./src/components/SuperAdminDashboard.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/SuperAdminDashboard.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+[error] ./src/components/UserView.tsx:22:30
+Parsing ecmascript source code failed
+  20 |     if (plRes.ok) setPlans(await plRes.json());
+  21 |     if (sRes.ok) setSedes(await sRes.json());
+> 22 |     if (hRes.ok) setHolidays(await hRes.json());
+     |                              ^^^^^
+  23 |   });
+  24 |
+  25 |   useEffect(() => { _load(); });
+
+await isn't allowed in non-async function
+
+Import traces:
+  Client Component Browser:
+    ./src/components/UserView.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/UserView.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+[log] [Fast Refresh] rebuilding
+[error] ./src/components/SuperAdminDashboard.tsx:34:6
+Parsing ecmascript source code failed
+  32 |     const res = await fetch("/api/admin/stats");
+  33 |     if (res.ok) setStats(await res.json());
+> 34 |   }, []);
+     |      ^^
+  35 |
+  36 |   useEffect(() => {
+  37 |     setLoading(true);
+
+'const' declarations must be initialized
+
+Import traces:
+  Client Component Browser:
+    ./src/components/SuperAdminDashboard.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/SuperAdminDashboard.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+[error] ./src/components/SuperAdminDashboard.tsx:34:8
+Parsing ecmascript source code failed
+  32 |     const res = await fetch("/api/admin/stats");
+  33 |     if (res.ok) setStats(await res.json());
+> 34 |   }, []);
+     |        ^
+  35 |
+  36 |   useEffect(() => {
+  37 |     setLoading(true);
+
+Expected a semicolon
+
+Import traces:
+  Client Component Browser:
+    ./src/components/SuperAdminDashboard.tsx [Client Component Browser]
+    ./src/components/AppShell.tsx [Client Component Browser]
+    ./src/app/page.tsx [Client Component Browser]
+    ./src/app/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./src/components/SuperAdminDashboard.tsx [Client Component SSR]
+    ./src/components/AppShell.tsx [Client Component SSR]
+    ./src/app/page.tsx [Client Component SSR]
+    ./src/app/page.tsx [Server Component]
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 172ms
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 142ms
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[log] [HMR] connected
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 143ms
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 148ms
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[log] [HMR] connected
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 170ms
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 142ms
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 155ms
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 155ms
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 142ms
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 151ms
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[log] [HMR] connected
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[log] [HMR] connected
+[info] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[log] [HMR] connected
+[log] [Fast Refresh] rebuilding
+[log] [Fast Refresh] done in 163ms
