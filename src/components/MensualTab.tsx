@@ -135,12 +135,12 @@ export default function MensualTab() {
         <div className="relative">
           <label className="block text-xs font-extrabold text-blue-400 uppercase mb-1">SEDES</label>
           <button onClick={() => { setShowSedeDD(!showSedeDD); setShowProDD(false); }}
-            className="min-w-[260px] px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white text-xs font-bold flex justify-between items-center">
-            <span>{selectedSedes.size === sedes.length ? `Todas las sedes (${sedes.length})` : `${selectedSedes.size} de ${sedes.length} sedes`}</span>
+            className="sm:min-w-[260px] w-full sm:w-auto px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white text-xs font-bold flex justify-between items-center">
+            <span>{selectedSedes.size === sedes.length ? `Todas (${sedes.length})` : `${selectedSedes.size}/${sedes.length} sedes`}</span>
             <span className="text-amber-500">▼</span>
           </button>
           {showSedeDD && (
-            <div className="absolute top-full mt-1 left-0 min-w-[320px] max-h-[300px] overflow-y-auto bg-slate-900 border border-amber-500 rounded-lg z-50 shadow-2xl p-2">
+            <div className="absolute top-full mt-1 left-0 right-0 sm:min-w-[320px] sm:right-auto max-h-[300px] overflow-y-auto bg-slate-900 border border-amber-500 rounded-lg z-50 shadow-2xl p-2">
               <div className="flex gap-1 pb-2 mb-2 border-b border-slate-700">
                 <button onClick={() => setSelectedSedes(new Set(sedes.map(s => s.id)))} className="flex-1 bg-slate-800 hover:bg-amber-500 hover:text-black text-xs px-2 py-1 rounded font-bold">TODAS</button>
                 <button onClick={() => setSelectedSedes(new Set())} className="flex-1 bg-slate-800 hover:bg-amber-500 hover:text-black text-xs px-2 py-1 rounded font-bold">NINGUNA</button>
@@ -161,12 +161,12 @@ export default function MensualTab() {
         <div className="relative">
           <label className="block text-xs font-extrabold text-blue-400 uppercase mb-1">PROFESIONALES</label>
           <button onClick={() => { setShowProDD(!showProDD); setShowSedeDD(false); }}
-            className="min-w-[240px] px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white text-xs font-bold flex justify-between items-center">
-            <span>{selectedPros.size === professionals.length ? `Todos (${professionals.length})` : `${selectedPros.size} de ${professionals.length}`}</span>
+            className="sm:min-w-[240px] w-full sm:w-auto px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white text-xs font-bold flex justify-between items-center">
+            <span>{selectedPros.size === professionals.length ? `Todos (${professionals.length})` : `${selectedPros.size}/${professionals.length}`}</span>
             <span className="text-amber-500">▼</span>
           </button>
           {showProDD && (
-            <div className="absolute top-full mt-1 left-0 min-w-[280px] max-h-[300px] overflow-y-auto bg-slate-900 border border-amber-500 rounded-lg z-50 shadow-2xl p-2">
+            <div className="absolute top-full mt-1 left-0 right-0 sm:min-w-[280px] sm:right-auto max-h-[300px] overflow-y-auto bg-slate-900 border border-amber-500 rounded-lg z-50 shadow-2xl p-2">
               <div className="flex gap-1 pb-2 mb-2 border-b border-slate-700">
                 <button onClick={() => setSelectedPros(new Set(professionals.map(p => p.alias)))} className="flex-1 bg-slate-800 hover:bg-amber-500 hover:text-black text-xs px-2 py-1 rounded font-bold">TODOS</button>
                 <button onClick={() => setSelectedPros(new Set())} className="flex-1 bg-slate-800 hover:bg-amber-500 hover:text-black text-xs px-2 py-1 rounded font-bold">NINGUNO</button>

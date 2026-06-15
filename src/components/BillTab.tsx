@@ -65,14 +65,21 @@ export default function BillTab() {
     FAILED: "bg-red-600/30 text-red-400",
     REFUNDED: "bg-slate-600/30 text-slate-400",
   };
+  const payStatusMobileColors: Record<string, string> = {
+    PAID: "text-green-400",
+    PENDING: "text-amber-400",
+    OVERDUE: "text-red-400",
+    FAILED: "text-red-400",
+    REFUNDED: "text-slate-400",
+  };
   const methodLabels: Record<string, string> = { CARD: "Tarjeta", TRANSFER: "Transferencia", CASH: "Efectivo" };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Subscription & Plan Card */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         {/* Current Plan */}
-        <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
+        <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4 sm:p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-bold text-white">Mi Plan</h3>
             <span className={`text-xs font-bold px-3 py-1 rounded-full ${statusColors[subscription?.status || "TRIAL"]} bg-slate-700`}>
@@ -80,9 +87,9 @@ export default function BillTab() {
             </span>
           </div>
 
-          <div className="flex items-center gap-4 mb-6">
-            <div className="bg-amber-500/20 border border-amber-500/30 rounded-xl px-6 py-4 text-center">
-              <div className="text-3xl font-black text-amber-400">{subscription?.price?.toFixed(2) || "0.00"}€</div>
+          <div className="flex items-center gap-3 sm:gap-4 mb-6">
+            <div className="bg-amber-500/20 border border-amber-500/30 rounded-xl px-4 sm:px-6 py-3 sm:py-4 text-center">
+              <div className="text-2xl sm:text-3xl font-black text-amber-400">{subscription?.price?.toFixed(2) || "0.00"}€</div>
               <div className="text-xs text-slate-400 font-bold mt-1">
                 / {billingLabels[subscription?.billingMethod || "MONTHLY"]?.toLowerCase() || "mes"}
               </div>
@@ -130,17 +137,17 @@ export default function BillTab() {
         </div>
 
         {/* Billing Summary */}
-        <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
+        <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4 sm:p-6">
           <h3 className="text-lg font-bold text-white mb-4">Resumen de Facturación</h3>
 
-          <div className="grid grid-cols-2 gap-4 mb-6">
-            <div className="bg-green-600/10 border border-green-600/20 rounded-xl p-4 text-center">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 mb-6">
+            <div className="bg-green-600/10 border border-green-600/20 rounded-xl p-3 sm:p-4 text-center">
               <div className="text-xs text-green-400 font-bold uppercase">Total Pagado</div>
-              <div className="text-2xl font-black text-green-400 mt-1">{billing.totalPaid.toFixed(2)}€</div>
+              <div className="text-xl sm:text-2xl font-black text-green-400 mt-1">{billing.totalPaid.toFixed(2)}€</div>
             </div>
-            <div className="bg-amber-600/10 border border-amber-600/20 rounded-xl p-4 text-center">
+            <div className="bg-amber-600/10 border border-amber-600/20 rounded-xl p-3 sm:p-4 text-center">
               <div className="text-xs text-amber-400 font-bold uppercase">Pendiente</div>
-              <div className="text-2xl font-black text-amber-400 mt-1">{billing.totalPending.toFixed(2)}€</div>
+              <div className="text-xl sm:text-2xl font-black text-amber-400 mt-1">{billing.totalPending.toFixed(2)}€</div>
             </div>
           </div>
 
@@ -149,7 +156,7 @@ export default function BillTab() {
             <h4 className="text-xs font-extrabold text-blue-400 uppercase">Límites del Plan</h4>
             <div className="grid grid-cols-2 gap-2 text-sm">
               <div className="flex justify-between bg-slate-900/50 rounded-lg px-3 py-2">
-                <span className="text-slate-400">Máx. Profesionales</span>
+                <span className="text-slate-400">Máx. Prof.</span>
                 <span className="text-white font-bold">{usage.maxProfessionals}</span>
               </div>
               <div className="flex justify-between bg-slate-900/50 rounded-lg px-3 py-2">
@@ -166,60 +173,87 @@ export default function BillTab() {
 
       {/* Payment History */}
       <div className="bg-slate-800/50 border border-slate-700 rounded-xl">
-        <div className="px-6 py-4 border-b border-slate-700 flex justify-between items-center">
+        <div className="px-4 sm:px-6 py-4 border-b border-slate-700 flex justify-between items-center">
           <h3 className="text-lg font-bold text-white">Historial de Facturas</h3>
           <div className="text-xs text-slate-400">{payments.length} facturas</div>
         </div>
         {payments.length === 0 ? (
           <div className="p-8 text-center text-slate-500">No hay facturas disponibles</div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-slate-900">
-                  <th className="text-left px-4 py-3 text-xs font-extrabold text-blue-400 uppercase">Factura</th>
-                  <th className="text-left px-4 py-3 text-xs font-extrabold text-blue-400 uppercase">Concepto</th>
-                  <th className="text-left px-4 py-3 text-xs font-extrabold text-blue-400 uppercase">Base</th>
-                  <th className="text-left px-4 py-3 text-xs font-extrabold text-blue-400 uppercase">IVA</th>
-                  <th className="text-left px-4 py-3 text-xs font-extrabold text-blue-400 uppercase">Total</th>
-                  <th className="text-left px-4 py-3 text-xs font-extrabold text-blue-400 uppercase">Estado</th>
-                  <th className="text-left px-4 py-3 text-xs font-extrabold text-blue-400 uppercase">Vencimiento</th>
-                  <th className="text-left px-4 py-3 text-xs font-extrabold text-blue-400 uppercase">Método</th>
-                </tr>
-              </thead>
-              <tbody>
-                {payments.map((p: any) => (
-                  <tr
-                    key={p.id}
-                    className="border-b border-slate-700/50 hover:bg-slate-700/20 cursor-pointer transition"
-                    onClick={() => setSelectedPayment(selectedPayment?.id === p.id ? null : p)}
-                  >
-                    <td className="px-4 py-3 text-sm font-bold text-white">{p.invoiceNumber || "—"}</td>
-                    <td className="px-4 py-3 text-sm text-slate-300">{p.concept || "Suscripción"}</td>
-                    <td className="px-4 py-3 text-sm text-slate-300">{(p.subtotal || p.amount).toFixed(2)}€</td>
-                    <td className="px-4 py-3 text-sm text-slate-400">{p.taxAmount?.toFixed(2) || "—"}€</td>
-                    <td className="px-4 py-3 text-sm font-bold text-amber-400">{p.amount.toFixed(2)}€</td>
-                    <td className="px-4 py-3">
-                      <span className={`text-xs font-bold px-2 py-1 rounded ${payStatusColors[p.status] || "bg-slate-600/30 text-slate-400"}`}>
-                        {p.status === "PAID" ? "Pagado" : p.status === "PENDING" ? "Pendiente" : p.status === "OVERDUE" ? "Vencido" : p.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-400">
+          <>
+            {/* Mobile: card layout */}
+            <div className="sm:hidden divide-y divide-slate-700/50">
+              {payments.map((p: any) => (
+                <div key={p.id} className="p-4 space-y-2 cursor-pointer hover:bg-slate-700/20 transition"
+                  onClick={() => setSelectedPayment(selectedPayment?.id === p.id ? null : p)}>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <div className="text-sm font-bold text-white">{p.invoiceNumber || "—"}</div>
+                      <div className="text-xs text-slate-400">{p.concept || "Suscripción"}</div>
+                    </div>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${payStatusColors[p.status] || "bg-slate-600/30 text-slate-400"}`}>
+                      {p.status === "PAID" ? "Pagado" : p.status === "PENDING" ? "Pendiente" : p.status === "OVERDUE" ? "Vencido" : p.status}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-lg font-black text-amber-400">{p.amount.toFixed(2)}€</span>
+                    <span className="text-xs text-slate-400">
                       {p.dueDate ? new Date(p.dueDate).toLocaleDateString("es-ES") : "—"}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-slate-300">{methodLabels[p.method] || p.method}</td>
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop: table */}
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-slate-900">
+                    <th className="text-left px-4 py-3 text-xs font-extrabold text-blue-400 uppercase">Factura</th>
+                    <th className="text-left px-4 py-3 text-xs font-extrabold text-blue-400 uppercase">Concepto</th>
+                    <th className="text-left px-4 py-3 text-xs font-extrabold text-blue-400 uppercase">Base</th>
+                    <th className="text-left px-4 py-3 text-xs font-extrabold text-blue-400 uppercase">IVA</th>
+                    <th className="text-left px-4 py-3 text-xs font-extrabold text-blue-400 uppercase">Total</th>
+                    <th className="text-left px-4 py-3 text-xs font-extrabold text-blue-400 uppercase">Estado</th>
+                    <th className="text-left px-4 py-3 text-xs font-extrabold text-blue-400 uppercase">Vencimiento</th>
+                    <th className="text-left px-4 py-3 text-xs font-extrabold text-blue-400 uppercase">Método</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {payments.map((p: any) => (
+                    <tr
+                      key={p.id}
+                      className="border-b border-slate-700/50 hover:bg-slate-700/20 cursor-pointer transition"
+                      onClick={() => setSelectedPayment(selectedPayment?.id === p.id ? null : p)}
+                    >
+                      <td className="px-4 py-3 text-sm font-bold text-white">{p.invoiceNumber || "—"}</td>
+                      <td className="px-4 py-3 text-sm text-slate-300">{p.concept || "Suscripción"}</td>
+                      <td className="px-4 py-3 text-sm text-slate-300">{(p.subtotal || p.amount).toFixed(2)}€</td>
+                      <td className="px-4 py-3 text-sm text-slate-400">{p.taxAmount?.toFixed(2) || "—"}€</td>
+                      <td className="px-4 py-3 text-sm font-bold text-amber-400">{p.amount.toFixed(2)}€</td>
+                      <td className="px-4 py-3">
+                        <span className={`text-xs font-bold px-2 py-1 rounded ${payStatusColors[p.status] || "bg-slate-600/30 text-slate-400"}`}>
+                          {p.status === "PAID" ? "Pagado" : p.status === "PENDING" ? "Pendiente" : p.status === "OVERDUE" ? "Vencido" : p.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-slate-400">
+                        {p.dueDate ? new Date(p.dueDate).toLocaleDateString("es-ES") : "—"}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-300">{methodLabels[p.method] || p.method}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
 
       {/* Invoice Detail Modal */}
       {selectedPayment && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setSelectedPayment(null)}>
-          <div className="bg-slate-800 border border-slate-600 rounded-2xl p-6 w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-slate-800 border border-slate-600 rounded-2xl p-5 sm:p-6 w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-between items-start mb-6">
               <div>
                 <h3 className="text-lg font-bold text-white">Detalle Factura</h3>
@@ -301,7 +335,7 @@ export default function BillTab() {
       )}
 
       {/* Plan comparison (upgrade info) */}
-      <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
+      <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4 sm:p-6">
         <h3 className="text-lg font-bold text-white mb-4">Comparativa de Planes</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {[

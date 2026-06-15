@@ -128,8 +128,8 @@ export default function SedesTab() {
 
       {/* Delete confirmation dialog */}
       {deleteTarget && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <div className="bg-slate-800 border border-slate-600 rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl">
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-slate-800 border border-slate-600 rounded-xl p-6 max-w-md w-full shadow-2xl">
             <h3 className="text-lg font-bold text-white mb-2">Confirmar eliminación</h3>
             <p className="text-slate-300 text-sm mb-1">
               ¿Estás seguro de que quieres eliminar la sede <span className="text-amber-400 font-bold">&quot;{deleteTarget.name}&quot;</span>?
@@ -163,8 +163,8 @@ export default function SedesTab() {
         </div>
       )}
 
-      {/* Form row */}
-      <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-5">
+      {/* Form */}
+      <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4 sm:p-5">
         <div className="flex items-center gap-3 mb-3">
           <h2 className="text-sm font-extrabold text-blue-400 uppercase tracking-wider">
             {editingId ? "Editar Sede" : "Nueva Sede"}
@@ -175,7 +175,68 @@ export default function SedesTab() {
             </button>
           )}
         </div>
-        <div className="grid gap-3 items-end" style={{ gridTemplateColumns: "repeat(9, 1fr) 100px" }}>
+        {/* Mobile: stacked layout */}
+        <div className="sm:hidden space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-extrabold text-blue-400 uppercase mb-1">Sede</label>
+              <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
+                className="w-full px-2 py-2 bg-slate-900 border border-slate-600 rounded text-white text-xs focus:outline-none focus:border-amber-500 transition" />
+            </div>
+            <div>
+              <label className="block text-xs font-extrabold text-blue-400 uppercase mb-1">Ciudad</label>
+              <input value={form.city} onChange={e => setForm({ ...form, city: e.target.value })}
+                className="w-full px-2 py-2 bg-slate-900 border border-slate-600 rounded text-white text-xs focus:outline-none focus:border-amber-500 transition" />
+            </div>
+            <div>
+              <label className="block text-xs font-extrabold text-blue-400 uppercase mb-1">Provincia</label>
+              <input value={form.province} onChange={e => setForm({ ...form, province: e.target.value })}
+                className="w-full px-2 py-2 bg-slate-900 border border-slate-600 rounded text-white text-xs focus:outline-none focus:border-amber-500 transition" />
+            </div>
+            <div>
+              <label className="block text-xs font-extrabold text-blue-400 uppercase mb-1">Tarea</label>
+              <input value={form.task} onChange={e => setForm({ ...form, task: e.target.value })}
+                className="w-full px-2 py-2 bg-slate-900 border border-slate-600 rounded text-white text-xs focus:outline-none focus:border-amber-500 transition" />
+            </div>
+            <div>
+              <label className="block text-xs font-extrabold text-blue-400 uppercase mb-1">Mail</label>
+              <input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
+                className="w-full px-2 py-2 bg-slate-900 border border-slate-600 rounded text-white text-xs focus:outline-none focus:border-amber-500 transition" />
+            </div>
+            <div>
+              <label className="block text-xs font-extrabold text-blue-400 uppercase mb-1">Tel.</label>
+              <input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })}
+                className="w-full px-2 py-2 bg-slate-900 border border-slate-600 rounded text-white text-xs focus:outline-none focus:border-amber-500 transition" />
+            </div>
+          </div>
+          <div className="flex gap-3 items-end">
+            <div className="flex-1">
+              <label className="block text-xs font-extrabold text-blue-400 uppercase mb-1">M</label>
+              <select value={form.morningEnabled ? "SI" : "NO"} onChange={e => setForm({ ...form, morningEnabled: e.target.value === "SI" })}
+                className="w-full px-2 py-2 bg-slate-900 border border-slate-600 rounded text-white text-xs">
+                <option>SI</option><option>NO</option>
+              </select>
+            </div>
+            <div className="flex-1">
+              <label className="block text-xs font-extrabold text-blue-400 uppercase mb-1">T</label>
+              <select value={form.afternoonEnabled ? "SI" : "NO"} onChange={e => setForm({ ...form, afternoonEnabled: e.target.value === "SI" })}
+                className="w-full px-2 py-2 bg-slate-900 border border-slate-600 rounded text-white text-xs">
+                <option>SI</option><option>NO</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-extrabold text-blue-400 uppercase mb-1">Color</label>
+              <input type="color" value={form.color} onChange={e => setForm({ ...form, color: e.target.value })} className="w-10 h-8 rounded cursor-pointer" />
+            </div>
+            <button onClick={handleSave} className={`font-bold py-2 px-4 rounded text-xs transition ${
+              editingId ? "bg-blue-500 hover:bg-blue-400 text-white" : "bg-amber-500 hover:bg-amber-400 text-black"
+            }`}>
+              {editingId ? "ACT." : "SAVE"}
+            </button>
+          </div>
+        </div>
+        {/* Desktop: wide grid */}
+        <div className="hidden sm:grid gap-3 items-end" style={{ gridTemplateColumns: "repeat(9, 1fr) 100px" }}>
           {[
             { label: "Sede", key: "name" }, { label: "Ciudad", key: "city" }, { label: "Provincia", key: "province" },
             { label: "Tarea", key: "task" }, { label: "Mail", key: "email" }, { label: "Tel.", key: "phone" },
@@ -228,8 +289,41 @@ export default function SedesTab() {
         </div>
       </div>
 
-      {/* Table */}
-      <div className="bg-slate-800/50 border border-slate-700 rounded-xl overflow-auto max-h-[calc(100vh-320px)]">
+      {/* Mobile: card layout */}
+      <div className="sm:hidden space-y-2">
+        {loading && sedes.length === 0 ? (
+          <div className="flex items-center justify-center py-12 text-slate-400 text-sm">Cargando sedes...</div>
+        ) : sedes.length === 0 ? (
+          <div className="flex items-center justify-center py-12 text-slate-500 text-sm">No hay sedes registradas</div>
+        ) : (
+          sedes.map(s => (
+            <div key={s.id} className="bg-slate-800/50 border border-slate-700 rounded-xl p-3 space-y-2">
+              <div className="flex justify-between items-start">
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded" style={{ background: s.color }} />
+                  <div>
+                    <div className="text-sm font-bold text-white">{s.name}</div>
+                    <div className="text-xs text-slate-400">{s.city}{s.province ? `, ${s.province}` : ""}</div>
+                  </div>
+                </div>
+                <div className="flex gap-1">
+                  <span className={`text-[10px] font-bold ${s.morningEnabled ? "text-emerald-400" : "text-slate-500"}`}>M{s.morningEnabled ? "✓" : "✗"}</span>
+                  <span className={`text-[10px] font-bold ${s.afternoonEnabled ? "text-emerald-400" : "text-slate-500"}`}>T{s.afternoonEnabled ? "✓" : "✗"}</span>
+                </div>
+              </div>
+              {s.task && <div className="text-xs text-slate-400">Tarea: {s.task}</div>}
+              {(s.phone || s.email) && <div className="text-xs text-slate-400">{s.phone || s.email}</div>}
+              <div className="flex gap-2">
+                <button onClick={() => handleEdit(s)} className="flex-1 bg-blue-600/20 text-blue-400 font-bold py-1.5 rounded text-xs">EDITAR</button>
+                <button onClick={() => setDeleteTarget(s)} className="bg-red-600/20 text-red-400 font-bold py-1.5 px-3 rounded text-xs">✕</button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Desktop: table */}
+      <div className="hidden sm:block bg-slate-800/50 border border-slate-700 rounded-xl overflow-auto max-h-[calc(100vh-320px)]">
         {loading && sedes.length === 0 ? (
           <div className="flex items-center justify-center py-12 text-slate-400 text-sm">Cargando sedes...</div>
         ) : sedes.length === 0 ? (
@@ -258,20 +352,8 @@ export default function SedesTab() {
                   <td className="px-4 py-2"><div className="w-5 h-5 rounded border border-slate-600" style={{ background: s.color }} /></td>
                   <td className="px-4 py-2">
                     <div className="flex gap-1">
-                      <button
-                        onClick={() => handleEdit(s)}
-                        className="bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded text-xs transition"
-                        title="Editar sede"
-                      >
-                        ✏️
-                      </button>
-                      <button
-                        onClick={() => setDeleteTarget(s)}
-                        className="bg-red-600/30 hover:bg-red-600/50 text-red-400 px-2 py-1 rounded text-xs transition"
-                        title="Eliminar sede"
-                      >
-                        ✖
-                      </button>
+                      <button onClick={() => handleEdit(s)} className="bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded text-xs transition" title="Editar sede">✏️</button>
+                      <button onClick={() => setDeleteTarget(s)} className="bg-red-600/30 hover:bg-red-600/50 text-red-400 px-2 py-1 rounded text-xs transition" title="Eliminar sede">✖</button>
                     </div>
                   </td>
                 </tr>

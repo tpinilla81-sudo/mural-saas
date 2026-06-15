@@ -114,6 +114,13 @@ export default function SuperAdminDashboard() {
     else addToast("Error", "error");
   };
 
+  const handleDeleteCompany = async (company: Company) => {
+    if (!confirm(`¿Eliminar la empresa "${company.name}"? Esta acción no se puede deshacer.`)) return;
+    const res = await fetch(`/api/admin/companies/${company.id}`, { method: "DELETE" });
+    if (res.ok) { addToast("Empresa eliminada"); fetchCompanies(); }
+    else addToast("Error al eliminar empresa", "error");
+  };
+
   const planLabels: Record<string, string> = { BASIC: "Básico", PRO: "Pro", ENTERPRISE: "Empresa" };
   const planColors: Record<string, string> = { BASIC: "bg-slate-600", PRO: "bg-blue-600", ENTERPRISE: "bg-[#2E5D3A]" };
 
@@ -175,6 +182,7 @@ export default function SuperAdminDashboard() {
                     <button onClick={() => handleToggleActive(c)} className={`flex-1 font-bold py-1.5 rounded text-xs ${c.isActive ? "bg-red-600/20 text-red-400" : "bg-green-600/20 text-green-400"}`}>
                       {c.isActive ? "DESACTIVAR" : "ACTIVAR"}
                     </button>
+                    <button onClick={() => handleDeleteCompany(c)} className="bg-red-600/20 text-red-400 font-bold py-1.5 px-3 rounded text-xs">✕</button>
                   </div>
                 </div>
               ))}
@@ -211,7 +219,8 @@ export default function SuperAdminDashboard() {
                         <td className="px-4 py-3 text-sm text-amber-400 font-bold text-right">{c.subscription?.price?.toFixed(2)}€</td>
                         <td className="px-4 py-3 text-center whitespace-nowrap">
                           <button onClick={() => openEditCompany(c)} className="text-blue-400 hover:text-blue-300 text-xs font-bold mr-2">EDITAR</button>
-                          <button onClick={() => handleToggleActive(c)} className={`text-xs font-bold ${c.isActive ? "text-red-400" : "text-green-400"}`}>{c.isActive ? "DESACTIVAR" : "ACTIVAR"}</button>
+                          <button onClick={() => handleToggleActive(c)} className={`text-xs font-bold mr-2 ${c.isActive ? "text-red-400" : "text-green-400"}`}>{c.isActive ? "DESACTIVAR" : "ACTIVAR"}</button>
+                          <button onClick={() => handleDeleteCompany(c)} className="text-red-400 hover:text-red-300 text-xs font-bold">✕</button>
                         </td>
                       </tr>
                     ))}

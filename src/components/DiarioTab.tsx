@@ -66,21 +66,21 @@ export default function DiarioTab() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden border border-slate-700 rounded-xl bg-slate-800/50">
-      <div className="bg-slate-900 p-4 border-b border-slate-700 flex gap-4 items-end flex-wrap shrink-0">
+      <div className="bg-slate-900 p-3 sm:p-4 border-b border-slate-700 flex gap-3 sm:gap-4 items-end flex-wrap shrink-0">
         <div>
           <label className="block text-xs font-extrabold text-blue-400 uppercase mb-1">AÑO</label>
           <select value={year} onChange={e => setYear(parseInt(e.target.value))} className="w-20 px-2 py-2 bg-slate-800 border border-slate-600 rounded text-white text-xs">
             {Array.from({ length: 15 }, (_, i) => 2026 + i).map(y => <option key={y} value={y}>{y}</option>)}
           </select>
         </div>
-        <div>
+        <div className="flex-1 sm:flex-none">
           <label className="block text-xs font-extrabold text-blue-400 uppercase mb-1">PROFESIONAL</label>
-          <select value={selectedPro} onChange={e => setSelectedPro(e.target.value)} className="w-64 px-2 py-2 bg-slate-800 border-2 border-amber-500 rounded text-white text-xs font-bold">
+          <select value={selectedPro} onChange={e => setSelectedPro(e.target.value)} className="w-full sm:w-64 px-2 py-2 bg-slate-800 border-2 border-amber-500 rounded text-white text-xs font-bold">
             <option value="">-- SELEC --</option>
             {professionals.map(p => <option key={p.id} value={p.alias}>{p.alias} - {p.firstName}</option>)}
           </select>
         </div>
-        <div className="flex gap-2 ml-4">
+        <div className="flex gap-2">
           {uniqueColors.map(c => (
             <div key={c} onClick={() => setFilters(f => f.includes(c) ? f.filter(x => x !== c) : [...f, c])}
               className="w-5 h-5 rounded-full cursor-pointer" style={{ background: c, border: filters.includes(c) ? "2px solid white" : "1px solid #555" }} />
