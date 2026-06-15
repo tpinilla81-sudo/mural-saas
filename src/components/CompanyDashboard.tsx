@@ -7,31 +7,33 @@ import SedesTab from "@/components/SedesTab";
 import CalendariosTab from "@/components/CalendariosTab";
 import DiarioTab from "@/components/DiarioTab";
 import MensualTab from "@/components/MensualTab";
+import BillTab from "@/components/BillTab";
 
 export default function CompanyDashboard() {
   const { data: session } = useSession();
-  const [tab, setTab] = useState<"pros" | "sedes" | "cal" | "diario" | "mensual">("mensual");
+  const [tab, setTab] = useState<"pros" | "sedes" | "cal" | "diario" | "mensual" | "bill">("mensual");
 
   const tabs = [
-    { key: "pros" as const, label: "👷 PROFESIONALES" },
-    { key: "sedes" as const, label: "🏢 SEDES" },
-    { key: "cal" as const, label: "🗓️ CALENDARIOS" },
-    { key: "diario" as const, label: "📅 DIARIO" },
-    { key: "mensual" as const, label: "📆 MENSUAL" },
+    { key: "pros" as const, label: "PROFESIONALES" },
+    { key: "sedes" as const, label: "SEDES" },
+    { key: "cal" as const, label: "CALENDARIOS" },
+    { key: "diario" as const, label: "DIARIO" },
+    { key: "mensual" as const, label: "MENSUAL" },
+    { key: "bill" as const, label: "FACTURACIÓN" },
   ];
 
   return (
     <div className="h-full flex flex-col p-5 overflow-hidden">
-      <div className="flex gap-3 mb-5">
+      <div className="flex gap-2 mb-5 flex-wrap">
         {tabs.map((t) => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`px-5 py-2.5 rounded-lg font-bold text-sm transition ${
+            className={`px-4 py-2 rounded-lg font-bold text-sm transition ${
               tab === t.key ? "bg-amber-500 text-black" : "bg-slate-700 text-slate-400 hover:bg-slate-600"
             }`}
           >
-            {t.label}
+            {t.key === "bill" && "💳 "}{t.label}
           </button>
         ))}
       </div>
@@ -42,6 +44,7 @@ export default function CompanyDashboard() {
         {tab === "cal" && <CalendariosTab />}
         {tab === "diario" && <DiarioTab />}
         {tab === "mensual" && <MensualTab />}
+        {tab === "bill" && <BillTab />}
       </div>
     </div>
   );

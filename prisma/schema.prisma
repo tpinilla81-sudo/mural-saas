@@ -61,21 +61,32 @@ model Subscription {
 }
 
 model Payment {
-  id            String   @id @default(cuid())
-  subscriptionId String
-  companyId     String
-  amount        Float
-  currency      String   @default("EUR")
-  status        String   @default("PENDING") // PENDING | PAID | FAILED | REFUNDED
-  paymentDate   DateTime?
-  dueDate       DateTime
-  method        String   @default("CARD") // CARD | TRANSFER | CASH
-  invoiceNumber String?
-  notes         String?
-  createdAt     DateTime @default(now())
+  id              String    @id @default(cuid())
+  subscriptionId  String
+  companyId       String
+  amount          Float
+  currency        String    @default("EUR")
+  status          String     @default("PENDING") // PENDING | PAID | FAILED | REFUNDED | OVERDUE
+  paymentDate     DateTime?
+  dueDate         DateTime
+  method          String     @default("CARD") // CARD | TRANSFER | CASH
+  invoiceNumber   String?
+  concept         String?    @default("Suscripción mensual")
+  taxRate         Float      @default(21.0)
+  taxAmount       Float      @default(0)
+  subtotal        Float      @default(0)
+  periodStart     DateTime?
+  periodEnd       DateTime?
+  paidAt          DateTime?
+  notes           String?
+  createdAt       DateTime   @default(now())
 
   subscription Subscription @relation(fields: [subscriptionId], references: [id])
   company      Company     @relation(fields: [companyId], references: [id])
+
+  @@index([companyId])
+  @@index([status])
+  @@index([dueDate])
 }
 
 model Sede {

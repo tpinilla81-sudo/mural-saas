@@ -69,21 +69,171 @@ async function main() {
   });
   console.log("✅ Subscription created:", sub.planName);
 
-  // Create sample payment
-  await db.payment.create({
+  // Create sample payments with full billing data
+  const paymentData = [
+    { month: "01", status: "PAID", method: "CARD", paidAt: "2026-01-05" },
+    { month: "02", status: "PAID", method: "TRANSFER", paidAt: "2026-02-03" },
+    { month: "03", status: "PAID", method: "CARD", paidAt: "2026-03-04" },
+    { month: "04", status: "PAID", method: "CARD", paidAt: "2026-04-02" },
+    { month: "05", status: "PAID", method: "TRANSFER", paidAt: "2026-05-05" },
+    { month: "06", status: "PAID", method: "CARD", paidAt: "2026-06-02" },
+    { month: "07", status: "PENDING", method: "CARD", paidAt: null },
+  ];
+
+  for (let i = 0; i < paymentData.length; i++) {
+    const p = paymentData[i];
+    const subtotal = 79.99;
+    const taxRate = 21.0;
+    const taxAmount = Math.round(subtotal * (taxRate / 100) * 100) / 100;
+    const totalAmount = Math.round((subtotal + taxAmount) * 100) / 100;
+
+    await db.payment.create({
+      data: {
+        subscriptionId: sub.id,
+        companyId: company.id,
+        amount: totalAmount,
+        currency: "EUR",
+        status: p.status,
+        paymentDate: p.paidAt ? new Date(p.paidAt) : null,
+        paidAt: p.paidAt ? new Date(p.paidAt) : null,
+        dueDate: new Date(`2026-${p.month}-01`),
+        method: p.method,
+        invoiceNumber: `INV-2026-${String(i + 1).padStart(3, "0")}`,
+        concept: `Suscripción Mensual - Plan PRO`,
+        taxRate,
+        taxAmount,
+        subtotal,
+        periodStart: new Date(`2026-${p.month}-01`),
+        periodEnd: new Date(`2026-${p.month}-28`),
+      },
+    });
+  }
+  console.log(`✅ ${paymentData.length} Payments created`);
+
+  // Create a second demo company with BASIC plan
+  const company2 = await db.company.create({
     data: {
-      subscriptionId: sub.id,
-      companyId: company.id,
-      amount: 79.99,
-      currency: "EUR",
-      status: "PAID",
-      paymentDate: new Date("2026-06-01"),
-      dueDate: new Date("2026-06-01"),
-      method: "CARD",
-      invoiceNumber: "INV-2026-001",
+      name: "Clínica Derma Plus",
+      slug: "derma-plus",
+      isActive: true,
     },
   });
-  console.log("✅ Payment created");
+  console.log("✅ Company 2 created:", company2.name);
+
+  const sub2 = await db.subscription.create({
+    data: {
+      companyId: company2.id,
+      planName: "BASIC",
+      billingMethod: "QUARTERLY",
+      price: 29.99,
+      currency: "EUR",
+      status: "ACTIVE",
+      currentPeriodStart: new Date("2026-04-01"),
+      currentPeriodEnd: new Date("2026-06-30"),
+      maxProfessionals: 5,
+      maxSedes: 3,
+    },
+  });
+
+  const company2AdminPw = await bcrypt.hash("derma123", 10);
+  await db.user.create({
+    data: {
+      email: "derma@mural.app",
+      name: "Ana García",
+      password: company2AdminPw,
+      role: "COMPANY_ADMIN",
+      companyId: company2.id,
+    },
+  });
+
+  // Payments for company 2
+  const sub2Subtotal = 29.99;
+  const sub2TaxAmount = Math.round(sub2Subtotal * 0.21 * 100) / 100;
+  const sub2Total = Math.round((sub2Subtotal + sub2TaxAmount) * 100) / 100;
+
+  await db.payment.create({
+    data: {
+      subscriptionId: sub2.id,
+      companyId: company2.id,
+      amount: sub2Total * 3, // Quarterly
+      currency: "EUR",
+      status: "PAID",
+      paymentDate: new Date("2026-04-01"),
+      paidAt: new Date("2026-04-01"),
+      dueDate: new Date("2026-04-01"),
+      method: "TRANSFER",
+      invoiceNumber: "INV-2026-008",
+      concept: "Suscripción Trimestral - Plan BASIC",
+      taxRate: 21.0,
+      taxAmount: sub2TaxAmount * 3,
+      subtotal: sub2Subtotal * 3,
+      periodStart: new Date("2026-04-01"),
+      periodEnd: new Date("2026-06-30"),
+    },
+  });
+  console.log("✅ Company 2 payments created");
+
+  // Create a third demo company with ENTERPRISE plan
+  const company3 = await db.company.create({
+    data: {
+      name: "Hospital Grupo Médico",
+      slug: "grupo-medico",
+      isActive: true,
+    },
+  });
+  console.log("✅ Company 3 created:", company3.name);
+
+  const sub3 = await db.subscription.create({
+    data: {
+      companyId: company3.id,
+      planName: "ENTERPRISE",
+      billingMethod: "ANNUAL",
+      price: 199.99,
+      currency: "EUR",
+      status: "ACTIVE",
+      currentPeriodStart: new Date("2026-01-01"),
+      currentPeriodEnd: new Date("2026-12-31"),
+      maxProfessionals: 999,
+      maxSedes: 999,
+    },
+  });
+
+  const company3AdminPw = await bcrypt.hash("grupo123", 10);
+  await db.user.create({
+    data: {
+      email: "grupo@mural.app",
+      name: "Carlos Ruiz",
+      password: company3AdminPw,
+      role: "COMPANY_ADMIN",
+      companyId: company3.id,
+    },
+  });
+
+  const sub3Subtotal = 199.99 * 12; // Annual
+  const sub3TaxAmount = Math.round(sub3Subtotal * 0.21 * 100) / 100;
+  const sub3Total = Math.round((sub3Subtotal + sub3TaxAmount) * 100) / 100;
+
+  await db.payment.create({
+    data: {
+      subscriptionId: sub3.id,
+      companyId: company3.id,
+      amount: sub3Total,
+      currency: "EUR",
+      status: "PAID",
+      paymentDate: new Date("2026-01-15"),
+      paidAt: new Date("2026-01-15"),
+      dueDate: new Date("2026-01-01"),
+      method: "TRANSFER",
+      invoiceNumber: "INV-2026-009",
+      concept: "Suscripción Anual - Plan ENTERPRISE",
+      taxRate: 21.0,
+      taxAmount: sub3TaxAmount,
+      subtotal: sub3Subtotal,
+      periodStart: new Date("2026-01-01"),
+      periodEnd: new Date("2026-12-31"),
+    },
+  });
+  console.log("✅ Company 3 payments created");
 
   // Create sample sedes
   const sedeData = [
