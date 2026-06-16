@@ -20,7 +20,7 @@ export default function AppShell() {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: "#0b1120" }}>
         <div className="flex flex-col items-center gap-4">
-          <img src="/logo.svg" alt="Mural by Método" className="h-12 w-12 rounded-full animate-pulse" />
+          <img src="/logo.jpeg" alt="Mural by Método" className="h-12 w-12 rounded-full animate-pulse object-cover" />
           <span className="text-white font-bold text-base">Mural by Método</span>
         </div>
       </div>
@@ -38,7 +38,7 @@ export default function AppShell() {
       {/* Navbar */}
       <nav className="bg-black px-3 sm:px-6 py-3 flex items-center gap-3 border-b-2 border-[#6BBE7A] shrink-0">
         <div className="flex items-center gap-2 sm:gap-3">
-          <img src="/logo.svg" alt="Mural by Método" className="h-8 w-8 sm:h-9 sm:w-9 rounded-full" />
+          <img src="/logo.jpeg" alt="Mural by Método" className="h-8 w-8 sm:h-9 sm:w-9 rounded-full object-cover" />
           <div>
             <div className="text-[#6BBE7A] font-black text-base sm:text-lg leading-none">Mural</div>
             <div className="text-[#2E5D3A] text-[10px] sm:text-xs font-bold tracking-widest">by Método</div>
