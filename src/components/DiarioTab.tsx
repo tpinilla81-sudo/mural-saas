@@ -286,7 +286,7 @@ export default function DiarioTab() {
 
   const hasAnyFilter = filterColors.length > 0 || filterPro || filterCity || filterProvince || filterAvisoReason;
 
-  const cellW = viewMode === "compact" ? "min-w-[32px] sm:min-w-[44px]" : "min-w-[44px] sm:min-w-[60px]";
+  const cellW = viewMode === "compact" ? "min-w-[28px] sm:min-w-[44px]" : "min-w-[36px] sm:min-w-[60px]";
   const cellH = viewMode === "compact" ? "h-[32px] sm:h-[44px]" : "h-[44px] sm:h-[60px]";
   const textSize = viewMode === "compact" ? "text-[6px] sm:text-[8px]" : "text-[7px] sm:text-[9px]";
 
@@ -456,7 +456,7 @@ export default function DiarioTab() {
           <thead className="sticky top-0 z-10">
             <tr>
               {/* Sede label column - compact on mobile */}
-              <th className="sticky left-0 z-20 bg-black border-r-[3px] border-amber-500 px-1 sm:px-3 py-1 sm:py-2 text-[9px] sm:text-xs text-blue-400 font-bold text-left w-[70px] sm:w-[200px] min-w-[70px] sm:min-w-[200px]">
+              <th className="sticky left-0 z-20 bg-black border-r-[3px] border-amber-500 px-0.5 sm:px-3 py-1 sm:py-2 text-[9px] sm:text-xs text-blue-400 font-bold text-left w-[50px] sm:w-[200px] min-w-[50px] sm:min-w-[200px]">
                 SEDES
               </th>
               {daysArr.map((d, i) => {
@@ -481,13 +481,12 @@ export default function DiarioTab() {
               return (
                 <tr key={sede.id}>
                   {/* Sede label - very compact on mobile */}
-                  <td className="sticky left-0 z-10 bg-black border-r-[3px] border-amber-500 px-1 sm:px-3 py-0.5 sm:py-2 border-b-2 border-white/90">
-                    {/* Mobile: compact view */}
+                  <td className="sticky left-0 z-10 bg-black border-r-[3px] border-amber-500 px-0.5 sm:px-3 py-0.5 sm:py-2 border-b-2 border-white/90">
+                    {/* Mobile: ultra-compact view */}
                     <div className="sm:hidden">
-                      <div className="font-bold text-[9px] leading-tight" style={{ borderLeft: `4px solid ${sede.color}`, paddingLeft: 4 }}>
+                      <div className="font-bold text-[8px] leading-tight truncate max-w-[42px]" style={{ borderLeft: `3px solid ${sede.color}`, paddingLeft: 3 }}>
                         {sede.name}
                       </div>
-                      <div className="text-[7px] text-slate-400 leading-tight truncate max-w-[58px]">{sede.task}</div>
                     </div>
                     {/* Desktop: full view */}
                     <div className="hidden sm:block">
