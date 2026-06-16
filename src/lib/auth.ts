@@ -64,6 +64,5 @@ export const authOptions: NextAuthOptions = {
   },
   session: { strategy: "jwt" },
   pages: { signIn: "/" },
-  secret: process.env.NEXTAUTH_SECRET || "mural-saas-secret-key-2024",
-  debug: process.env.NODE_ENV === "development",
+  secret: process.env.NEXTAUTH_SECRET || "mural-saas-secret-key-2024-stable",
 };
