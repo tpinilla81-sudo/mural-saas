@@ -47,6 +47,11 @@ export async function GET(req: NextRequest) {
 
     const items = await db.billDiarioItem.findMany({
       where,
+      include: {
+        lineas: {
+          orderBy: [{ orden: "asc" }, { createdAt: "asc" }],
+        },
+      },
       orderBy: [{ fecha: "desc" }, { createdAt: "desc" }],
     });
 

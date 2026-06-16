@@ -29,17 +29,29 @@ import {
   Pencil,
   Trash2,
   Save,
-  SquareCheck,
   X,
   Plus,
   ArrowRight,
-  FileSpreadsheet,
   Download,
+  ChevronDown,
+  ChevronRight,
+  ListPlus,
 } from 'lucide-react'
 import { fmtCurrency, fmtDate, todayISO } from '@/lib/bill-utils'
 import { useBillConfig } from '@/lib/bill-config'
 
 const API = '/api/company/bill'
+
+export interface DiarioLinea {
+  id?: string
+  catalogoId?: string | null
+  c1: string
+  c2: string
+  cant: number
+  precioUnitario: number
+  obs: string
+  orden?: number
+}
 
 export interface DiarioItem {
   id: string
@@ -61,6 +73,7 @@ export interface DiarioItem {
   sourceId: string | null
   registroId: string | null
   facturadoAt: string | null
+  lineas?: DiarioLinea[]
 }
 
 interface Cliente {
@@ -80,41 +93,63 @@ interface Professional {
   alias: string
 }
 
+interface CatalogoItem {
+  id: string
+  clienteId: string | null
+  c1: string
+  c2: string
+  coste: number
+  inc: number
+  final: number
+}
+
 function useDiarioData() {
   const [items, setItems] = useState<DiarioItem[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [sedes, setSedes] = useState<Sede[]>([])
   const [professionals, setProfessionals] = useState<Professional[]>([])
+  const [catalogo, setCatalogo] = useState<CatalogoItem[]>([])
   const [loading, setLoading] = useState(false)
 
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      const [dRes, cRes, sRes, pRes] = await Promise.all([
+      const [dRes, cRes, sRes, pRes, catRes] = await Promise.all([
         fetch(`${API}/diario`),
         fetch(`${API}/clientes`),
         fetch('/api/company/sedes'),
         fetch('/api/company/professionals'),
+        fetch(`${API}/catalogo`),
       ])
       const d = await dRes.json()
       const c = await cRes.json()
       const s = await sRes.json()
       const p = await pRes.json()
+      const cat = await catRes.json()
       setItems(Array.isArray(d) ? d : [])
       setClientes(Array.isArray(c) ? c : [])
       setSedes(Array.isArray(s) ? s : [])
       setProfessionals(Array.isArray(p) ? p : [])
+      setCatalogo(Array.isArray(cat) ? cat : [])
     } catch (err) {
       console.error('Error loading diario data:', err)
     }
     setLoading(false)
   }, [])
 
-  return { items, clientes, sedes, professionals, loadData, loading }
+  return { items, clientes, sedes, professionals, catalogo, loadData, loading }
 }
 
 export function DiarioView() {
-  const { items, clientes, sedes, professionals, loadData, loading } = useDiarioData()
+  const {
+    items,
+    clientes,
+    sedes,
+    professionals,
+    catalogo,
+    loadData,
+    loading,
+  } = useDiarioData()
   const { config } = useBillConfig()
 
   // Filters
@@ -140,25 +175,22 @@ export function DiarioView() {
   const [addProfId, setAddProfId] = useState('')
   const [addTurn, setAddTurn] = useState('MANANA')
   const [addClienteId, setAddClienteId] = useState('')
-  const [addC1, setAddC1] = useState('Servicios')
-  const [addC2, setAddC2] = useState('')
-  const [addCant, setAddCant] = useState('1')
-  const [addPrecio, setAddPrecio] = useState('')
-  const [addObs, setAddObs] = useState('')
 
-  // Edit modal
+  // Edit modal (item header)
   const [editId, setEditId] = useState<string | null>(null)
   const [editFecha, setEditFecha] = useState('')
   const [editClienteId, setEditClienteId] = useState('')
-  const [editC1, setEditC1] = useState('')
-  const [editC2, setEditC2] = useState('')
-  const [editCant, setEditCant] = useState('')
-  const [editPrecio, setEditPrecio] = useState('')
   const [editObs, setEditObs] = useState('')
   const [editModalOpen, setEditModalOpen] = useState(false)
 
   // Bulk selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+
+  // Expanded rows (showing lineas editor)
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
+
+  // Lineas draft per item (local editing buffer)
+  const [lineasDraft, setLineasDraft] = useState<Record<string, DiarioLinea[]>>({})
 
   // Status message
   const [statusMsg, setStatusMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
@@ -188,7 +220,13 @@ export function DiarioView() {
   // Stats
   const totalCumplida = filtered.filter(r => r.status === 'CUMPLIDA').length
   const totalFacturada = filtered.filter(r => r.status === 'FACTURADA').length
-  const totalImporte = filtered.reduce((sum, r) => sum + r.precioUnitario * r.cant, 0)
+  // Importe = sum of líneas (if any) else fallback to item.precioUnitario*cant
+  const totalImporte = filtered.reduce((sum, r) => {
+    if (r.lineas && r.lineas.length > 0) {
+      return sum + r.lineas.reduce((s, l) => s + l.precioUnitario * l.cant, 0)
+    }
+    return sum + r.precioUnitario * r.cant
+  }, 0)
 
   // ── Sync from Diario ──
   async function handleSync() {
@@ -227,47 +265,32 @@ export function DiarioView() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           fecha: addFecha,
-          sedeId: addSedeId || undefined,
-          professionalId: addProfId || undefined,
+          sedeId: addSedeId && addSedeId !== '__none__' ? addSedeId : undefined,
+          professionalId: addProfId && addProfId !== '__none__' ? addProfId : undefined,
           turn: addTurn,
-          clienteId: addClienteId || undefined,
-          c1: addC1,
-          c2: addC2,
-          cant: Number(addCant) || 1,
-          precioUnitario: addPrecio ? Number(addPrecio) : 0,
-          obs: addObs,
+          clienteId: addClienteId && addClienteId !== '__none__' ? addClienteId : undefined,
         }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Error al crear item')
-      showStatus('ok', 'Item añadido')
+      showStatus('ok', 'Item añadido. Ahora añade líneas desde el catálogo.')
       setAddModalOpen(false)
-      // Reset form
       setAddFecha(todayISO())
       setAddSedeId('')
       setAddProfId('')
       setAddTurn('MANANA')
       setAddClienteId('')
-      setAddC1('Servicios')
-      setAddC2('')
-      setAddCant('1')
-      setAddPrecio('')
-      setAddObs('')
       loadData()
     } catch (err: any) {
       showStatus('err', err.message)
     }
   }
 
-  // ── Edit ──
+  // ── Edit header ──
   function openEdit(item: DiarioItem) {
     setEditId(item.id)
     setEditFecha(item.fecha)
     setEditClienteId(item.clienteId || '')
-    setEditC1(item.c1)
-    setEditC2(item.c2)
-    setEditCant(String(item.cant))
-    setEditPrecio(String(item.precioUnitario))
     setEditObs(item.obs)
     setEditModalOpen(true)
   }
@@ -281,10 +304,6 @@ export function DiarioView() {
         body: JSON.stringify({
           fecha: editFecha,
           clienteId: editClienteId || null,
-          c1: editC1,
-          c2: editC2,
-          cant: Number(editCant) || 1,
-          precioUnitario: Number(editPrecio) || 0,
           obs: editObs,
         }),
       })
@@ -302,7 +321,7 @@ export function DiarioView() {
 
   // ── Delete ──
   async function handleDelete(id: string) {
-    if (!confirm('¿Eliminar este item de diario?')) return
+    if (!confirm('¿Eliminar este item de diario y todas sus líneas?')) return
     try {
       await fetch(`${API}/diario/${id}`, { method: 'DELETE' })
       showStatus('ok', 'Item eliminado')
@@ -315,7 +334,7 @@ export function DiarioView() {
   // ── Bulk transfer to REGISTROS (facturar) ──
   async function handleTransfer(ids: string[]) {
     if (ids.length === 0) return
-    if (!confirm(`¿Pasar ${ids.length} item(s) a facturación (REGISTROS)?`)) return
+    if (!confirm(`¿Pasar ${ids.length} item(s) a facturación (REGISTROS)? Se creará un registro por cada línea.`)) return
     try {
       const res = await fetch(`${API}/diario/transfer`, {
         method: 'POST',
@@ -324,7 +343,10 @@ export function DiarioView() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Error al transferir')
-      showStatus('ok', `${data.transferred} item(s) transferido(s) a REGISTROS · ${data.skipped} ya facturados`)
+      showStatus(
+        'ok',
+        `${data.transferred} item(s) transferido(s) → ${data.registrosCreated} registro(s) creado(s) · ${data.skipped} ya facturados`
+      )
       setSelectedIds(new Set())
       loadData()
     } catch (err: any) {
@@ -335,21 +357,27 @@ export function DiarioView() {
   // ── Excel export ──
   async function handleExport() {
     const XLSX = await import('xlsx')
-    const rows = filtered.map(r => ({
-      Fecha: r.fecha,
-      Sede: r.sedeName,
-      Profesional: r.professionalName,
-      Turno: r.turn,
-      Cliente: r.cliente,
-      Grupo: r.c1,
-      Servicio: r.c2,
-      Cantidad: r.cant,
-      'P. Unitario': r.precioUnitario.toFixed(2),
-      Importe: (r.precioUnitario * r.cant).toFixed(2),
-      Observaciones: r.obs,
-      Estado: r.status === 'FACTURADA' ? 'Facturada' : 'Cumplida',
-      Origen: r.sourceType,
-    }))
+    const rows = filtered.flatMap(r => {
+      const lineas = r.lineas && r.lineas.length > 0 ? r.lineas : [
+        { c1: r.c1, c2: r.c2, cant: r.cant, precioUnitario: r.precioUnitario, obs: r.obs },
+      ]
+      return lineas.map((l, i) => ({
+        Fecha: r.fecha,
+        Sede: r.sedeName,
+        Profesional: r.professionalName,
+        Turno: r.turn,
+        Cliente: r.cliente,
+        Línea: i + 1,
+        Grupo: l.c1,
+        Servicio: l.c2,
+        Cantidad: l.cant,
+        'P. Unitario': l.precioUnitario.toFixed(2),
+        Importe: (l.precioUnitario * l.cant).toFixed(2),
+        Observaciones: l.obs,
+        Estado: r.status === 'FACTURADA' ? 'Facturada' : 'Cumplida',
+        Origen: r.sourceType,
+      }))
+    })
     const ws = XLSX.utils.json_to_sheet(rows)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Diario')
@@ -377,6 +405,100 @@ export function DiarioView() {
     }
   }
 
+  // ── Expand / collapse row + init lineas draft ──
+  function toggleExpand(item: DiarioItem) {
+    setExpandedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(item.id)) {
+        next.delete(item.id)
+      } else {
+        next.add(item.id)
+        // Initialize draft from current lineas
+        setLineasDraft(d => ({
+          ...d,
+          [item.id]: item.lineas && item.lineas.length > 0
+            ? item.lineas.map(l => ({ ...l }))
+            : [],
+        }))
+      }
+      return next
+    })
+  }
+
+  // ── Lineas draft operations ──
+  function addLinea(itemId: string) {
+    setLineasDraft(d => {
+      const current = d[itemId] || []
+      return {
+        ...d,
+        [itemId]: [
+          ...current,
+          { c1: '', c2: '', cant: 1, precioUnitario: 0, obs: '', orden: current.length },
+        ],
+      }
+    })
+  }
+
+  function updateLinea(itemId: string, idx: number, patch: Partial<DiarioLinea>) {
+    setLineasDraft(d => {
+      const current = [...(d[itemId] || [])]
+      const line = { ...current[idx], ...patch }
+      // If catalogoId set, resolve c1/c2/precio from catalog
+      if (patch.catalogoId) {
+        const cat = catalogo.find(c => c.id === patch.catalogoId)
+        if (cat) {
+          line.c1 = cat.c1
+          line.c2 = cat.c2
+          if (line.precioUnitario === 0) line.precioUnitario = cat.final
+        }
+      }
+      current[idx] = line
+      return { ...d, [itemId]: current }
+    })
+  }
+
+  function removeLinea(itemId: string, idx: number) {
+    setLineasDraft(d => {
+      const current = [...(d[itemId] || [])]
+      current.splice(idx, 1)
+      return { ...d, [itemId]: current }
+    })
+  }
+
+  async function saveLineas(itemId: string) {
+    const draft = lineasDraft[itemId] || []
+    try {
+      const res = await fetch(`${API}/diario/${itemId}/lineas`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lineas: draft }),
+      })
+      if (!res.ok) {
+        const d = await res.json()
+        throw new Error(d.error || 'Error al guardar líneas')
+      }
+      showStatus('ok', `${draft.length} línea(s) guardada(s)`)
+      loadData()
+    } catch (err: any) {
+      showStatus('err', err.message)
+    }
+  }
+
+  // ── Catalog filter for select (client-specific first, then generic) ──
+  function catalogoOptionsForItem(item: DiarioItem) {
+    const clientItems = catalogo.filter(c => c.clienteId === item.clienteId)
+    const genericItems = catalogo.filter(c => !c.clienteId)
+    return { clientItems, genericItems }
+  }
+
+  // ── Calculate importe for an item (sum of lineas if any, else fallback) ──
+  function itemImporte(item: DiarioItem): number {
+    if (item.lineas && item.lineas.length > 0) {
+      return item.lineas.reduce((s, l) => s + l.precioUnitario * l.cant, 0)
+    }
+    return item.precioUnitario * item.cant
+  }
+
   return (
     <div className="flex flex-col flex-1 min-h-0">
       {/* Status */}
@@ -392,21 +514,13 @@ export function DiarioView() {
         <CalendarClock className="h-5 w-5 text-emerald-600" />
         <h2 className="text-lg font-bold text-gray-700">DIARIO → FACTURACIÓN</h2>
         <span className="text-xs text-gray-500 ml-1">
-          Salida cumplida desde Diario. Selecciona y pasa a REGISTROS para facturar.
+          Salida cumplida. Añade líneas desde el catálogo a cada salida. Esas líneas son lo que se factura.
         </span>
         <div className="ml-auto flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setSyncModalOpen(true)}
-          >
+          <Button size="sm" variant="outline" onClick={() => setSyncModalOpen(true)}>
             <RefreshCw className="h-4 w-4 mr-1" /> Sincronizar desde Diario
           </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setAddModalOpen(true)}
-          >
+          <Button size="sm" variant="outline" onClick={() => setAddModalOpen(true)}>
             <Plus className="h-4 w-4 mr-1" /> Nuevo item
           </Button>
           <Button size="sm" variant="outline" onClick={handleExport} disabled={filtered.length === 0}>
@@ -508,7 +622,8 @@ export function DiarioView() {
           <table className="w-full text-sm min-w-[1100px]">
             <thead className="sticky top-0 z-10 shadow-sm">
               <tr className="bg-emerald-50">
-                <th className="p-2 text-center border-b bg-emerald-50">
+                <th className="p-2 text-center border-b bg-emerald-50 w-8"></th>
+                <th className="p-2 text-center border-b bg-emerald-50 w-8">
                   <input
                     type="checkbox"
                     checked={selectedIds.size > 0 && selectedIds.size === filtered.filter(r => r.status === 'CUMPLIDA').length && filtered.filter(r => r.status === 'CUMPLIDA').length > 0}
@@ -522,9 +637,7 @@ export function DiarioView() {
                 <th className="p-2 text-left font-semibold border-b bg-emerald-50">Profesional</th>
                 <th className="p-2 text-left font-semibold border-b bg-emerald-50">Turno</th>
                 <th className="p-2 text-left font-semibold border-b bg-emerald-50">Cliente</th>
-                <th className="p-2 text-left font-semibold border-b bg-emerald-50">C1 / C2</th>
-                <th className="p-2 text-right font-semibold border-b bg-emerald-50">Cant</th>
-                <th className="p-2 text-right font-semibold border-b bg-emerald-50">P.Unit</th>
+                <th className="p-2 text-center font-semibold border-b bg-emerald-50">Líneas</th>
                 <th className="p-2 text-right font-semibold border-b bg-emerald-50">Importe</th>
                 <th className="p-2 text-center font-semibold border-b bg-emerald-50">Estado</th>
                 <th className="p-2 text-center font-semibold border-b bg-emerald-50">Acc.</th>
@@ -532,65 +645,94 @@ export function DiarioView() {
             </thead>
             <tbody>
               {filtered.map(r => {
-                const importe = r.precioUnitario * r.cant
                 const isFacturada = r.status === 'FACTURADA'
+                const isExpanded = expandedIds.has(r.id)
+                const numLineas = r.lineas?.length || 0
+                const importe = itemImporte(r)
                 return (
-                  <tr
-                    key={r.id}
-                    className={`border-b hover:bg-gray-50 ${selectedIds.has(r.id) ? 'bg-emerald-50' : ''} ${isFacturada ? 'opacity-70' : ''}`}
-                  >
-                    <td className="p-2 text-center">
-                      {!isFacturada && (
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.has(r.id)}
-                          onChange={() => toggleSelect(r.id)}
-                          className="rounded"
-                        />
-                      )}
-                    </td>
-                    <td className="p-2 whitespace-nowrap">{fmtDate(r.fecha)}</td>
-                    <td className="p-2">{r.sedeName || '—'}</td>
-                    <td className="p-2">{r.professionalName || '—'}</td>
-                    <td className="p-2">
-                      <span className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded ${r.turn === 'MANANA' ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700'}`}>
-                        {r.turn === 'MANANA' ? 'M' : r.turn === 'TARDE' ? 'T' : r.turn || '—'}
-                      </span>
-                    </td>
-                    <td className="p-2">{r.cliente || '—'}</td>
-                    <td className="p-2 text-xs">
-                      <div className="font-semibold">{r.c1 || '—'}</div>
-                      <div className="text-gray-500">{r.c2 || '—'}</div>
-                    </td>
-                    <td className="p-2 text-right">{r.cant}</td>
-                    <td className="p-2 text-right">{r.precioUnitario.toFixed(2)}</td>
-                    <td className="p-2 text-right font-bold">{fmtCurrency(importe, config?.currency || '€')}</td>
-                    <td className="p-2 text-center">
-                      <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full ${isFacturada ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-                        {isFacturada ? 'Facturada' : 'Cumplida'}
-                      </span>
-                    </td>
-                    <td className="p-2 text-center whitespace-nowrap">
-                      {!isFacturada && (
-                        <>
-                          <Button size="icon" variant="ghost" className="h-7 w-7 text-indigo-600 hover:bg-indigo-50" onClick={() => openEdit(r)}>
-                            <Pencil className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button size="icon" variant="ghost" className="h-7 w-7 text-rose-600 hover:bg-rose-50" onClick={() => handleDelete(r.id)}>
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </>
-                      )}
-                      {isFacturada && (
-                        <span className="text-[10px] text-gray-400">—</span>
-                      )}
-                    </td>
-                  </tr>
+                  <>
+                    <tr
+                      key={r.id}
+                      className={`border-b hover:bg-gray-50 ${selectedIds.has(r.id) ? 'bg-emerald-50' : ''} ${isFacturada ? 'opacity-70' : ''}`}
+                    >
+                      <td className="p-2 text-center">
+                        <button
+                          onClick={() => toggleExpand(r)}
+                          className="text-gray-400 hover:text-emerald-600"
+                          title={isExpanded ? 'Contraer líneas' : 'Expandir líneas'}
+                        >
+                          {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                        </button>
+                      </td>
+                      <td className="p-2 text-center">
+                        {!isFacturada && (
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.has(r.id)}
+                            onChange={() => toggleSelect(r.id)}
+                            className="rounded"
+                          />
+                        )}
+                      </td>
+                      <td className="p-2 whitespace-nowrap">{fmtDate(r.fecha)}</td>
+                      <td className="p-2">{r.sedeName || '—'}</td>
+                      <td className="p-2">{r.professionalName || '—'}</td>
+                      <td className="p-2">
+                        <span className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded ${r.turn === 'MANANA' ? 'bg-amber-100 text-amber-700' : 'bg-indigo-100 text-indigo-700'}`}>
+                          {r.turn === 'MANANA' ? 'M' : r.turn === 'TARDE' ? 'T' : r.turn || '—'}
+                        </span>
+                      </td>
+                      <td className="p-2">{r.cliente || '—'}</td>
+                      <td className="p-2 text-center">
+                        <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full ${numLineas > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
+                          {numLineas} {numLineas === 1 ? 'línea' : 'líneas'}
+                        </span>
+                      </td>
+                      <td className="p-2 text-right font-bold">{fmtCurrency(importe, config?.currency || '€')}</td>
+                      <td className="p-2 text-center">
+                        <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full ${isFacturada ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                          {isFacturada ? 'Facturada' : 'Cumplida'}
+                        </span>
+                      </td>
+                      <td className="p-2 text-center whitespace-nowrap">
+                        {!isFacturada && (
+                          <>
+                            <Button size="icon" variant="ghost" className="h-7 w-7 text-emerald-600 hover:bg-emerald-50" onClick={() => toggleExpand(r)} title="Ver/editar líneas">
+                              <ListPlus className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button size="icon" variant="ghost" className="h-7 w-7 text-indigo-600 hover:bg-indigo-50" onClick={() => openEdit(r)} title="Editar item">
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button size="icon" variant="ghost" className="h-7 w-7 text-rose-600 hover:bg-rose-50" onClick={() => handleDelete(r.id)} title="Eliminar">
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </>
+                        )}
+                        {isFacturada && <span className="text-[10px] text-gray-400">—</span>}
+                      </td>
+                    </tr>
+                    {isExpanded && (
+                      <tr key={`${r.id}-lineas`} className="bg-gray-50/50">
+                        <td colSpan={11} className="p-3">
+                          <LineasEditor
+                            item={r}
+                            draft={lineasDraft[r.id] || []}
+                            catalogoOptions={catalogoOptionsForItem(r)}
+                            onAdd={() => addLinea(r.id)}
+                            onUpdate={(idx, patch) => updateLinea(r.id, idx, patch)}
+                            onRemove={(idx) => removeLinea(r.id, idx)}
+                            onSave={() => saveLineas(r.id)}
+                            currency={config?.currency || '€'}
+                          />
+                        </td>
+                      </tr>
+                    )}
+                  </>
                 )
               })}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={12} className="p-6 text-center text-gray-400">
+                  <td colSpan={11} className="p-6 text-center text-gray-400">
                     {loading ? 'Cargando...' : 'No hay items de diario. Pulsa "Sincronizar desde Diario" para importar entradas.'}
                   </td>
                 </tr>
@@ -610,7 +752,7 @@ export function DiarioView() {
             <p className="text-sm text-gray-600">
               Importa las entradas del Diario (planes de profesionales en sedes) como salida cumplida.
               Se ignoran las entradas ya sincronizadas. Las sedes se mapean automáticamente a clientes
-              con el mismo nombre.
+              con el mismo nombre. Después podrás añadir líneas desde el catálogo a cada salida.
             </p>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -641,7 +783,7 @@ export function DiarioView() {
         </DialogContent>
       </Dialog>
 
-      {/* Add modal */}
+      {/* Add modal (simplified: just header info; lineas added inline) */}
       <Dialog open={addModalOpen} onOpenChange={setAddModalOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -667,8 +809,8 @@ export function DiarioView() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label className="text-xs uppercase font-bold text-slate-500">Sede</Label>
-                <Select value={addSedeId} onValueChange={setAddSedeId}>
-                  <SelectTrigger><SelectValue placeholder="— Sin sede —" /></SelectTrigger>
+                <Select value={addSedeId || '__none__'} onValueChange={setAddSedeId}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none__">— Sin sede —</SelectItem>
                     {sedes.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
@@ -677,8 +819,8 @@ export function DiarioView() {
               </div>
               <div>
                 <Label className="text-xs uppercase font-bold text-slate-500">Profesional</Label>
-                <Select value={addProfId} onValueChange={setAddProfId}>
-                  <SelectTrigger><SelectValue placeholder="— Sin profesional —" /></SelectTrigger>
+                <Select value={addProfId || '__none__'} onValueChange={setAddProfId}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none__">— Sin profesional —</SelectItem>
                     {professionals.map(p => (
@@ -692,37 +834,16 @@ export function DiarioView() {
             </div>
             <div>
               <Label className="text-xs uppercase font-bold text-slate-500">Cliente (facturable a)</Label>
-              <Select value={addClienteId} onValueChange={setAddClienteId}>
-                <SelectTrigger><SelectValue placeholder="— Sin cliente —" /></SelectTrigger>
+              <Select value={addClienteId || '__none__'} onValueChange={setAddClienteId}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">— Sin cliente —</SelectItem>
                   {clientes.map(c => <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label className="text-xs uppercase font-bold text-slate-500">C1 (Grupo)</Label>
-                <Input value={addC1} onChange={e => setAddC1(e.target.value)} />
-              </div>
-              <div>
-                <Label className="text-xs uppercase font-bold text-slate-500">C2 (Servicio)</Label>
-                <Input value={addC2} onChange={e => setAddC2(e.target.value)} placeholder="Mañana, Tarde..." />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label className="text-xs uppercase font-bold text-slate-500">Cantidad</Label>
-                <Input type="number" value={addCant} onChange={e => setAddCant(e.target.value)} />
-              </div>
-              <div>
-                <Label className="text-xs uppercase font-bold text-slate-500">Precio Unit. (0 = auto)</Label>
-                <Input type="number" step="0.01" value={addPrecio} onChange={e => setAddPrecio(e.target.value)} />
-              </div>
-            </div>
-            <div>
-              <Label className="text-xs uppercase font-bold text-slate-500">Observaciones</Label>
-              <Input value={addObs} onChange={e => setAddObs(e.target.value)} />
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-700">
+              Una vez creado el item, expándelo con el botón <ListPlus className="inline h-3 w-3" /> para añadir líneas desde el catálogo. Esas líneas son lo que se facturará.
             </div>
             <div className="flex gap-3 mt-2">
               <Button variant="outline" onClick={() => setAddModalOpen(false)} className="flex-1">Cancelar</Button>
@@ -734,7 +855,7 @@ export function DiarioView() {
         </DialogContent>
       </Dialog>
 
-      {/* Edit modal */}
+      {/* Edit header modal */}
       <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>Editar item de diario</DialogTitle></DialogHeader>
@@ -753,26 +874,6 @@ export function DiarioView() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label className="text-xs uppercase font-bold text-slate-500">C1</Label>
-                <Input value={editC1} onChange={e => setEditC1(e.target.value)} />
-              </div>
-              <div>
-                <Label className="text-xs uppercase font-bold text-slate-500">C2</Label>
-                <Input value={editC2} onChange={e => setEditC2(e.target.value)} />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label className="text-xs uppercase font-bold text-slate-500">Cantidad</Label>
-                <Input type="number" value={editCant} onChange={e => setEditCant(e.target.value)} />
-              </div>
-              <div>
-                <Label className="text-xs uppercase font-bold text-slate-500">Precio Unit.</Label>
-                <Input type="number" step="0.01" value={editPrecio} onChange={e => setEditPrecio(e.target.value)} />
-              </div>
-            </div>
             <div>
               <Label className="text-xs uppercase font-bold text-slate-500">Observaciones</Label>
               <Input value={editObs} onChange={e => setEditObs(e.target.value)} />
@@ -786,6 +887,173 @@ export function DiarioView() {
           </div>
         </DialogContent>
       </Dialog>
+    </div>
+  )
+}
+
+// ── Líneas editor (inline panel) ──
+function LineasEditor({
+  item,
+  draft,
+  catalogoOptions,
+  onAdd,
+  onUpdate,
+  onRemove,
+  onSave,
+  currency,
+}: {
+  item: DiarioItem
+  draft: DiarioLinea[]
+  catalogoOptions: { clientItems: CatalogoItem[]; genericItems: CatalogoItem[] }
+  onAdd: () => void
+  onUpdate: (idx: number, patch: Partial<DiarioLinea>) => void
+  onRemove: (idx: number) => void
+  onSave: () => void
+  currency: string
+}) {
+  const { clientItems, genericItems } = catalogoOptions
+  const total = draft.reduce((s, l) => s + l.precioUnitario * l.cant, 0)
+
+  return (
+    <div className="border rounded-lg bg-white">
+      <div className="flex items-center justify-between px-3 py-2 border-b bg-emerald-50/50">
+        <div className="text-sm font-bold text-emerald-700">
+          Líneas a facturar — {item.sedeName} · {item.professionalName} · {fmtDate(item.fecha)}
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-500">
+            Total: <b className="text-emerald-700">{fmtCurrency(total, currency)}</b>
+          </span>
+          <Button size="sm" variant="outline" onClick={onAdd}>
+            <Plus className="h-3 w-3 mr-1" /> Añadir línea
+          </Button>
+          <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={onSave}>
+            <Save className="h-3 w-3 mr-1" /> Guardar
+          </Button>
+        </div>
+      </div>
+
+      <div className="max-h-[300px] overflow-auto">
+        <table className="w-full text-xs">
+          <thead className="sticky top-0">
+            <tr className="bg-gray-100 text-gray-600">
+              <th className="p-2 text-left font-semibold w-64">Catálogo</th>
+              <th className="p-2 text-left font-semibold w-32">C1 (Grupo)</th>
+              <th className="p-2 text-left font-semibold w-32">C2 (Servicio)</th>
+              <th className="p-2 text-right font-semibold w-20">Cant</th>
+              <th className="p-2 text-right font-semibold w-24">P.Unit</th>
+              <th className="p-2 text-right font-semibold w-28">Importe</th>
+              <th className="p-2 text-left font-semibold">Obs</th>
+              <th className="p-2 text-center w-10"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {draft.length === 0 && (
+              <tr>
+                <td colSpan={8} className="p-4 text-center text-gray-400 text-xs">
+                  Sin líneas. Añade desde el catálogo para definir qué se factura en esta salida.
+                </td>
+              </tr>
+            )}
+            {draft.map((l, idx) => {
+              const importe = l.precioUnitario * l.cant
+              return (
+                <tr key={idx} className="border-t hover:bg-gray-50">
+                  <td className="p-2">
+                    <Select
+                      value={l.catalogoId || '__none__'}
+                      onValueChange={(v) => onUpdate(idx, v === '__none__' ? { catalogoId: null } : { catalogoId: v })}
+                    >
+                      <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="— Manual —" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">— Manual —</SelectItem>
+                        {clientItems.length > 0 && (
+                          <>
+                            <div className="px-2 py-1 text-[10px] font-bold uppercase text-emerald-600 bg-emerald-50">
+                              Específico de {item.cliente || 'cliente'}
+                            </div>
+                            {clientItems.map(c => (
+                              <SelectItem key={c.id} value={c.id}>
+                                {c.c1} / {c.c2} — {fmtCurrency(c.final, currency)}
+                              </SelectItem>
+                            ))}
+                          </>
+                        )}
+                        {genericItems.length > 0 && (
+                          <>
+                            <div className="px-2 py-1 text-[10px] font-bold uppercase text-gray-500 bg-gray-50">
+                              Genéricos
+                            </div>
+                            {genericItems.map(c => (
+                              <SelectItem key={c.id} value={c.id}>
+                                {c.c1} / {c.c2} — {fmtCurrency(c.final, currency)}
+                              </SelectItem>
+                            ))}
+                          </>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </td>
+                  <td className="p-2">
+                    <Input
+                      className="h-8 text-xs"
+                      value={l.c1}
+                      onChange={e => onUpdate(idx, { c1: e.target.value })}
+                      disabled={!!l.catalogoId}
+                    />
+                  </td>
+                  <td className="p-2">
+                    <Input
+                      className="h-8 text-xs"
+                      value={l.c2}
+                      onChange={e => onUpdate(idx, { c2: e.target.value })}
+                      disabled={!!l.catalogoId}
+                    />
+                  </td>
+                  <td className="p-2">
+                    <Input
+                      type="number"
+                      className="h-8 text-xs text-right"
+                      value={l.cant}
+                      onChange={e => onUpdate(idx, { cant: Number(e.target.value) || 1 })}
+                    />
+                  </td>
+                  <td className="p-2">
+                    <Input
+                      type="number"
+                      step="0.01"
+                      className="h-8 text-xs text-right"
+                      value={l.precioUnitario}
+                      onChange={e => onUpdate(idx, { precioUnitario: Number(e.target.value) || 0 })}
+                    />
+                  </td>
+                  <td className="p-2 text-right font-bold">
+                    {fmtCurrency(importe, currency)}
+                  </td>
+                  <td className="p-2">
+                    <Input
+                      className="h-8 text-xs"
+                      value={l.obs}
+                      onChange={e => onUpdate(idx, { obs: e.target.value })}
+                      placeholder="—"
+                    />
+                  </td>
+                  <td className="p-2 text-center">
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7 text-rose-600 hover:bg-rose-50"
+                      onClick={() => onRemove(idx)}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }

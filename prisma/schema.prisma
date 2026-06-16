@@ -343,8 +343,8 @@ model BillDiarioItem {
   // Billing fields (filled when transferring to Registro)
   clienteId       String?  // FK to BillCliente
   cliente         String   @default("") // denormalized
-  c1              String   @default("") // concept group
-  c2              String   @default("") // concept service
+  c1              String   @default("") // concept group (legacy/fallback)
+  c2              String   @default("") // concept service (legacy/fallback)
   cant            Int      @default(1)
   precioUnitario  Float    @default(0)
   obs             String   @default("")
@@ -352,13 +352,14 @@ model BillDiarioItem {
   status          String   @default("CUMPLIDA") // CUMPLIDA | FACTURADA
   sourceType      String   @default("plan") // plan | manual
   sourceId        String?  // Plan.id when sourceType=plan
-  registroId      String?  // BillRegistro.id when transferred
+  registroId      String?  // BillRegistro.id when transferred (first one, for back-ref)
   facturadoAt     DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  clienteRel  BillCliente? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  company     Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  clienteRel  BillCliente?    @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+  lineas      BillDiarioLine[]
 
   @@index([companyId])
   @@index([fecha])
@@ -366,4 +367,26 @@ model BillDiarioItem {
   @@index([status])
   @@index([clienteId])
   @@unique([sourceType, sourceId])
+}
+
+// Each Diario item carries N líneas (each one references a catalog item)
+// These líneas are what gets invoiced (1 line = 1 BillRegistro on transfer)
+model BillDiarioLine {
+  id            String   @id @default(cuid())
+  diarioItemId  String
+  companyId     String   // denormalized for fast filtering
+  catalogoId    String?  // optional FK to BillCatalogo
+  c1            String   @default("") // denormalized from catalog (or manual)
+  c2            String   @default("") // denormalized from catalog (or manual)
+  cant          Int      @default(1)
+  precioUnitario Float   @default(0)
+  obs           String   @default("")
+  orden         Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  diarioItem BillDiarioItem @relation(fields: [diarioItemId], references: [id], onDelete: Cascade)
+
+  @@index([diarioItemId])
+  @@index([companyId])
 }

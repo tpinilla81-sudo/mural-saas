@@ -7,10 +7,11 @@ import { db } from "@/lib/db";
 // (pasadoRegistro=true, ready for invoicing in REGISTROS view).
 //
 // Body: { ids: string[] }
-// - For each item, creates a BillRegistro with the same fecha/cliente/c1/c2/cant/precioUnitario/obs
-// - Marks the BillDiarioItem as status=FACTURADA, sets registroId and facturadoAt
-// - Idempotent: items already in FACTURADA status are skipped
-// - Items without a clienteId will still be transferred (cliente name only)
+// For each item:
+//   - If item has líneas: creates one BillRegistro per línea (with the line's c1/c2/cant/precio)
+//   - If item has no líneas: falls back to creating one BillRegistro with the item's c1/c2/cant/precio
+//   - Marks the BillDiarioItem as status=FACTURADA, sets registroId (first one) and facturadoAt
+//   - Idempotent: items already in FACTURADA status are skipped
 export async function POST(req: NextRequest) {
   const { error, status, user } = await requireCompanyAdmin();
   if (error) return NextResponse.json({ error }, { status });
@@ -33,46 +34,77 @@ export async function POST(req: NextRequest) {
 
     const items = await db.billDiarioItem.findMany({
       where: { id: { in: ids }, companyId },
+      include: {
+        lineas: {
+          orderBy: [{ orden: "asc" }, { createdAt: "asc" }],
+        },
+      },
     });
 
     let transferred = 0;
     let skipped = 0;
-    const created: { itemId: string; registroId: string }[] = [];
+    let registrosCreated = 0;
+    const created: { itemId: string; registroIds: string[] }[] = [];
 
     for (const item of items) {
-      if (item.status === "FACTURADA" && item.registroId) {
+      if (item.status === "FACTURADA") {
         skipped++;
         continue;
       }
 
-      // Create the BillRegistro (pasadoRegistro=true so it appears in REGISTROS, not ENTRADA)
-      const registro = await db.billRegistro.create({
-        data: {
-          companyId,
-          fecha: item.fecha,
-          clienteId: item.clienteId,
-          cliente: item.cliente,
-          c1: item.c1,
-          c2: item.c2,
-          cant: item.cant,
-          precioUnitario: item.precioUnitario,
-          obs: item.obs,
-          pasadoRegistro: true,
-          facturado: false,
-        },
-      });
+      const registroIds: string[] = [];
 
-      // Mark the diario item as transferred
+      // Determine the source lines for registros
+      const lineasToTransfer =
+        item.lineas.length > 0
+          ? item.lineas.map((l) => ({
+              c1: l.c1,
+              c2: l.c2,
+              cant: l.cant,
+              precioUnitario: l.precioUnitario,
+              obs: l.obs,
+            }))
+          : [
+              {
+                c1: item.c1,
+                c2: item.c2,
+                cant: item.cant,
+                precioUnitario: item.precioUnitario,
+                obs: item.obs,
+              },
+            ];
+
+      for (const line of lineasToTransfer) {
+        const registro = await db.billRegistro.create({
+          data: {
+            companyId,
+            fecha: item.fecha,
+            clienteId: item.clienteId,
+            cliente: item.cliente,
+            c1: line.c1,
+            c2: line.c2,
+            cant: line.cant,
+            precioUnitario: line.precioUnitario,
+            obs: line.obs,
+            pasadoRegistro: true,
+            facturado: false,
+          },
+        });
+        registroIds.push(registro.id);
+        registrosCreated++;
+      }
+
+      // Mark the diario item as transferred (store first registro id as back-ref)
       await db.billDiarioItem.update({
         where: { id: item.id },
         data: {
           status: "FACTURADA",
-          registroId: registro.id,
+          registroId: registroIds[0] ?? null,
           facturadoAt: new Date(),
         },
       });
 
-      created.push({ itemId: item.id, registroId: registro.id });
+      created.push({ itemId: item.id, registroIds });
       transferred++;
     }
 
@@ -80,6 +112,7 @@ export async function POST(req: NextRequest) {
       transferred,
       skipped,
       total: items.length,
+      registrosCreated,
       items: created,
     });
   } catch (err) {
