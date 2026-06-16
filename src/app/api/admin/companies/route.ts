@@ -37,6 +37,15 @@ export async function POST(req: Request) {
     data: {
       name,
       slug,
+      phone: body.phone || "",
+      email: body.email || "",
+      website: body.website || "",
+      nif: body.nif || "",
+      address: body.address || "",
+      city: body.city || "",
+      province: body.province || "",
+      postalCode: body.postalCode || "",
+      logoUrl: body.logoUrl || "",
       subscription: {
         create: {
           planName: plan,

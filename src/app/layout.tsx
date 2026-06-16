@@ -9,7 +9,7 @@ const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"]
 export const metadata: Metadata = {
   title: "Mural by Método",
   description: "Plataforma de gestión de turnos y facturación profesional",
-  icons: { icon: "/favicon.ico" },
+  icons: { icon: "/logo.svg" },
 };
 
 export const viewport: Viewport = {

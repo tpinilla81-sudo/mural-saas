@@ -19,7 +19,23 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   if (error) return NextResponse.json({ error }, { status });
   const { id } = await params;
   const body = await req.json();
-  const company = await db.company.update({ where: { id }, data: { name: body.name, slug: body.slug, isActive: body.isActive } });
+  const company = await db.company.update({
+    where: { id },
+    data: {
+      name: body.name,
+      slug: body.slug,
+      isActive: body.isActive,
+      phone: body.phone,
+      email: body.email,
+      website: body.website,
+      nif: body.nif,
+      address: body.address,
+      city: body.city,
+      province: body.province,
+      postalCode: body.postalCode,
+      logoUrl: body.logoUrl,
+    },
+  });
   return NextResponse.json(company);
 }
 

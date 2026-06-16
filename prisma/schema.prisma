@@ -9,13 +9,22 @@ datasource db {
 }
 
 model Company {
-  id        String   @id @default(cuid())
-  name      String
-  slug      String   @unique
-  logo      String?
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String   @id @default(cuid())
+  name       String
+  slug       String   @unique
+  logo       String?
+  logoUrl    String?  @default("")
+  address    String?  @default("")
+  city       String?  @default("")
+  province   String?  @default("")
+  postalCode String?  @default("")
+  nif        String?  @default("")
+  phone      String?  @default("")
+  email      String?  @default("")
+  website    String?  @default("")
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   users         User[]
   sedes         Sede[]

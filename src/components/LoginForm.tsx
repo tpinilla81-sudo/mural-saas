@@ -33,7 +33,7 @@ export default function LoginForm() {
           {/* Logo + Branding */}
           <div className="flex flex-col items-center mb-6">
             <img
-              src="/logo.png"
+              src="/logo.svg"
               alt="Mural by Método"
               className="h-20 w-20 rounded-full mb-3 shadow-md"
             />
