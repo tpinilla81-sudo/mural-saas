@@ -47,7 +47,7 @@ export default function CompanyProfileTab() {
     nif: "", phone: "", email: "", website: "", logoUrl: "",
   });
 
-  const [userForm, setUserForm] = useState({ name: "", email: "", password: "", role: "USER" });
+  const [userForm, setUserForm] = useState({ name: "", email: "", role: "USER" });
   const [showUserModal, setShowUserModal] = useState(false);
   const [editUserId, setEditUserId] = useState<string | null>(null);
 
@@ -105,8 +105,8 @@ export default function CompanyProfileTab() {
   }
 
   async function createUser() {
-    if (!userForm.name || !userForm.email || !userForm.password) {
-      addToast("Todos los campos son obligatorios", "error"); return;
+    if (!userForm.name || !userForm.email) {
+      addToast("Nombre y email son obligatorios", "error"); return;
     }
     const res = await fetch("/api/company/users", {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -115,7 +115,7 @@ export default function CompanyProfileTab() {
     if (res.ok) {
       addToast("Usuario creado");
       setShowUserModal(false);
-      setUserForm({ name: "", email: "", password: "", role: "USER" });
+      setUserForm({ name: "", email: "", role: "USER" });
       const uRes = await fetch("/api/company/users");
       if (uRes.ok) setUsers(await uRes.json());
     } else {
@@ -425,11 +425,6 @@ export default function CompanyProfileTab() {
                 <label className="block text-xs font-extrabold text-blue-400 uppercase mb-1">Email</label>
                 <input type="email" value={userForm.email} onChange={e => setUserForm(f => ({ ...f, email: e.target.value }))}
                   className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm" placeholder="usuario@empresa.com" />
-              </div>
-              <div>
-                <label className="block text-xs font-extrabold text-blue-400 uppercase mb-1">Contraseña</label>
-                <input type="password" value={userForm.password} onChange={e => setUserForm(f => ({ ...f, password: e.target.value }))}
-                  className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm" placeholder="••••••••" />
               </div>
               <div>
                 <label className="block text-xs font-extrabold text-blue-400 uppercase mb-1">Rol</label>

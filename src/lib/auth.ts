@@ -1,18 +1,18 @@
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 
+// Passwordless auth: the user picks an identity from the login dropdown.
+// This app is for internal use only and runs behind a known URL.
 export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
-      name: "Credentials",
+      name: "Selector",
       credentials: {
         email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) return null;
+        if (!credentials?.email) return null;
 
         try {
           const user = await db.user.findUnique({
@@ -22,9 +22,7 @@ export const authOptions: NextAuthOptions = {
 
           if (!user || !user.isActive) return null;
 
-          const isValid = await bcrypt.compare(credentials.password, user.password);
-          if (!isValid) return null;
-
+          // Passwordless: just return the user. The login picker lists all active users.
           return {
             id: user.id,
             email: user.email,
