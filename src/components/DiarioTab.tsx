@@ -250,16 +250,8 @@ export default function DiarioTab() {
     load();
   };
 
-  // Get aviso reason color
-  const getAvisoColor = (reason: string) => {
-    switch (reason) {
-      case "BAJA": return "bg-red-600/70 text-red-100 border-red-400";
-      case "FORMACION": return "bg-blue-600/70 text-blue-100 border-blue-400";
-      case "PERMISO": return "bg-yellow-600/70 text-yellow-100 border-yellow-400";
-      case "VACACIONES": return "bg-orange-600/70 text-orange-100 border-orange-400";
-      default: return "bg-red-500/50 text-red-200 border-red-400";
-    }
-  };
+  // Avisos now use a single uniform color regardless of reason
+  const getAvisoColor = (_reason: string) => "bg-red-700/70 text-red-100 border-red-400";
 
   // Get aviso reason short label
   const getAvisoLabel = (reason: string) => {
@@ -492,10 +484,6 @@ export default function DiarioTab() {
 
           {/* Legend */}
           <div className="hidden sm:flex text-[10px] text-slate-400 items-center gap-3 ml-auto">
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-600/70 border border-red-400 inline-block" /> Baja</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-blue-600/70 border border-blue-400 inline-block" /> Formación</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-yellow-600/70 border border-yellow-400 inline-block" /> Permiso</span>
-            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-orange-600/70 border border-orange-400 inline-block" /> Vacaciones</span>
             <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-purple-500/15 border border-purple-400 inline-block" /> Finde</span>
             <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-500/20 border border-red-400 inline-block" /> Festivo</span>
           </div>
@@ -503,41 +491,9 @@ export default function DiarioTab() {
 
         {/* Mobile legend (compact) */}
         <div className="sm:hidden flex gap-2 mt-1 overflow-x-auto text-[8px] text-slate-400 pb-1">
-          <span className="flex items-center gap-0.5 shrink-0"><span className="w-2 h-2 rounded bg-red-600/70 inline-block" />B</span>
-          <span className="flex items-center gap-0.5 shrink-0"><span className="w-2 h-2 rounded bg-blue-600/70 inline-block" />F</span>
-          <span className="flex items-center gap-0.5 shrink-0"><span className="w-2 h-2 rounded bg-yellow-600/70 inline-block" />P</span>
-          <span className="flex items-center gap-0.5 shrink-0"><span className="w-2 h-2 rounded bg-orange-600/70 inline-block" />V</span>
           <span className="flex items-center gap-0.5 shrink-0"><span className="w-2 h-2 rounded bg-purple-500/15 inline-block" />WE</span>
           <span className="flex items-center gap-0.5 shrink-0"><span className="w-2 h-2 rounded bg-red-500/20 inline-block" />Fest</span>
         </div>
-      </div>
-
-      {/* ═══ Professional Summary Bar ═══ (shows ALL visible pros with counts) */}
-      <div className="bg-slate-800 border-b border-slate-700 px-2 sm:px-3 py-1.5 flex gap-2 sm:gap-3 items-center text-[10px] sm:text-xs shrink-0 overflow-x-auto no-print">
-        <span className="font-bold text-slate-500 uppercase shrink-0">Resumen {year}:</span>
-        {professionals
-          .filter(p => visiblePros.has(p.alias) && proCounts[p.alias] && (proCounts[p.alias].morning + proCounts[p.alias].afternoon + proCounts[p.alias].avisos) > 0)
-          .sort((a, b) => (proCounts[b.alias].morning + proCounts[b.alias].afternoon) - (proCounts[a.alias].morning + proCounts[a.alias].afternoon))
-          .map(p => {
-            const c = proCounts[p.alias];
-            const total = c.morning + c.afternoon;
-            return (
-              <div key={p.alias} className={`flex gap-1 sm:gap-2 items-center px-1.5 sm:px-2 py-0.5 rounded border shrink-0 ${selectedPro === p.alias ? 'border-amber-500 bg-amber-500/10' : 'border-slate-700'}`}>
-                <span className="font-black text-amber-400">{p.alias}</span>
-                <span className="text-slate-500 hidden md:inline">{p.firstName}</span>
-                <span className="text-green-400">M:{c.morning}</span>
-                <span className="text-amber-300">T:{c.afternoon}</span>
-                <span className="text-slate-400 font-bold">Σ{total}</span>
-                {c.avisos > 0 && <span className="text-red-400">!{c.avisos}</span>}
-              </div>
-            );
-          })}
-        {selectedPro && (
-          <button
-            onClick={() => setSelectedPro("")}
-            className="ml-auto bg-amber-500/20 hover:bg-amber-500 hover:text-black text-amber-400 px-2 py-0.5 rounded font-bold text-[10px] shrink-0"
-          >Asignando: {selectedPro} ✕</button>
-        )}
       </div>
 
       {/* ═══ Calendar grid ═══ */}
