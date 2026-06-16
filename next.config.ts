@@ -6,9 +6,7 @@ const nextConfig: NextConfig = {
   },
   reactStrictMode: false,
   env: {
-    NEXTAUTH_URL: process.env.VERCEL_URL 
-      ? `https://${process.env.VERCEL_URL}` 
-      : process.env.NEXTAUTH_URL || "http://localhost:3000",
+    AUTH_TRUST_HOST: "true",
   },
 };
 
