@@ -1,0 +1,514 @@
+     1→     1→"use client";
+     2→     2→
+     3→     3→import { useState, useEffect, useCallback } from "react";
+     4→     4→
+     5→     5→/* ─── Types ─── */
+     6→     6→interface Sede { id: string; name: string; task: string; color: string; morningEnabled: boolean; afternoonEnabled: boolean; }
+     7→     7→interface Professional { id: string; alias: string; firstName: string; lastName: string; }
+     8→     8→interface CatalogItem { id: string; name: string; sedeId: string | null; turn: string; price: number; taxRate: number; description: string; isActive: boolean; }
+     9→     9→interface InvoiceLine { id: string; date: string; sedeId: string; sedeName: string; turn: string; concept: string; quantity: number; unitPrice: number; taxRate: number; lineTotal: number; validated: boolean; }
+    10→    10→interface Invoice { id: string; professionalAlias: string; invoiceNumber: string; type: string; status: string; periodStart: string; periodEnd: string; subtotal: number; taxRate: number; taxAmount: number; total: number; notes: string | null; issuedAt: string | null; paidAt: string | null; lines: InvoiceLine[]; }
+    11→    11→
+    12→    12→type Tab = "catalog" | "validate" | "invoices";
+    13→    13→type Toast = { id: number; message: string; type: "success" | "error" };
+    14→    14→
+    15→    15→const MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+    16→    16→const statusLabels: Record<string, string> = { DRAFT: "Borrador", ISSUED: "Emitida", PAID: "Pagada", CANCELLED: "Anulada" };
+    17→    17→const statusColors: Record<string, string> = { DRAFT: "bg-slate-600/30 text-slate-300", ISSUED: "bg-blue-600/30 text-blue-400", PAID: "bg-green-600/30 text-green-400", CANCELLED: "bg-red-600/30 text-red-400" };
+    18→    18→const turnLabels: Record<string, string> = { MANANA: "Mañana", TARDE: "Tarde" };
+    19→    19→
+    20→    20→export default function BillTab() {
+    21→    21→  const [tab, setTab] = useState<Tab>("catalog");
+    22→    22→  const [sedes, setSedes] = useState<Sede[]>([]);
+    23→    23→  const [professionals, setProfessionals] = useState<Professional[]>([]);
+    24→    24→  const [catalog, setCatalog] = useState<CatalogItem[]>([]);
+    25→    25→  const [invoices, setInvoices] = useState<Invoice[]>([]);
+    26→    26→  const [toasts, setToasts] = useState<Toast[]>([]);
+    27→    27→  const toastIdRef = useState(0);
+    28→    28→  const [year, setYear] = useState(new Date().getFullYear());
+    29→    29→  const [month, setMonth] = useState(new Date().getMonth());
+    30→    30→
+    31→    31→  // Catalog form
+    32→    32→  const [catForm, setCatForm] = useState({ name: "", sedeId: "", turn: "MANANA", price: "", taxRate: "21", description: "" });
+    33→    33→  const [editingCat, setEditingCat] = useState<string | null>(null);
+    34→    34→
+    35→    35→  // Generate form
+    36→    36→  const [genPro, setGenPro] = useState("");
+    37→    37→  const [genType, setGenType] = useState("MONTHLY");
+    38→    38→
+    39→    39→  // Invoice detail
+    40→    40→  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+    41→    41→
+    42→    42→  const addToast = useCallback((message: string, type: "success" | "error" = "success") => {
+    43→    43→    const id = Date.now() + Math.random();
+    44→    44→    setToasts(prev => [...prev, { id, message, type }]);
+    45→    45→    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000);
+    46→    46→  }, []);
+    47→    47→
+    48→    48→  async function loadBase() {
+    49→    49→    const [sRes, pRes] = await Promise.all([fetch("/api/company/sedes"), fetch("/api/company/professionals")]);
+    50→    50→    if (sRes.ok) setSedes(await sRes.json());
+    51→    51→    if (pRes.ok) setProfessionals(await pRes.json());
+    52→    52→  }
+    53→    53→
+    54→    54→  async function loadCatalog() {
+    55→    55→    const res = await fetch("/api/company/catalog");
+    56→    56→    if (res.ok) setCatalog(await res.json());
+    57→    57→  }
+    58→    58→
+    59→    59→  async function loadInvoices() {
+    60→    60→    const res = await fetch("/api/company/invoices");
+    61→    61→    if (res.ok) setInvoices(await res.json());
+    62→    62→  }
+    63→    63→
+    64→    64→  useEffect(() => { loadBase(); loadCatalog(); loadInvoices(); }, []);
+    65→    65→
+    66→    66→  /* ─── Catalog CRUD ─── */
+    67→    67→  async function saveCatalogItem() {
+    68→    68→    if (!catForm.name || !catForm.price) { addToast("Nombre y precio son obligatorios", "error"); return; }
+    69→    69→    const payload = { ...catForm, price: parseFloat(catForm.price), taxRate: parseFloat(catForm.taxRate), sedeId: catForm.sedeId || null };
+    70→    70→
+    71→    71→    if (editingCat) {
+    72→    72→      const res = await fetch(`/api/company/catalog/${editingCat}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    73→    73→      if (res.ok) { addToast("Concepto actualizado"); setEditingCat(null); } else addToast("Error al actualizar", "error");
+    74→    74→    } else {
+    75→    75→      const res = await fetch("/api/company/catalog", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    76→    76→      if (res.ok) addToast("Concepto creado"); else addToast("Error al crear", "error");
+    77→    77→    }
+    78→    78→    setCatForm({ name: "", sedeId: "", turn: "MANANA", price: "", taxRate: "21", description: "" });
+    79→    79→    loadCatalog();
+    80→    80→  }
+    81→    81→
+    82→    82→  async function deleteCatalogItem(id: string) {
+    83→    83→    const res = await fetch(`/api/company/catalog/${id}`, { method: "DELETE" });
+    84→    84→    if (res.ok) addToast("Concepto eliminado"); else addToast("Error al eliminar", "error");
+    85→    85→    loadCatalog();
+    86→    86→  }
+    87→    87→
+    88→    88→  function editCatalogItem(item: CatalogItem) {
+    89→    89→    setCatForm({ name: item.name, sedeId: item.sedeId || "", turn: item.turn, price: String(item.price), taxRate: String(item.taxRate), description: item.description });
+    90→    90→    setEditingCat(item.id);
+    91→    91→  }
+    92→    92→
+    93→    93→  /* ─── Auto-generate catalog from sedes ─── */
+    94→    94→  async function autoGenerateCatalog() {
+    95→    95→    let created = 0;
+    96→    96→    for (const sede of sedes) {
+    97→    97→      if (sede.morningEnabled) {
+    98→    98→        const existing = catalog.find(c => c.sedeId === sede.id && c.turn === "MANANA");
+    99→    99→        if (!existing) {
+   100→   100→          const res = await fetch("/api/company/catalog", {
+   101→   101→            method: "POST", headers: { "Content-Type": "application/json" },
+   102→   102→            body: JSON.stringify({ name: `${sede.name} / ${sede.task} · Mañana`, sedeId: sede.id, turn: "MANANA", price: 0, taxRate: 21 }),
+   103→   103→          });
+   104→   104→          if (res.ok) created++;
+   105→   105→        }
+   106→   106→      }
+   107→   107→      if (sede.afternoonEnabled) {
+   108→   108→        const existing = catalog.find(c => c.sedeId === sede.id && c.turn === "TARDE");
+   109→   109→        if (!existing) {
+   110→   110→          const res = await fetch("/api/company/catalog", {
+   111→   111→            method: "POST", headers: { "Content-Type": "application/json" },
+   112→   112→            body: JSON.stringify({ name: `${sede.name} / ${sede.task} · Tarde`, sedeId: sede.id, turn: "TARDE", price: 0, taxRate: 21 }),
+   113→   113→          });
+   114→   114→          if (res.ok) created++;
+   115→   115→        }
+   116→   116→      }
+   117→   117→    }
+   118→   118→    addToast(`${created} conceptos creados automáticamente`);
+   119→   119→    loadCatalog();
+   120→   120→  }
+   121→   121→
+   122→   122→  /* ─── Generate Invoice ─── */
+   123→   123→  async function generateInvoice() {
+   124→   124→    if (!genPro) { addToast("Selecciona un profesional", "error"); return; }
+   125→   125→    const res = await fetch("/api/company/invoices/generate", {
+   126→   126→      method: "POST", headers: { "Content-Type": "application/json" },
+   127→   127→      body: JSON.stringify({ professionalAlias: genPro, type: genType, year, month }),
+   128→   128→    });
+   129→   129→    if (res.ok) {
+   130→   130→      const inv = await res.json();
+   131→   131→      addToast(`Factura ${inv.invoiceNumber} generada`);
+   132→   132→      loadInvoices();
+   133→   133→      setTab("validate");
+   134→   134→    } else {
+   135→   135→      const data = await res.json().catch(() => ({}));
+   136→   136→      addToast(data.error || "Error generando factura", "error");
+   137→   137→    }
+   138→   138→  }
+   139→   139→
+   140→   140→  /* ─── Validate Line ─── */
+   141→   141→  async function toggleLineValidation(lineId: string, current: boolean) {
+   142→   142→    const res = await fetch("/api/company/invoices/validate", {
+   143→   143→      method: "PUT", headers: { "Content-Type": "application/json" },
+   144→   144→      body: JSON.stringify({ lineId, validated: !current }),
+   145→   145→    });
+   146→   146→    if (res.ok) loadInvoices();
+   147→   147→  }
+   148→   148→
+   149→   149→  async function validateAllLines(invoiceId: string) {
+   150→   150→    const res = await fetch("/api/company/invoices/validate", {
+   151→   151→      method: "PUT", headers: { "Content-Type": "application/json" },
+   152→   152→      body: JSON.stringify({ invoiceId, validated: true }),
+   153→   153→    });
+   154→   154→    if (res.ok) { addToast("Todas las líneas validadas"); loadInvoices(); }
+   155→   155→  }
+   156→   156→
+   157→   157→  /* ─── Invoice Actions ─── */
+   158→   158→  async function invoiceAction(id: string, action: string) {
+   159→   159→    const res = await fetch(`/api/company/invoices/${id}`, {
+   160→   160→      method: "PUT", headers: { "Content-Type": "application/json" },
+   161→   161→      body: JSON.stringify({ action }),
+   162→   162→    });
+   163→   163→    if (res.ok) {
+   164→   164→      const labels: Record<string, string> = { issue: "emitida", pay: "marcada como pagada", cancel: "anulada" };
+   165→   165→      addToast(`Factura ${labels[action] || action}`);
+   166→   166→      loadInvoices();
+   167→   167→      if (selectedInvoice?.id === id) {
+   168→   168→        setSelectedInvoice(await res.json());
+   169→   169→      }
+   170→   170→    } else {
+   171→   171→      const data = await res.json().catch(() => ({}));
+   172→   172→      addToast(data.error || "Error", "error");
+   173→   173→    }
+   174→   174→  }
+   175→   175→
+   176→   176→  async function deleteInvoice(id: string) {
+   177→   177→    const res = await fetch(`/api/company/invoices/${id}`, { method: "DELETE" });
+   178→   178→    if (res.ok) { addToast("Factura eliminada"); setSelectedInvoice(null); loadInvoices(); }
+   179→   179→    else { const data = await res.json().catch(() => ({})); addToast(data.error || "Error", "error"); }
+   180→   180→  }
+   181→   181→
+   182→   182→  /* ─── Draft invoices for validation ─── */
+   183→   183→  const draftInvoices = invoices.filter(i => i.status === "DRAFT");
+   184→   184→
+   185→   185→  /* ─── RENDER ─── */
+   186→   186→  return (
+   187→   187→    <div className="flex flex-col h-full overflow-hidden">
+   188→   188→      {/* Tabs */}
+   189→   189→      <div className="flex gap-2 mb-4 shrink-0 flex-wrap">
+   190→   190→        {[
+   191→   191→          { key: "catalog" as Tab, label: "📦 CATÁLOGO", count: catalog.length },
+   192→   192→          { key: "validate" as Tab, label: "✅ VALIDAR", count: draftInvoices.length },
+   193→   193→          { key: "invoices" as Tab, label: "📄 FACTURAS", count: invoices.length },
+   194→   194→        ].map(t => (
+   195→   195→          <button key={t.key} onClick={() => setTab(t.key)}
+   196→   196→            className={`px-4 py-2 rounded-lg font-bold text-sm transition ${tab === t.key ? "bg-amber-500 text-black" : "bg-slate-700 text-slate-400 hover:bg-slate-600"}`}>
+   197→   197→            {t.label} <span className="ml-1 text-xs opacity-70">({t.count})</span>
+   198→   198→          </button>
+   199→   199→        ))}
+   200→   200→      </div>
+   201→   201→
+   202→   202→      <div className="flex-1 overflow-auto">
+   203→   203→        {/* ═══════ CATÁLOGO ═══════ */}
+   204→   204→        {tab === "catalog" && (
+   205→   205→          <div className="space-y-4">
+   206→   206→            {/* Auto-generate */}
+   207→   207→            <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
+   208→   208→              <div className="flex justify-between items-center mb-3">
+   209→   209→                <h3 className="font-bold text-white">Catálogo de Conceptos</h3>
+   210→   210→                <button onClick={autoGenerateCatalog} className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-3 py-1.5 rounded-lg text-xs transition">
+   211→   211→                  ⚡ AUTO-GENERAR DESDE SEDES
+   212→   212→                </button>
+   213→   213→              </div>
+   214→   214→              <p className="text-xs text-slate-400 mb-3">Cada concepto enlaza una sede + turno con un precio. Se usan para generar facturas automáticamente.</p>
+   215→   215→
+   216→   216→              {/* Form */}
+   217→   217→              <div className="grid grid-cols-2 md:grid-cols-6 gap-2 mb-4">
+   218→   218→                <input value={catForm.name} onChange={e => setCatForm(f => ({ ...f, name: e.target.value }))} placeholder="Nombre concepto" className="col-span-2 px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-xs" />
+   219→   219→                <select value={catForm.sedeId} onChange={e => setCatForm(f => ({ ...f, sedeId: e.target.value }))} className="px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-xs">
+   220→   220→                  <option value="">Sin sede</option>
+   221→   221→                  {sedes.map(s => <option key={s.id} value={s.id}>{s.name} / {s.task}</option>)}
+   222→   222→                </select>
+   223→   223→                <select value={catForm.turn} onChange={e => setCatForm(f => ({ ...f, turn: e.target.value }))} className="px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-xs">
+   224→   224→                  <option value="MANANA">Mañana</option>
+   225→   225→                  <option value="TARDE">Tarde</option>
+   226→   226→                </select>
+   227→   227→                <input value={catForm.price} onChange={e => setCatForm(f => ({ ...f, price: e.target.value }))} placeholder="Precio €" type="number" step="0.01" className="px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-xs" />
+   228→   228→                <input value={catForm.taxRate} onChange={e => setCatForm(f => ({ ...f, taxRate: e.target.value }))} placeholder="IVA %" type="number" step="0.1" className="px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-xs" />
+   229→   229→              </div>
+   230→   230→              <div className="flex gap-2">
+   231→   231→                <button onClick={saveCatalogItem} className="bg-amber-500 hover:bg-amber-400 text-black font-bold px-4 py-2 rounded-lg text-xs transition">
+   232→   232→                  {editingCat ? "ACTUALIZAR" : "+ AÑADIR CONCEPTO"}
+   233→   233→                </button>
+   234→   234→                {editingCat && <button onClick={() => { setEditingCat(null); setCatForm({ name: "", sedeId: "", turn: "MANANA", price: "", taxRate: "21", description: "" }); }} className="bg-slate-700 hover:bg-slate-600 text-white font-bold px-4 py-2 rounded-lg text-xs transition">CANCELAR</button>}
+   235→   235→              </div>
+   236→   236→            </div>
+   237→   237→
+   238→   238→            {/* Catalog list */}
+   239→   239→            <div className="bg-slate-800/50 border border-slate-700 rounded-xl overflow-hidden">
+   240→   240→              <table className="w-full">
+   241→   241→                <thead>
+   242→   242→                  <tr className="bg-slate-900">
+   243→   243→                    <th className="text-left px-4 py-2 text-xs font-extrabold text-blue-400 uppercase">Concepto</th>
+   244→   244→                    <th className="text-left px-4 py-2 text-xs font-extrabold text-blue-400 uppercase">Sede</th>
+   245→   245→                    <th className="text-left px-4 py-2 text-xs font-extrabold text-blue-400 uppercase">Turno</th>
+   246→   246→                    <th className="text-right px-4 py-2 text-xs font-extrabold text-blue-400 uppercase">Precio</th>
+   247→   247→                    <th className="text-right px-4 py-2 text-xs font-extrabold text-blue-400 uppercase">IVA</th>
+   248→   248→                    <th className="text-center px-4 py-2 text-xs font-extrabold text-blue-400 uppercase">Acciones</th>
+   249→   249→                  </tr>
+   250→   250→                </thead>
+   251→   251→                <tbody>
+   252→   252→                  {catalog.map(item => {
+   253→   253→                    const sede = sedes.find(s => s.id === item.sedeId);
+   254→   254→                    return (
+   255→   255→                      <tr key={item.id} className="border-b border-slate-700/50 hover:bg-slate-700/20">
+   256→   256→                        <td className="px-4 py-2 text-sm font-bold text-white">{item.name}</td>
+   257→   257→                        <td className="px-4 py-2 text-sm text-slate-300">{sede ? `${sede.name} / ${sede.task}` : "—"}</td>
+   258→   258→                        <td className="px-4 py-2">
+   259→   259→                          <span className={`text-xs font-bold px-2 py-0.5 rounded ${item.turn === "MANANA" ? "bg-blue-600/30 text-blue-400" : "bg-amber-600/30 text-amber-400"}`}>
+   260→   260→                            {turnLabels[item.turn] || item.turn}
+   261→   261→                          </span>
+   262→   262→                        </td>
+   263→   263→                        <td className="px-4 py-2 text-sm text-amber-400 font-bold text-right">{item.price.toFixed(2)}€</td>
+   264→   264→                        <td className="px-4 py-2 text-sm text-slate-400 text-right">{item.taxRate}%</td>
+   265→   265→                        <td className="px-4 py-2 text-center">
+   266→   266→                          <button onClick={() => editCatalogItem(item)} className="text-blue-400 hover:text-blue-300 text-xs font-bold mr-2">EDITAR</button>
+   267→   267→                          <button onClick={() => deleteCatalogItem(item.id)} className="text-red-400 hover:text-red-300 text-xs font-bold">✕</button>
+   268→   268→                        </td>
+   269→   269→                      </tr>
+   270→   270→                    );
+   271→   271→                  })}
+   272→   272→                  {catalog.length === 0 && (
+   273→   273→                    <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-500">No hay conceptos. Usa "Auto-generar" para crear desde las sedes.</td></tr>
+   274→   274→                  )}
+   275→   275→                </tbody>
+   276→   276→              </table>
+   277→   277→            </div>
+   278→   278→          </div>
+   279→   279→        )}
+   280→   280→
+   281→   281→        {/* ═══════ VALIDAR ═══════ */}
+   282→   282→        {tab === "validate" && (
+   283→   283→          <div className="space-y-4">
+   284→   284→            {/* Generate invoice form */}
+   285→   285→            <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
+   286→   286→              <h3 className="font-bold text-white mb-3">Generar Factura</h3>
+   287→   287→              <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-3">
+   288→   288→                <select value={genPro} onChange={e => setGenPro(e.target.value)} className="px-3 py-2 bg-slate-900 border-2 border-amber-500 rounded-lg text-white text-xs font-bold">
+   289→   289→                  <option value="">-- PROFESIONAL --</option>
+   290→   290→                  {professionals.map(p => <option key={p.id} value={p.alias}>{p.alias} - {p.firstName} {p.lastName}</option>)}
+   291→   291→                </select>
+   292→   292→                <select value={genType} onChange={e => setGenType(e.target.value)} className="px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-xs">
+   293→   293→                  <option value="MONTHLY">Mensual</option>
+   294→   294→                  <option value="DAILY">Por días</option>
+   295→   295→                </select>
+   296→   296→                <select value={year} onChange={e => setYear(parseInt(e.target.value))} className="px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-xs">
+   297→   297→                  {Array.from({ length: 10 }, (_, i) => 2024 + i).map(y => <option key={y} value={y}>{y}</option>)}
+   298→   298→                </select>
+   299→   299→                <select value={month} onChange={e => setMonth(parseInt(e.target.value))} className="px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-xs">
+   300→   300→                  {MESES.map((m, i) => <option key={i} value={i}>{m.toUpperCase()}</option>)}
+   301→   301→                </select>
+   302→   302→                <button onClick={generateInvoice} className="bg-amber-500 hover:bg-amber-400 text-black font-bold px-4 py-2 rounded-lg text-xs transition">
+   303→   303→                  ⚡ GENERAR
+   304→   304→                </button>
+   305→   305→              </div>
+   306→   306→            </div>
+   307→   307→
+   308→   308→            {/* Draft invoices to validate */}
+   309→   309→            {draftInvoices.length === 0 ? (
+   310→   310→              <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-8 text-center text-slate-500">
+   311→   311→                <div className="text-4xl mb-3">✅</div>
+   312→   312→                <p className="font-bold">No hay facturas pendientes de validación</p>
+   313→   313→                <p className="text-xs mt-1">Genera una factura para un profesional y luego valida los turnos</p>
+   314→   314→              </div>
+   315→   315→            ) : (
+   316→   316→              draftInvoices.map(inv => (
+   317→   317→                <div key={inv.id} className="bg-slate-800/50 border border-slate-700 rounded-xl overflow-hidden">
+   318→   318→                  <div className="bg-slate-900 px-4 py-3 flex justify-between items-center">
+   319→   319→                    <div className="flex items-center gap-3">
+   320→   320→                      <span className="text-amber-400 font-black text-sm">{inv.invoiceNumber}</span>
+   321→   321→                      <span className="text-white font-bold text-sm">{inv.professionalAlias}</span>
+   322→   322→                      <span className="text-slate-400 text-xs">{inv.periodStart} → {inv.periodEnd}</span>
+   323→   323→                      <span className={`text-xs font-bold px-2 py-0.5 rounded ${statusColors[inv.status]}`}>{statusLabels[inv.status]}</span>
+   324→   324→                    </div>
+   325→   325→                    <div className="flex gap-2">
+   326→   326→                      <button onClick={() => validateAllLines(inv.id)} className="bg-green-600 hover:bg-green-500 text-white font-bold px-3 py-1 rounded text-xs transition">
+   327→   327→                        ✓ VALIDAR TODAS
+   328→   328→                      </button>
+   329→   329→                      <button onClick={() => invoiceAction(inv.id, "issue")} className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-3 py-1 rounded text-xs transition">
+   330→   330→                        📧 EMITIR
+   331→   331→                      </button>
+   332→   332→                      <button onClick={() => deleteInvoice(inv.id)} className="bg-red-600/30 hover:bg-red-600 text-red-400 hover:text-white font-bold px-3 py-1 rounded text-xs transition">
+   333→   333→                        ✕
+   334→   334→                      </button>
+   335→   335→                    </div>
+   336→   336→                  </div>
+   337→   337→                  <table className="w-full">
+   338→   338→                    <thead>
+   339→   339→                      <tr className="bg-slate-900/50">
+   340→   340→                        <th className="text-left px-4 py-2 text-xs font-bold text-slate-400">✓</th>
+   341→   341→                        <th className="text-left px-4 py-2 text-xs font-bold text-slate-400">FECHA</th>
+   342→   342→                        <th className="text-left px-4 py-2 text-xs font-bold text-slate-400">SEDE</th>
+   343→   343→                        <th className="text-left px-4 py-2 text-xs font-bold text-slate-400">TURNO</th>
+   344→   344→                        <th className="text-left px-4 py-2 text-xs font-bold text-slate-400">CONCEPTO</th>
+   345→   345→                        <th className="text-right px-4 py-2 text-xs font-bold text-slate-400">PRECIO</th>
+   346→   346→                      </tr>
+   347→   347→                    </thead>
+   348→   348→                    <tbody>
+   349→   349→                      {inv.lines.map(line => (
+   350→   350→                        <tr key={line.id} className={`border-b border-slate-700/30 ${line.validated ? "bg-green-900/10" : ""}`}>
+   351→   351→                          <td className="px-4 py-2">
+   352→   352→                            <input type="checkbox" checked={line.validated} onChange={() => toggleLineValidation(line.id, line.validated)}
+   353→   353→                              className="w-4 h-4 accent-green-500 cursor-pointer" />
+   354→   354→                          </td>
+   355→   355→                          <td className="px-4 py-2 text-sm text-white">{line.date}</td>
+   356→   356→                          <td className="px-4 py-2 text-sm text-slate-300">{line.sedeName}</td>
+   357→   357→                          <td className="px-4 py-2">
+   358→   358→                            <span className={`text-xs font-bold px-2 py-0.5 rounded ${line.turn === "MANANA" ? "bg-blue-600/30 text-blue-400" : "bg-amber-600/30 text-amber-400"}`}>
+   359→   359→                              {turnLabels[line.turn] || line.turn}
+   360→   360→                            </span>
+   361→   361→                          </td>
+   362→   362→                          <td className="px-4 py-2 text-sm text-slate-300">{line.concept}</td>
+   363→   363→                          <td className="px-4 py-2 text-sm text-amber-400 font-bold text-right">{line.unitPrice.toFixed(2)}€</td>
+   364→   364→                        </tr>
+   365→   365→                      ))}
+   366→   366→                    </tbody>
+   367→   367→                    <tfoot>
+   368→   368→                      <tr className="bg-slate-900/50">
+   369→   369→                        <td colSpan={5} className="px-4 py-2 text-sm text-slate-400 text-right">Subtotal</td>
+   370→   370→                        <td className="px-4 py-2 text-sm text-white font-bold text-right">{inv.subtotal.toFixed(2)}€</td>
+   371→   371→                      </tr>
+   372→   372→                      <tr className="bg-slate-900/50">
+   373→   373→                        <td colSpan={5} className="px-4 py-2 text-sm text-slate-400 text-right">IVA ({inv.taxRate}%):</td>
+   374→   374→                        <td className="px-4 py-2 text-sm text-slate-300 text-right">{inv.taxAmount.toFixed(2)}€</td>
+   375→   375→                      </tr>
+   376→   376→                      <tr className="bg-slate-900/50">
+   377→   377→                        <td colSpan={5} className="px-4 py-2 text-sm text-white font-bold text-right">TOTAL</td>
+   378→   378→                        <td className="px-4 py-2 text-lg text-amber-400 font-black text-right">{inv.total.toFixed(2)}€</td>
+   379→   379→                      </tr>
+   380→   380→                    </tfoot>
+   381→   381→                  </table>
+   382→   382→                </div>
+   383→   383→              ))
+   384→   384→            )}
+   385→   385→          </div>
+   386→   386→        )}
+   387→   387→
+   388→   388→        {/* ═══════ FACTURAS ═══════ */}
+   389→   389→        {tab === "invoices" && (
+   390→   390→          <div className="space-y-4">
+   391→   391→            {/* Summary cards */}
+   392→   392→            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+   393→   393→              {[
+   394→   394→                { label: "Borradores", count: invoices.filter(i => i.status === "DRAFT").length, color: "text-slate-400", bg: "bg-slate-800/50" },
+   395→   395→                { label: "Emitidas", count: invoices.filter(i => i.status === "ISSUED").length, color: "text-blue-400", bg: "bg-blue-900/10" },
+   396→   396→                { label: "Pagadas", count: invoices.filter(i => i.status === "PAID").length, color: "text-green-400", bg: "bg-green-900/10" },
+   397→   397→                { label: "Total ingresado", count: invoices.filter(i => i.status === "PAID").reduce((s, i) => s + i.total, 0).toFixed(2) + "€", color: "text-amber-400", bg: "bg-amber-900/10" },
+   398→   398→              ].map((s, idx) => (
+   399→   399→                <div key={idx} className={`${s.bg} border border-slate-700 rounded-xl p-4 text-center`}>
+   400→   400→                  <div className="text-xs text-slate-400 font-bold uppercase">{s.label}</div>
+   401→   401→                  <div className={`text-2xl font-black mt-1 ${s.color}`}>{s.count}</div>
+   402→   402→                </div>
+   403→   403→              ))}
+   404→   404→            </div>
+   405→   405→
+   406→   406→            {/* Invoice list */}
+   407→   407→            <div className="bg-slate-800/50 border border-slate-700 rounded-xl overflow-hidden">
+   408→   408→              <table className="w-full">
+   409→   409→                <thead>
+   410→   410→                  <tr className="bg-slate-900">
+   411→   411→                    <th className="text-left px-4 py-2 text-xs font-extrabold text-blue-400 uppercase">Factura</th>
+   412→   412→                    <th className="text-left px-4 py-2 text-xs font-extrabold text-blue-400 uppercase">Profesional</th>
+   413→   413→                    <th className="text-left px-4 py-2 text-xs font-extrabold text-blue-400 uppercase">Período</th>
+   414→   414→                    <th className="text-right px-4 py-2 text-xs font-extrabold text-blue-400 uppercase">Base</th>
+   415→   415→                    <th className="text-right px-4 py-2 text-xs font-extrabold text-blue-400 uppercase">IVA</th>
+   416→   416→                    <th className="text-right px-4 py-2 text-xs font-extrabold text-blue-400 uppercase">Total</th>
+   417→   417→                    <th className="text-center px-4 py-2 text-xs font-extrabold text-blue-400 uppercase">Estado</th>
+   418→   418→                    <th className="text-center px-4 py-2 text-xs font-extrabold text-blue-400 uppercase">Acciones</th>
+   419→   419→                  </tr>
+   420→   420→                </thead>
+   421→   421→                <tbody>
+   422→   422→                  {invoices.map(inv => (
+   423→   423→                    <tr key={inv.id} className="border-b border-slate-700/50 hover:bg-slate-700/20 cursor-pointer"
+   424→   424→                      onClick={() => setSelectedInvoice(selectedInvoice?.id === inv.id ? null : inv)}>
+   425→   425→                      <td className="px-4 py-2 text-sm font-bold text-amber-400">{inv.invoiceNumber}</td>
+   426→   426→                      <td className="px-4 py-2 text-sm text-white font-bold">{inv.professionalAlias}</td>
+   427→   427→                      <td className="px-4 py-2 text-xs text-slate-300">{inv.periodStart} → {inv.periodEnd}</td>
+   428→   428→                      <td className="px-4 py-2 text-sm text-slate-300 text-right">{inv.subtotal.toFixed(2)}€</td>
+   429→   429→                      <td className="px-4 py-2 text-sm text-slate-400 text-right">{inv.taxAmount.toFixed(2)}€</td>
+   430→   430→                      <td className="px-4 py-2 text-sm text-white font-bold text-right">{inv.total.toFixed(2)}€</td>
+   431→   431→                      <td className="px-4 py-2 text-center">
+   432→   432→                        <span className={`text-xs font-bold px-2 py-1 rounded ${statusColors[inv.status]}`}>{statusLabels[inv.status]}</span>
+   433→   433→                      </td>
+   434→   434→                      <td className="px-4 py-2 text-center" onClick={e => e.stopPropagation()}>
+   435→   435→                        {inv.status === "DRAFT" && <button onClick={() => invoiceAction(inv.id, "issue")} className="text-blue-400 hover:text-blue-300 text-xs font-bold mr-1">EMITIR</button>}
+   436→   436→                        {inv.status === "ISSUED" && <button onClick={() => invoiceAction(inv.id, "pay")} className="text-green-400 hover:text-green-300 text-xs font-bold mr-1">PAGAR</button>}
+   437→   437→                        {(inv.status === "DRAFT" || inv.status === "ISSUED") && <button onClick={() => invoiceAction(inv.id, "cancel")} className="text-red-400 hover:text-red-300 text-xs font-bold">ANULAR</button>}
+   438→   438→                      </td>
+   439→   439→                    </tr>
+   440→   440→                  ))}
+   441→   441→                  {invoices.length === 0 && (
+   442→   442→                    <tr><td colSpan={8} className="px-4 py-8 text-center text-slate-500">No hay facturas. Genera la primera desde la pestaña "Validar".</td></tr>
+   443→   443→                  )}
+   444→   444→                </tbody>
+   445→   445→              </table>
+   446→   446→            </div>
+   447→   447→
+   448→   448→            {/* Invoice Detail */}
+   449→   449→            {selectedInvoice && (
+   450→   450→              <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setSelectedInvoice(null)}>
+   451→   451→                <div className="bg-slate-800 border border-slate-600 rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-auto" onClick={e => e.stopPropagation()}>
+   452→   452→                  <div className="flex justify-between items-start mb-4">
+   453→   453→                    <div>
+   454→   454→                      <h3 className="text-lg font-bold text-white">{selectedInvoice.invoiceNumber}</h3>
+   455→   455→                      <div className="text-sm text-slate-400">{selectedInvoice.professionalAlias} · {selectedInvoice.periodStart} → {selectedInvoice.periodEnd}</div>
+   456→   456→                    </div>
+   457→   457→                    <span className={`text-xs font-bold px-3 py-1 rounded-full ${statusColors[selectedInvoice.status]}`}>{statusLabels[selectedInvoice.status]}</span>
+   458→   458→                  </div>
+   459→   459→
+   460→   460→                  <table className="w-full mb-4">
+   461→   461→                    <thead>
+   462→   462→                      <tr className="bg-slate-900/50">
+   463→   463→                        <th className="text-left px-3 py-2 text-xs font-bold text-slate-400">FECHA</th>
+   464→   464→                        <th className="text-left px-3 py-2 text-xs font-bold text-slate-400">SEDE</th>
+   465→   465→                        <th className="text-left px-3 py-2 text-xs font-bold text-slate-400">TURNO</th>
+   466→   466→                        <th className="text-left px-3 py-2 text-xs font-bold text-slate-400">CONCEPTO</th>
+   467→   467→                        <th className="text-right px-3 py-2 text-xs font-bold text-slate-400">PRECIO</th>
+   468→   468→                        <th className="text-center px-3 py-2 text-xs font-bold text-slate-400">✓</th>
+   469→   469→                      </tr>
+   470→   470→                    </thead>
+   471→   471→                    <tbody>
+   472→   472→                      {selectedInvoice.lines.map(l => (
+   473→   473→                        <tr key={l.id} className="border-b border-slate-700/30">
+   474→   474→                          <td className="px-3 py-2 text-xs text-white">{l.date}</td>
+   475→   475→                          <td className="px-3 py-2 text-xs text-slate-300">{l.sedeName}</td>
+   476→   476→                          <td className="px-3 py-2"><span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${l.turn === "MANANA" ? "bg-blue-600/30 text-blue-400" : "bg-amber-600/30 text-amber-400"}`}>{turnLabels[l.turn]}</span></td>
+   477→   477→                          <td className="px-3 py-2 text-xs text-slate-300">{l.concept}</td>
+   478→   478→                          <td className="px-3 py-2 text-xs text-amber-400 font-bold text-right">{l.unitPrice.toFixed(2)}€</td>
+   479→   479→                          <td className="px-3 py-2 text-center">{l.validated ? "✅" : "⬜"}</td>
+   480→   480→                        </tr>
+   481→   481→                      ))}
+   482→   482→                    </tbody>
+   483→   483→                  </table>
+   484→   484→
+   485→   485→                  <div className="bg-slate-900/50 rounded-xl p-4 space-y-2">
+   486→   486→                    <div className="flex justify-between text-sm"><span className="text-slate-400">Subtotal</span><span className="text-white">{selectedInvoice.subtotal.toFixed(2)}€</span></div>
+   487→   487→                    <div className="flex justify-between text-sm"><span className="text-slate-400">IVA ({selectedInvoice.taxRate}%)</span><span className="text-white">{selectedInvoice.taxAmount.toFixed(2)}€</span></div>
+   488→   488→                    <div className="flex justify-between text-lg font-black border-t border-slate-700 pt-2"><span className="text-white">TOTAL</span><span className="text-amber-400">{selectedInvoice.total.toFixed(2)}€</span></div>
+   489→   489→                  </div>
+   490→   490→
+   491→   491→                  <div className="mt-4 flex gap-2">
+   492→   492→                    {selectedInvoice.status === "DRAFT" && <button onClick={() => { invoiceAction(selectedInvoice.id, "issue"); }} className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-2 rounded-lg text-sm transition">📧 EMITIR</button>}
+   493→   493→                    {selectedInvoice.status === "ISSUED" && <button onClick={() => { invoiceAction(selectedInvoice.id, "pay"); }} className="flex-1 bg-green-600 hover:bg-green-500 text-white font-bold py-2 rounded-lg text-sm transition">💰 MARCAR PAGADA</button>}
+   494→   494→                    <button onClick={() => setSelectedInvoice(null)} className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-bold py-2 rounded-lg text-sm transition">CERRAR</button>
+   495→   495→                  </div>
+   496→   496→                </div>
+   497→   497→              </div>
+   498→   498→            )}
+   499→   499→          </div>
+   500→   500→        )}
+   501→   501→      </div>
+   502→   502→
+   503→   503→      {/* Toasts */}
+   504→   504→      <div className="fixed bottom-4 right-4 flex flex-col gap-2 z-50">
+   505→   505→        {toasts.map(t => (
+   506→   506→          <div key={t.id} className={`px-4 py-3 rounded-lg text-sm font-bold shadow-xl ${t.type === "success" ? "bg-green-600 text-white" : "bg-red-600 text-white"}`}>
+   507→   507→            {t.type === "success" ? "✓" : "✗"} {t.message}
+   508→   508→          </div>
+   509→   509→        ))}
+   510→   510→      </div>
+   511→   511→    </div>
+   512→   512→  );
+   513→   513→}
+   514→   514→

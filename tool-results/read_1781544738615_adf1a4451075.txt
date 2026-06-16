@@ -1,0 +1,692 @@
+     1→     1→"use client";
+     2→     2→
+     3→     3→import { useState, useEffect } from "react";
+     4→     4→import { useSession } from "next-auth/react";
+     5→     5→
+     6→     6→type Company = any;
+     7→     7→type Payment = any;
+     8→     8→type RevenueData = any;
+     9→     9→
+    10→    10→export default function SuperAdminDashboard() {
+    11→    11→  const { data: session } = useSession();
+    12→    12→  const [tab, setTab] = useState<"companies" | "billing" | "revenue" | "invoices">("companies");
+    13→    13→  const [companies, setCompanies] = useState<Company[]>([]);
+    14→    14→  const [payments, setPayments] = useState<Payment[]>([]);
+    15→    15→  const [revenue, setRevenue] = useState<RevenueData | null>(null);
+    16→    16→  const [loading, setLoading] = useState(true);
+    17→    17→  const [showCompanyModal, setShowCompanyModal] = useState(false);
+    18→    18→  const [editCompany, setEditCompany] = useState<Company | null>(null);
+    19→    19→  const [showPaymentModal, setShowPaymentModal] = useState(false);
+    20→    20→  const [editPayment, setEditPayment] = useState<Payment | null>(null);
+    21→    21→  const [form, setForm] = useState({ name: "", slug: "", planName: "BASIC", billingMethod: "MONTHLY", price: 29.99, address: "", city: "", province: "", postalCode: "", nif: "", phone: "", email: "", logoUrl: "" });
+    22→    22→  const [payForm, setPayForm] = useState({ subscriptionId: "", companyId: "", amount: 0, subtotal: 0, method: "CARD", dueDate: "", concept: "", status: "PENDING" });
+    23→    23→  const [filterStatus, setFilterStatus] = useState<string>("ALL");
+    24→    24→  const [filterCompany, setFilterCompany] = useState<string>("ALL");
+    25→    25→  const [generating, setGenerating] = useState(false);
+    26→    26→
+    27→    27→  async function fetchCompanies() {
+    28→    28→    const res = await fetch("/api/admin/companies");
+    29→    29→    if (res.ok) setCompanies(await res.json());
+    30→    30→  }
+    31→    31→  async function fetchPayments() {
+    32→    32→    const res = await fetch("/api/admin/payments");
+    33→    33→    if (res.ok) setPayments(await res.json());
+    34→    34→  }
+    35→    35→  async function fetchRevenue() {
+    36→    36→    const res = await fetch("/api/admin/revenue");
+    37→    37→    if (res.ok) setRevenue(await res.json());
+    38→    38→  }
+    39→    39→
+    40→    40→  useEffect(() => {
+    41→    41→    const load = async () => {
+    42→    42→      setLoading(true);
+    43→    43→      await fetchCompanies();
+    44→    44→      if (tab === "billing" || tab === "invoices") await fetchPayments();
+    45→    45→      if (tab === "revenue") await fetchRevenue();
+    46→    46→      setLoading(false);
+    47→    47→    };
+    48→    48→    load();
+    49→    49→  }, [tab]);
+    50→    50→
+    51→    51→  const handleSaveCompany = async () => {
+    52→    52→    if (editCompany) {
+    53→    53→      await fetch(`/api/admin/companies/${editCompany.id}`, {
+    54→    54→        method: "PUT",
+    55→    55→        headers: { "Content-Type": "application/json" },
+    56→    56→        body: JSON.stringify({ name: form.name, slug: form.slug, isActive: editCompany.isActive, address: form.address, city: form.city, province: form.province, postalCode: form.postalCode, nif: form.nif, phone: form.phone, email: form.email, logoUrl: form.logoUrl }),
+    57→    57→      });
+    58→    58→      await fetch(`/api/admin/companies/${editCompany.id}/subscription`, {
+    59→    59→        method: "PUT",
+    60→    60→        headers: { "Content-Type": "application/json" },
+    61→    61→        body: JSON.stringify({ planName: form.planName, billingMethod: form.billingMethod, price: form.price }),
+    62→    62→      });
+    63→    63→    } else {
+    64→    64→      await fetch("/api/admin/companies", {
+    65→    65→        method: "POST",
+    66→    66→        headers: { "Content-Type": "application/json" },
+    67→    67→        body: JSON.stringify(form),
+    68→    68→      });
+    69→    69→    }
+    70→    70→    setShowCompanyModal(false);
+    71→    71→    setEditCompany(null);
+    72→    72→    fetchCompanies();
+    73→    73→  };
+    74→    74→
+    75→    75→  const handleToggleActive = async (company: Company) => {
+    76→    76→    await fetch(`/api/admin/companies/${company.id}`, {
+    77→    77→      method: "PUT",
+    78→    78→      headers: { "Content-Type": "application/json" },
+    79→    79→      body: JSON.stringify({ ...company, isActive: !company.isActive }),
+    80→    80→    });
+    81→    81→    fetchCompanies();
+    82→    82→  };
+    83→    83→
+    84→    84→  const openEditCompany = (c: Company) => {
+    85→    85→    setEditCompany(c);
+    86→    86→    setForm({
+    87→    87→      name: c.name,
+    88→    88→      slug: c.slug,
+    89→    89→      planName: c.subscription?.planName || "BASIC",
+    90→    90→      billingMethod: c.subscription?.billingMethod || "MONTHLY",
+    91→    91→      price: c.subscription?.price || 29.99,
+    92→    92→      address: c.address || "",
+    93→    93→      city: c.city || "",
+    94→    94→      province: c.province || "",
+    95→    95→      postalCode: c.postalCode || "",
+    96→    96→      nif: c.nif || "",
+    97→    97→      phone: c.phone || "",
+    98→    98→      email: c.email || "",
+    99→    99→      logoUrl: c.logoUrl || "",
+   100→   100→    });
+   101→   101→    setShowCompanyModal(true);
+   102→   102→  };
+   103→   103→
+   104→   104→  const openNewCompany = () => {
+   105→   105→    setEditCompany(null);
+   106→   106→    setForm({ name: "", slug: "", planName: "BASIC", billingMethod: "MONTHLY", price: 29.99, address: "", city: "", province: "", postalCode: "", nif: "", phone: "", email: "", logoUrl: "" });
+   107→   107→    setShowCompanyModal(true);
+   108→   108→  };
+   109→   109→
+   110→   110→  const handleCompanyChange = async (companyId: string) => {
+   111→   111→    setPayForm({ ...payForm, companyId });
+   112→   112→    const res = await fetch(`/api/admin/companies/${companyId}/subscription`);
+   113→   113→    if (res.ok) {
+   114→   114→      const sub = await res.json();
+   115→   115→      const subtotal = sub.price;
+   116→   116→      const taxAmount = Math.round(subtotal * 0.21 * 100) / 100;
+   117→   117→      const totalAmount = Math.round((subtotal + taxAmount) * 100) / 100;
+   118→   118→      setPayForm((f) => ({ ...f, subscriptionId: sub.id, amount: totalAmount, subtotal }));
+   119→   119→    }
+   120→   120→  };
+   121→   121→
+   122→   122→  const handleAddPayment = async () => {
+   123→   123→    await fetch("/api/admin/payments", {
+   124→   124→      method: "POST",
+   125→   125→      headers: { "Content-Type": "application/json" },
+   126→   126→      body: JSON.stringify({
+   127→   127→        ...payForm,
+   128→   128→        taxRate: 21.0,
+   129→   129→        taxAmount: Math.round(payForm.subtotal * 0.21 * 100) / 100,
+   130→   130→      }),
+   131→   131→    });
+   132→   132→    setShowPaymentModal(false);
+   133→   133→    setEditPayment(null);
+   134→   134→    fetchPayments();
+   135→   135→  };
+   136→   136→
+   137→   137→  const handleUpdatePaymentStatus = async (paymentId: string, newStatus: string) => {
+   138→   138→    await fetch(`/api/admin/payments/${paymentId}`, {
+   139→   139→      method: "PUT",
+   140→   140→      headers: { "Content-Type": "application/json" },
+   141→   141→      body: JSON.stringify({ status: newStatus }),
+   142→   142→    });
+   143→   143→    fetchPayments();
+   144→   144→  };
+   145→   145→
+   146→   146→  const handleDeletePayment = async (paymentId: string) => {
+   147→   147→    await fetch(`/api/admin/payments/${paymentId}`, { method: "DELETE" });
+   148→   148→    fetchPayments();
+   149→   149→  };
+   150→   150→
+   151→   151→  const handleGenerateInvoices = async () => {
+   152→   152→    setGenerating(true);
+   153→   153→    const res = await fetch("/api/admin/invoices/generate", { method: "GET" });
+   154→   154→    if (res.ok) {
+   155→   155→      const data = await res.json();
+   156→   156→      alert(`${data.generated} facturas generadas`);
+   157→   157→      fetchPayments();
+   158→   158→    }
+   159→   159→    setGenerating(false);
+   160→   160→  };
+   161→   161→
+   162→   162→  const handleGenerateSingleInvoice = async (companyId: string) => {
+   163→   163→    const res = await fetch("/api/admin/invoices/generate", {
+   164→   164→      method: "POST",
+   165→   165→      headers: { "Content-Type": "application/json" },
+   166→   166→      body: JSON.stringify({ companyId }),
+   167→   167→    });
+   168→   168→    if (res.ok) {
+   169→   169→      fetchPayments();
+   170→   170→      fetchCompanies();
+   171→   171→    }
+   172→   172→  };
+   173→   173→
+   174→   174→  // Filtered payments
+   175→   175→  const filteredPayments = payments.filter((p: Payment) => {
+   176→   176→    if (filterStatus !== "ALL" && p.status !== filterStatus) return false;
+   177→   177→    if (filterCompany !== "ALL" && p.companyId !== filterCompany) return false;
+   178→   178→    return true;
+   179→   179→  });
+   180→   180→
+   181→   181→  const planColors: Record<string, string> = { BASIC: "bg-slate-600", PRO: "bg-blue-600", ENTERPRISE: "bg-[#2E5D3A]" };
+   182→   182→  const statusColors: Record<string, string> = { ACTIVE: "text-green-400", TRIAL: "text-blue-400", PAST_DUE: "text-red-400", CANCELLED: "text-slate-500" };
+   183→   183→  const payStatusColors: Record<string, string> = {
+   184→   184→    PAID: "bg-green-600/30 text-green-400",
+   185→   185→    PENDING: "bg-amber-600/30 text-amber-400",
+   186→   186→    OVERDUE: "bg-red-600/30 text-red-400",
+   187→   187→    FAILED: "bg-red-600/30 text-red-400",
+   188→   188→    REFUNDED: "bg-slate-600/30 text-slate-400",
+   189→   189→  };
+   190→   190→  const methodLabels: Record<string, string> = { CARD: "Tarjeta", TRANSFER: "Transferencia", CASH: "Efectivo" };
+   191→   191→
+   192→   192→  const tabs = [
+   193→   193→    { key: "companies" as const, label: "EMPRESAS" },
+   194→   194→    { key: "billing" as const, label: "FACTURACIÓN" },
+   195→   195→    { key: "invoices" as const, label: "FACTURAS" },
+   196→   196→    { key: "revenue" as const, label: "INGRESOS" },
+   197→   197→  ];
+   198→   198→
+   199→   199→  return (
+   200→   200→    <div className="h-full flex flex-col p-6 overflow-hidden">
+   201→   201→      <div className="flex gap-2 mb-6 flex-wrap">
+   202→   202→        {tabs.map((t) => (
+   203→   203→          <button
+   204→   204→            key={t.key}
+   205→   205→            onClick={() => setTab(t.key)}
+   206→   206→            className={`px-4 py-2 rounded-lg font-bold text-sm transition ${
+   207→   207→              tab === t.key ? "bg-[#2E5D3A] text-white" : "bg-slate-700 text-slate-400 hover:bg-slate-600"
+   208→   208→            }`}
+   209→   209→          >
+   210→   210→            {t.label}
+   211→   211→          </button>
+   212→   212→        ))}
+   213→   213→      </div>
+   214→   214→
+   215→   215→      <div className="flex-1 overflow-auto">
+   216→   216→        {/* ==================== COMPANIES TAB ==================== */}
+   217→   217→        {tab === "companies" && (
+   218→   218→          <div>
+   219→   219→            <div className="flex justify-between items-center mb-4">
+   220→   220→              <h2 className="text-xl font-bold text-white">Empresas</h2>
+   221→   221→              <button onClick={openNewCompany} className="bg-[#2E5D3A] hover:bg-[#3a7a4c] text-white font-bold px-4 py-2 rounded-lg text-sm transition">
+   222→   222→                + Nueva empresa
+   223→   223→              </button>
+   224→   224→            </div>
+   225→   225→            <div className="bg-slate-800/50 border border-slate-700 rounded-xl overflow-hidden">
+   226→   226→              <table className="w-full">
+   227→   227→                <thead>
+   228→   228→                  <tr className="bg-slate-900 border-b border-slate-700">
+   229→   229→                    <th className="text-left px-4 py-3 text-xs font-extrabold text-blue-400 uppercase">Empresa</th>
+   230→   230→                    <th className="text-left px-4 py-3 text-xs font-extrabold text-blue-400 uppercase">Plan</th>
+   231→   231→                    <th className="text-left px-4 py-3 text-xs font-extrabold text-blue-400 uppercase">Estado</th>
+   232→   232→                    <th className="text-left px-4 py-3 text-xs font-extrabold text-blue-400 uppercase">Prof.</th>
+   233→   233→                    <th className="text-left px-4 py-3 text-xs font-extrabold text-blue-400 uppercase">Sedes</th>
+   234→   234→                    <th className="text-left px-4 py-3 text-xs font-extrabold text-blue-400 uppercase">Precio</th>
+   235→   235→                    <th className="text-left px-4 py-3 text-xs font-extrabold text-blue-400 uppercase">Acciones</th>
+   236→   236→                  </tr>
+   237→   237→                </thead>
+   238→   238→                <tbody>
+   239→   239→                  {companies.map((c) => (
+   240→   240→                    <tr key={c.id} className={`border-b border-slate-700/50 ${!c.isActive ? "opacity-50" : ""}`}>
+   241→   241→                      <td className="px-4 py-3">
+   242→   242→                        <div className="font-bold text-white">{c.name}</div>
+   243→   243→                        <div className="text-xs text-slate-500">{c.slug}</div>
+   244→   244→                      </td>
+   245→   245→                      <td className="px-4 py-3">
+   246→   246→                        <span className={`${planColors[c.subscription?.planName || "BASIC"]} text-white text-xs font-bold px-2 py-1 rounded`}>
+   247→   247→                          {c.subscription?.planName || "BASIC"}
+   248→   248→                        </span>
+   249→   249→                      </td>
+   250→   250→                      <td className="px-4 py-3">
+   251→   251→                        <span className={`font-bold text-sm ${statusColors[c.subscription?.status || "TRIAL"]}`}>
+   252→   252→                          {c.subscription?.status || "TRIAL"}
+   253→   253→                        </span>
+   254→   254→                      </td>
+   255→   255→                      <td className="px-4 py-3 text-sm text-slate-300">{c._count?.professionals || 0}</td>
+   256→   256→                      <td className="px-4 py-3 text-sm text-slate-300">{c._count?.sedes || 0}</td>
+   257→   257→                      <td className="px-4 py-3 text-sm font-bold text-amber-400">
+   258→   258→                        {c.subscription?.price ? `${c.subscription.price.toFixed(2)}€` : "—"}
+   259→   259→                        <span className="text-xs text-slate-500 ml-1">{c.subscription?.billingMethod?.toLowerCase()}</span>
+   260→   260→                      </td>
+   261→   261→                      <td className="px-4 py-3 flex gap-2">
+   262→   262→                        <button onClick={() => openEditCompany(c)} className="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1 rounded text-xs font-bold transition">✏️</button>
+   263→   263→                        <button onClick={() => handleGenerateSingleInvoice(c.id)} className="bg-blue-700 hover:bg-blue-600 text-white px-3 py-1 rounded text-xs font-bold transition" title="Generar factura">🧾</button>
+   264→   264→                        <button onClick={() => handleToggleActive(c)} className={`${c.isActive ? "bg-red-600/30 text-red-400 hover:bg-red-600/50" : "bg-green-600/30 text-green-400 hover:bg-green-600/50"} px-3 py-1 rounded text-xs font-bold transition`}>
+   265→   265→                          {c.isActive ? "Suspender" : "Activar"}
+   266→   266→                        </button>
+   267→   267→                      </td>
+   268→   268→                    </tr>
+   269→   269→                  ))}
+   270→   270→                </tbody>
+   271→   271→              </table>
+   272→   272→            </div>
+   273→   273→          </div>
+   274→   274→        )}
+   275→   275→
+   276→   276→        {/* ==================== BILLING TAB (Overview) ==================== */}
+   277→   277→        {tab === "billing" && (
+   278→   278→          <div>
+   279→   279→            <div className="flex justify-between items-center mb-4">
+   280→   280→              <h2 className="text-xl font-bold text-white">Facturación</h2>
+   281→   281→              <div className="flex gap-2">
+   282→   282→                <button
+   283→   283→                  onClick={handleGenerateInvoices}
+   284→   284→                  disabled={generating}
+   285→   285→                  className="bg-green-600 hover:bg-green-500 text-white font-bold px-4 py-2 rounded-lg text-sm transition disabled:opacity-50"
+   286→   286→                >
+   287→   287→                  {generating ? "Generando..." : "🔄 Generar facturas automáticas"}
+   288→   288→                </button>
+   289→   289→                <button onClick={() => { setEditPayment(null); setPayForm({ subscriptionId: "", companyId: "", amount: 0, subtotal: 0, method: "CARD", dueDate: "", concept: "", status: "PENDING" }); setShowPaymentModal(true); }} className="bg-blue-500 hover:bg-blue-400 text-white font-bold px-4 py-2 rounded-lg text-sm transition">
+   290→   290→                  + Nuevo pago
+   291→   291→                </button>
+   292→   292→              </div>
+   293→   293→            </div>
+   294→   294→
+   295→   295→            {/* KPI Cards */}
+   296→   296→            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+   297→   297→              {[
+   298→   298→                { label: "Ingresos Totales", value: `${payments.filter((p: Payment) => p.status === "PAID").reduce((s: number, p: Payment) => s + (p.amount || 0), 0).toFixed(2)}€`, color: "text-green-400", bg: "bg-green-600/10 border-green-600/20" },
+   299→   299→                { label: "Pendiente", value: `${payments.filter((p: Payment) => p.status === "PENDING" || p.status === "OVERDUE").reduce((s: number, p: Payment) => s + (p.amount || 0), 0).toFixed(2)}€`, color: "text-amber-400", bg: "bg-amber-600/10 border-amber-600/20" },
+   300→   300→                { label: "Facturas Pagadas", value: payments.filter((p: Payment) => p.status === "PAID").length.toString(), color: "text-blue-400", bg: "bg-blue-600/10 border-blue-600/20" },
+   301→   301→                { label: "Facturas Vencidas", value: payments.filter((p: Payment) => p.status === "OVERDUE" || (p.status === "PENDING" && new Date(p.dueDate) < new Date())).length.toString(), color: "text-red-400", bg: "bg-red-600/10 border-red-600/20" },
+   302→   302→              ].map((s, i) => (
+   303→   303→                <div key={i} className={`${s.bg} border rounded-xl p-4`}>
+   304→   304→                  <div className="text-xs text-slate-400 font-bold uppercase">{s.label}</div>
+   305→   305→                  <div className={`text-2xl font-black mt-1 ${s.color}`}>{s.value}</div>
+   306→   306→                </div>
+   307→   307→              ))}
+   308→   308→            </div>
+   309→   309→
+   310→   310→            {/* Revenue by method */}
+   311→   311→            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+   312→   312→              {["CARD", "TRANSFER", "CASH"].map((method) => {
+   313→   313→                const methodPayments = payments.filter((p: Payment) => p.method === method && p.status === "PAID");
+   314→   314→                const total = methodPayments.reduce((s: number, p: Payment) => s + (p.amount || 0), 0);
+   315→   315→                const icons: Record<string, string> = { CARD: "💳", TRANSFER: "🏦", CASH: "💵" };
+   316→   316→                return (
+   317→   317→                  <div key={method} className="bg-slate-800/50 border border-slate-700 rounded-xl p-5">
+   318→   318→                    <div className="text-2xl mb-2">{icons[method]}</div>
+   319→   319→                    <div className="text-xs text-slate-400 font-bold uppercase">{methodLabels[method]}</div>
+   320→   320→                    <div className="text-2xl font-black text-white mt-1">{total.toFixed(2)}€</div>
+   321→   321→                    <div className="text-xs text-slate-500">{methodPayments.length} pagos</div>
+   322→   322→                  </div>
+   323→   323→                );
+   324→   324→              })}
+   325→   325→            </div>
+   326→   326→
+   327→   327→            {/* Recent payments */}
+   328→   328→            <div className="bg-slate-800/50 border border-slate-700 rounded-xl overflow-hidden">
+   329→   329→              <div className="px-4 py-3 border-b border-slate-700">
+   330→   330→                <h3 className="font-bold text-white text-sm">Últimos pagos</h3>
+   331→   331→              </div>
+   332→   332→              <table className="w-full">
+   333→   333→                <thead>
+   334→   334→                  <tr className="bg-slate-900 border-b border-slate-700">
+   335→   335→                    <th className="text-left px-4 py-3 text-xs font-extrabold text-blue-400 uppercase">Empresa</th>
+   336→   336→                    <th className="text-left px-4 py-3 text-xs font-extrabold text-blue-400 uppercase">Factura</th>
+   337→   337→                    <th className="text-left px-4 py-3 text-xs font-extrabold text-blue-400 uppercase">Importe</th>
+   338→   338→                    <th className="text-left px-4 py-3 text-xs font-extrabold text-blue-400 uppercase">Método</th>
+   339→   339→                    <th className="text-left px-4 py-3 text-xs font-extrabold text-blue-400 uppercase">Estado</th>
+   340→   340→                    <th className="text-left px-4 py-3 text-xs font-extrabold text-blue-400 uppercase">Vencimiento</th>
+   341→   341→                    <th className="text-left px-4 py-3 text-xs font-extrabold text-blue-400 uppercase">Acciones</th>
+   342→   342→                  </tr>
+   343→   343→                </thead>
+   344→   344→                <tbody>
+   345→   345→                  {payments.slice(0, 10).map((p: Payment) => (
+   346→   346→                    <tr key={p.id} className="border-b border-slate-700/50">
+   347→   347→                      <td className="px-4 py-3 text-sm font-bold text-white">{p.subscription?.company?.name || "—"}</td>
+   348→   348→                      <td className="px-4 py-3 text-sm text-slate-300">{p.invoiceNumber || "—"}</td>
+   349→   349→                      <td className="px-4 py-3 text-sm font-bold text-amber-400">{p.amount.toFixed(2)}€</td>
+   350→   350→                      <td className="px-4 py-3 text-sm text-slate-300">{methodLabels[p.method] || p.method}</td>
+   351→   351→                      <td className="px-4 py-3">
+   352→   352→                        <span className={`text-xs font-bold px-2 py-1 rounded ${payStatusColors[p.status] || "bg-slate-600/30 text-slate-400"}`}>
+   353→   353→                          {p.status}
+   354→   354→                        </span>
+   355→   355→                      </td>
+   356→   356→                      <td className="px-4 py-3 text-xs text-slate-400">{p.dueDate ? new Date(p.dueDate).toLocaleDateString("es-ES") : "—"}</td>
+   357→   357→                      <td className="px-4 py-3">
+   358→   358→                        {p.status === "PENDING" && (
+   359→   359→                          <button onClick={() => handleUpdatePaymentStatus(p.id, "PAID")} className="bg-green-600/30 text-green-400 hover:bg-green-600/50 px-2 py-1 rounded text-xs font-bold transition" title="Marcar pagado">
+   360→   360→                            ✓ Pagado
+   361→   361→                          </button>
+   362→   362→                        )}
+   363→   363→                        {p.status === "PAID" && (
+   364→   364→                          <button onClick={() => handleUpdatePaymentStatus(p.id, "REFUNDED")} className="bg-slate-600/30 text-slate-400 hover:bg-slate-600/50 px-2 py-1 rounded text-xs font-bold transition" title="Reembolsar">
+   365→   365→                            ↩ Reembolso
+   366→   366→                          </button>
+   367→   367→                        )}
+   368→   368→                      </td>
+   369→   369→                    </tr>
+   370→   370→                  ))}
+   371→   371→                </tbody>
+   372→   372→              </table>
+   373→   373→            </div>
+   374→   374→          </div>
+   375→   375→        )}
+   376→   376→
+   377→   377→        {/* ==================== INVOICES TAB (Full invoice management) ==================== */}
+   378→   378→        {tab === "invoices" && (
+   379→   379→          <div>
+   380→   380→            <div className="flex justify-between items-center mb-4">
+   381→   381→              <h2 className="text-xl font-bold text-white">Gestión de Facturas</h2>
+   382→   382→              <div className="flex gap-2">
+   383→   383→                <button
+   384→   384→                  onClick={handleGenerateInvoices}
+   385→   385→                  disabled={generating}
+   386→   386→                  className="bg-green-600 hover:bg-green-500 text-white font-bold px-4 py-2 rounded-lg text-sm transition disabled:opacity-50"
+   387→   387→                >
+   388→   388→                  {generating ? "Generando..." : "🔄 Generar todas"}
+   389→   389→                </button>
+   390→   390→                <button onClick={() => { setEditPayment(null); setPayForm({ subscriptionId: "", companyId: "", amount: 0, subtotal: 0, method: "CARD", dueDate: "", concept: "", status: "PENDING" }); setShowPaymentModal(true); }} className="bg-blue-500 hover:bg-blue-400 text-white font-bold px-4 py-2 rounded-lg text-sm transition">
+   391→   391→                  + Nueva factura
+   392→   392→                </button>
+   393→   393→              </div>
+   394→   394→            </div>
+   395→   395→
+   396→   396→            {/* Filters */}
+   397→   397→            <div className="flex gap-3 mb-4 flex-wrap">
+   398→   398→              <select
+   399→   399→                value={filterStatus}
+   400→   400→                onChange={(e) => setFilterStatus(e.target.value)}
+   401→   401→                className="px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm"
+   402→   402→              >
+   403→   403→                <option value="ALL">Todos los estados</option>
+   404→   404→                <option value="PENDING">Pendiente</option>
+   405→   405→                <option value="PAID">Pagado</option>
+   406→   406→                <option value="OVERDUE">Vencido</option>
+   407→   407→                <option value="FAILED">Fallido</option>
+   408→   408→                <option value="REFUNDED">Reembolsado</option>
+   409→   409→              </select>
+   410→   410→              <select
+   411→   411→                value={filterCompany}
+   412→   412→                onChange={(e) => setFilterCompany(e.target.value)}
+   413→   413→                className="px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm"
+   414→   414→              >
+   415→   415→                <option value="ALL">Todas las empresas</option>
+   416→   416→                {companies.map((c) => (
+   417→   417→                  <option key={c.id} value={c.id}>{c.name}</option>
+   418→   418→                ))}
+   419→   419→              </select>
+   420→   420→              <div className="text-xs text-slate-500 self-center">{filteredPayments.length} facturas</div>
+   421→   421→            </div>
+   422→   422→
+   423→   423→            {/* Invoices Table */}
+   424→   424→            <div className="bg-slate-800/50 border border-slate-700 rounded-xl overflow-hidden">
+   425→   425→              <table className="w-full">
+   426→   426→                <thead>
+   427→   427→                  <tr className="bg-slate-900 border-b border-slate-700">
+   428→   428→                    <th className="text-left px-4 py-3 text-xs font-extrabold text-blue-400 uppercase">Factura</th>
+   429→   429→                    <th className="text-left px-4 py-3 text-xs font-extrabold text-blue-400 uppercase">Empresa</th>
+   430→   430→                    <th className="text-left px-4 py-3 text-xs font-extrabold text-blue-400 uppercase">Concepto</th>
+   431→   431→                    <th className="text-left px-4 py-3 text-xs font-extrabold text-blue-400 uppercase">Base</th>
+   432→   432→                    <th className="text-left px-4 py-3 text-xs font-extrabold text-blue-400 uppercase">IVA</th>
+   433→   433→                    <th className="text-left px-4 py-3 text-xs font-extrabold text-blue-400 uppercase">Total</th>
+   434→   434→                    <th className="text-left px-4 py-3 text-xs font-extrabold text-blue-400 uppercase">Método</th>
+   435→   435→                    <th className="text-left px-4 py-3 text-xs font-extrabold text-blue-400 uppercase">Estado</th>
+   436→   436→                    <th className="text-left px-4 py-3 text-xs font-extrabold text-blue-400 uppercase">Vencimiento</th>
+   437→   437→                    <th className="text-left px-4 py-3 text-xs font-extrabold text-blue-400 uppercase">Acciones</th>
+   438→   438→                  </tr>
+   439→   439→                </thead>
+   440→   440→                <tbody>
+   441→   441→                  {filteredPayments.map((p: Payment) => (
+   442→   442→                    <tr key={p.id} className="border-b border-slate-700/50 hover:bg-slate-700/20 transition">
+   443→   443→                      <td className="px-4 py-3 text-sm font-bold text-white">{p.invoiceNumber || "—"}</td>
+   444→   444→                      <td className="px-4 py-3 text-sm text-slate-300">{p.subscription?.company?.name || "—"}</td>
+   445→   445→                      <td className="px-4 py-3 text-sm text-slate-400 max-w-[200px] truncate">{p.concept || "Suscripción"}</td>
+   446→   446→                      <td className="px-4 py-3 text-sm text-slate-300">{(p.subtotal || p.amount).toFixed(2)}€</td>
+   447→   447→                      <td className="px-4 py-3 text-sm text-slate-400">{p.taxAmount?.toFixed(2) || "—"}€</td>
+   448→   448→                      <td className="px-4 py-3 text-sm font-bold text-amber-400">{p.amount.toFixed(2)}€</td>
+   449→   449→                      <td className="px-4 py-3 text-sm text-slate-300">{methodLabels[p.method] || p.method}</td>
+   450→   450→                      <td className="px-4 py-3">
+   451→   451→                        <span className={`text-xs font-bold px-2 py-1 rounded ${payStatusColors[p.status] || "bg-slate-600/30 text-slate-400"}`}>
+   452→   452→                          {p.status === "PAID" ? "Pagado" : p.status === "PENDING" ? "Pendiente" : p.status === "OVERDUE" ? "Vencido" : p.status}
+   453→   453→                        </span>
+   454→   454→                      </td>
+   455→   455→                      <td className="px-4 py-3 text-xs text-slate-400">{p.dueDate ? new Date(p.dueDate).toLocaleDateString("es-ES") : "—"}</td>
+   456→   456→                      <td className="px-4 py-3">
+   457→   457→                        <div className="flex gap-1">
+   458→   458→                          {p.status === "PENDING" && (
+   459→   459→                            <>
+   460→   460→                              <button onClick={() => handleUpdatePaymentStatus(p.id, "PAID")} className="bg-green-600/30 text-green-400 hover:bg-green-600/50 px-2 py-1 rounded text-xs font-bold transition" title="Marcar pagado">✓</button>
+   461→   461→                              <button onClick={() => handleUpdatePaymentStatus(p.id, "OVERDUE")} className="bg-red-600/30 text-red-400 hover:bg-red-600/50 px-2 py-1 rounded text-xs font-bold transition" title="Marcar vencido">!</button>
+   462→   462→                            </>
+   463→   463→                          )}
+   464→   464→                          {p.status === "PAID" && (
+   465→   465→                            <button onClick={() => handleUpdatePaymentStatus(p.id, "REFUNDED")} className="bg-slate-600/30 text-slate-400 hover:bg-slate-600/50 px-2 py-1 rounded text-xs font-bold transition" title="Reembolsar">↩</button>
+   466→   466→                          )}
+   467→   467→                          {p.status === "OVERDUE" && (
+   468→   468→                            <button onClick={() => handleUpdatePaymentStatus(p.id, "PAID")} className="bg-green-600/30 text-green-400 hover:bg-green-600/50 px-2 py-1 rounded text-xs font-bold transition" title="Marcar pagado">✓</button>
+   469→   469→                          )}
+   470→   470→                          <button onClick={() => { setEditPayment(p); setPayForm({ subscriptionId: p.subscriptionId, companyId: p.companyId, amount: p.amount, subtotal: p.subtotal || p.amount, method: p.method, dueDate: p.dueDate ? new Date(p.dueDate).toISOString().split("T")[0] : "", concept: p.concept || "", status: p.status }); setShowPaymentModal(true); }} className="bg-slate-600/30 text-slate-400 hover:bg-slate-600/50 px-2 py-1 rounded text-xs font-bold transition" title="Editar">✏️</button>
+   471→   471→                          <button onClick={() => { if (confirm("Eliminar factura?")) handleDeletePayment(p.id); }} className="bg-red-600/20 text-red-400 hover:bg-red-600/40 px-2 py-1 rounded text-xs font-bold transition" title="Eliminar">✕</button>
+   472→   472→                        </div>
+   473→   473→                      </td>
+   474→   474→                    </tr>
+   475→   475→                  ))}
+   476→   476→                </tbody>
+   477→   477→              </table>
+   478→   478→              {filteredPayments.length === 0 && (
+   479→   479→                <div className="p-8 text-center text-slate-500">No hay facturas con los filtros seleccionados</div>
+   480→   480→              )}
+   481→   481→            </div>
+   482→   482→          </div>
+   483→   483→        )}
+   484→   484→
+   485→   485→        {/* ==================== REVENUE TAB (Analytics) ==================== */}
+   486→   486→        {tab === "revenue" && revenue && (
+   487→   487→          <div>
+   488→   488→            <h2 className="text-xl font-bold text-white mb-4">Ingresos & Analíticas</h2>
+   489→   489→
+   490→   490→            {/* Top KPIs */}
+   491→   491→            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+   492→   492→              {[
+   493→   493→                { label: "Ingresos Totales", value: `${(revenue.totalRevenue || 0).toFixed(2)}€`, color: "text-green-400" },
+   494→   494→                { label: "MRR", value: `${(revenue.mrr || 0).toFixed(2)}€`, color: "text-blue-400" },
+   495→   495→                { label: "ARR", value: `${(revenue.arr || 0).toFixed(2)}€`, color: "text-amber-400" },
+   496→   496→                { label: "Pendiente", value: `${(revenue.pendingRevenue || 0).toFixed(2)}€`, color: "text-red-400" },
+   497→   497→              ].map((s, i) => (
+   498→   498→                <div key={i} className="bg-slate-800/50 border border-slate-700 rounded-xl p-5">
+   499→   499→                  <div className="text-xs text-slate-400 font-bold uppercase">{s.label}</div>
+   500→   500→                  <div className={`text-2xl font-black mt-1 ${s.color}`}>{s.value}</div>
+   501→   501→                </div>
+   502→   502→              ))}
+   503→   503→            </div>
+   504→   504→
+   505→   505→            {/* Monthly Revenue Chart */}
+   506→   506→            <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-5 mb-6">
+   507→   507→              <h3 className="font-bold text-white mb-4">Ingresos Mensuales</h3>
+   508→   508→              <div className="flex items-end gap-2 h-48">
+   509→   509→                {(revenue.monthlyRevenue || []).map((m: any, i: number) => {
+   510→   510→                  const maxVal = Math.max(...(revenue.monthlyRevenue || []).map((x: any) => x.total), 1);
+   511→   511→                  const height = Math.max((m.total / maxVal) * 100, 2);
+   512→   512→                  return (
+   513→   513→                    <div key={i} className="flex-1 flex flex-col items-center gap-1">
+   514→   514→                      <div className="text-xs text-slate-400 font-bold">{m.total > 0 ? `${m.total.toFixed(0)}€` : ""}</div>
+   515→   515→                      <div className="w-full relative" style={{ height: "160px" }}>
+   516→   516→                        <div
+   517→   517→                          className="absolute bottom-0 w-full bg-gradient-to-t from-amber-600 to-amber-400 rounded-t transition-all"
+   518→   518→                          style={{ height: `${height}%` }}
+   519→   519→                        />
+   520→   520→                      </div>
+   521→   521→                      <div className="text-xs text-slate-500 font-bold">{m.label}</div>
+   522→   522→                    </div>
+   523→   523→                  );
+   524→   524→                })}
+   525→   525→              </div>
+   526→   526→            </div>
+   527→   527→
+   528→   528→            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+   529→   529→              {/* Revenue by Method */}
+   530→   530→              <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-5">
+   531→   531→                <h3 className="font-bold text-white mb-3">Ingresos por Método</h3>
+   532→   532→                {(revenue.revenueByMethod || []).map((m: any, i: number) => (
+   533→   533→                  <div key={i} className="flex justify-between items-center py-2 border-b border-slate-700/50">
+   534→   534→                    <span className="text-sm font-bold text-slate-300">{methodLabels[m.method] || m.method}</span>
+   535→   535→                    <span className="text-sm font-bold text-amber-400">{(m._sum.amount || 0).toFixed(2)}€ ({m._count} pagos)</span>
+   536→   536→                  </div>
+   537→   537→                ))}
+   538→   538→              </div>
+   539→   539→
+   540→   540→              {/* Revenue by Plan */}
+   541→   541→              <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-5">
+   542→   542→                <h3 className="font-bold text-white mb-3">Suscripciones por Plan</h3>
+   543→   543→                {Object.entries(revenue.revenueByPlan || {}).map(([plan, data]: [string, any], i: number) => (
+   544→   544→                  <div key={i} className="flex justify-between items-center py-2 border-b border-slate-700/50">
+   545→   545→                    <div>
+   546→   546→                      <span className={`text-xs font-bold px-2 py-1 rounded ${planColors[plan]} text-white mr-2`}>{plan}</span>
+   547→   547→                      <span className="text-sm text-slate-300">{data.count} empresas</span>
+   548→   548→                    </div>
+   549→   549→                    <span className="text-sm font-bold text-blue-400">{data.mrr.toFixed(2)}€ MRR</span>
+   550→   550→                  </div>
+   551→   551→                ))}
+   552→   552→              </div>
+   553→   553→            </div>
+   554→   554→
+   555→   555→            {/* Overdue Payments */}
+   556→   556→            {revenue.overduePayments && revenue.overduePayments.length > 0 && (
+   557→   557→              <div className="bg-red-600/10 border border-red-600/20 rounded-xl p-5 mt-6">
+   558→   558→                <h3 className="font-bold text-red-400 mb-3">Pagos Vencidos</h3>
+   559→   559→                {revenue.overduePayments.map((p: any, i: number) => (
+   560→   560→                  <div key={i} className="flex justify-between items-center py-2 border-b border-red-600/10">
+   561→   561→                    <div>
+   562→   562→                      <span className="text-sm font-bold text-white">{p.subscription?.company?.name || "—"}</span>
+   563→   563→                      <span className="text-xs text-slate-400 ml-2">{p.invoiceNumber || "—"}</span>
+   564→   564→                    </div>
+   565→   565→                    <div className="flex items-center gap-3">
+   566→   566→                      <span className="text-sm font-bold text-red-400">{p.amount.toFixed(2)}€</span>
+   567→   567→                      <button onClick={() => handleUpdatePaymentStatus(p.id, "PAID")} className="bg-green-600/30 text-green-400 hover:bg-green-600/50 px-2 py-1 rounded text-xs font-bold transition">✓ Cobrar</button>
+   568→   568→                    </div>
+   569→   569→                  </div>
+   570→   570→                ))}
+   571→   571→              </div>
+   572→   572→            )}
+   573→   573→          </div>
+   574→   574→        )}
+   575→   575→      </div>
+   576→   576→
+   577→   577→      {/* ==================== MODALS ==================== */}
+   578→   578→
+   579→   579→      {/* Company Modal */}
+   580→   580→      {showCompanyModal && (
+   581→   581→        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setShowCompanyModal(false)}>
+   582→   582→          <div className="bg-slate-800 border border-slate-600 rounded-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+   583→   583→            <h3 className="text-lg font-bold text-white mb-4">{editCompany ? "Editar empresa" : "Nueva empresa"}</h3>
+   584→   584→            <div className="space-y-4">
+   585→   585→              <div className="grid grid-cols-2 gap-3">
+   586→   586→                <div>
+   587→   587→                  <label className="block text-xs font-extrabold text-blue-400 uppercase mb-1">Nombre</label>
+   588→   588→                  <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm" />
+   589→   589→                </div>
+   590→   590→                <div>
+   591→   591→                  <label className="block text-xs font-extrabold text-blue-400 uppercase mb-1">Slug</label>
+   592→   592→                  <input value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm" placeholder="mi-empresa" />
+   593→   593→                </div>
+   594→   594→              </div>
+   595→   595→              <div className="grid grid-cols-3 gap-3">
+   596→   596→                <div>
+   597→   597→                  <label className="block text-xs font-extrabold text-blue-400 uppercase mb-1">Plan</label>
+   598→   598→                  <select value={form.planName} onChange={(e) => {
+   599→   599→                    const p = e.target.value;
+   600→   600→                    setForm({ ...form, planName: p, price: p === "ENTERPRISE" ? 199.99 : p === "PRO" ? 79.99 : 29.99 });
+   601→   601→                  }} className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm">
+   602→   602→                    <option value="BASIC">BASIC</option>
+   603→   603→                    <option value="PRO">PRO</option>
+   604→   604→                    <option value="ENTERPRISE">ENTERPRISE</option>
+   605→   605→                  </select>
+   606→   606→                </div>
+   607→   607→                <div>
+   608→   608→                  <label className="block text-xs font-extrabold text-blue-400 uppercase mb-1">Facturación</label>
+   609→   609→                  <select value={form.billingMethod} onChange={(e) => setForm({ ...form, billingMethod: e.target.value })} className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm">
+   610→   610→                    <option value="MONTHLY">Mensual</option>
+   611→   611→                    <option value="QUARTERLY">Trimestral</option>
+   612→   612→                    <option value="ANNUAL">Anual</option>
+   613→   613→                  </select>
+   614→   614→                </div>
+   615→   615→                <div>
+   616→   616→                  <label className="block text-xs font-extrabold text-blue-400 uppercase mb-1">Precio €</label>
+   617→   617→                  <input type="number" step="0.01" value={form.price} onChange={(e) => setForm({ ...form, price: parseFloat(e.target.value) })} className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm" />
+   618→   618→                </div>
+   619→   619→              </div>
+   620→   620→              <div className="border-t border-slate-700 pt-3">
+   621→   621→                <h4 className="text-sm font-bold text-slate-400 uppercase mb-2">Datos de la Empresa</h4>
+   622→   622→                <div className="grid grid-cols-2 gap-3">
+   623→   623→                  <div>
+   624→   624→                    <label className="block text-xs font-extrabold text-blue-400 uppercase mb-1">NIF / CIF</label>
+   625→   625→                    <input value={form.nif} onChange={(e) => setForm({ ...form, nif: e.target.value })} className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm" placeholder="B12345678" />
+   626→   626→                  </div>
+   627→   627→                  <div>
+   628→   628→                    <label className="block text-xs font-extrabold text-blue-400 uppercase mb-1">Teléfono</label>
+   629→   629→                    <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm" placeholder="+34 600 000 000" />
+   630→   630→                  </div>
+   631→   631→                  <div>
+   632→   632→                    <label className="block text-xs font-extrabold text-blue-400 uppercase mb-1">Email</label>
+   633→   633→                    <input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm" placeholder="info@empresa.com" />
+   634→   634→                  </div>
+   635→   635→                  <div>
+   636→   636→                    <label className="block text-xs font-extrabold text-blue-400 uppercase mb-1">Logo URL</label>
+   637→   637→                    <input value={form.logoUrl} onChange={(e) => setForm({ ...form, logoUrl: e.target.value })} className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm" placeholder="https://..." />
+   638→   638→                  </div>
+   639→   639→                </div>
+   640→   640→              </div>
+   641→   641→              <div className="border-t border-slate-700 pt-3">
+   642→   642→                <h4 className="text-sm font-bold text-slate-400 uppercase mb-2">Dirección Fiscal</h4>
+   643→   643→                <div className="grid grid-cols-2 gap-3">
+   644→   644→                  <div className="col-span-2">
+   645→   645→                    <label className="block text-xs font-extrabold text-blue-400 uppercase mb-1">Dirección</label>
+   646→   646→                    <input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm" placeholder="Calle Mayor, 1" />
+   647→   647→                  </div>
+   648→   648→                  <div>
+   649→   649→                    <label className="block text-xs font-extrabold text-blue-400 uppercase mb-1">Ciudad</label>
+   650→   650→                    <input value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm" placeholder="Madrid" />
+   651→   651→                  </div>
+   652→   652→                  <div>
+   653→   653→                    <label className="block text-xs font-extrabold text-blue-400 uppercase mb-1">Provincia</label>
+   654→   654→                    <input value={form.province} onChange={(e) => setForm({ ...form, province: e.target.value })} className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm" placeholder="Madrid" />
+   655→   655→                  </div>
+   656→   656→                  <div>
+   657→   657→                    <label className="block text-xs font-extrabold text-blue-400 uppercase mb-1">Código Postal</label>
+   658→   658→                    <input value={form.postalCode} onChange={(e) => setForm({ ...form, postalCode: e.target.value })} className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm" placeholder="28001" />
+   659→   659→                  </div>
+   660→   660→                </div>
+   661→   661→              </div>
+   662→   662→              <div className="flex gap-3 pt-2">
+   663→   663→                <button onClick={handleSaveCompany} className="flex-1 bg-[#2E5D3A] hover:bg-[#3a7a4c] text-white font-bold py-2 rounded-lg text-sm transition">GUARDAR</button>
+   664→   664→                <button onClick={() => { setShowCompanyModal(false); setEditCompany(null); }} className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-bold py-2 rounded-lg text-sm transition">CANCELAR</button>
+   665→   665→              </div>
+   666→   666→            </div>
+   667→   667→          </div>
+   668→   668→        </div>
+   669→   669→      )}
+   670→   670→
+   671→   671→      {/* Payment/Invoice Modal */}
+   672→   672→      {showPaymentModal && (
+   673→   673→        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setShowPaymentModal(false)}>
+   674→   674→          <div className="bg-slate-800 border border-slate-600 rounded-2xl p-6 w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
+   675→   675→            <h3 className="text-lg font-bold text-white mb-4">{editPayment ? "Editar factura" : "Nueva factura"}</h3>
+   676→   676→            <div className="space-y-4">
+   677→   677→              <div>
+   678→   678→                <label className="block text-xs font-extrabold text-blue-400 uppercase mb-1">Empresa</label>
+   679→   679→                <select value={payForm.companyId} onChange={(e) => handleCompanyChange(e.target.value)} className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm">
+   680→   680→                  <option value="">Seleccionar...</option>
+   681→   681→                  {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+   682→   682→                </select>
+   683→   683→              </div>
+   684→   684→              <div>
+   685→   685→                <label className="block text-xs font-extrabold text-blue-400 uppercase mb-1">Concepto</label>
+   686→   686→                <input value={payForm.concept} onChange={(e) => setPayForm({ ...payForm, concept: e.target.value })} className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm" placeholder="Suscripción mensual - Plan PRO" />
+   687→   687→              </div>
+   688→   688→              <div className="grid grid-cols-2 gap-3">
+   689→   689→                <div>
+   690→   690→                  <label className="block text-xs font-extrabold text-blue-400 uppercase mb-1">Base imponible €</label>
+
+[showing lines 1-690 of 741; use offset=691 with limit to continue reading]

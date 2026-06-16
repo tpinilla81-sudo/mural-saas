@@ -70,3 +70,26 @@ Stage Summary:
 - En la vista Diaria, todos los avisos ahora se ven del mismo color (rojo oscuro), sin distinción por motivo.
 - La leyenda solo muestra Finde y Festivo (que son marcas del calendario, no de aviso).
 - La barra de resumen superior ha desaparecido — la tabla ahora ocupa ese espacio.
+
+---
+Task ID: 10
+Agent: main
+Task: Diario — quitar todos los filtros excepto los círculos de color de sede
+
+Work Log:
+- User: "quitar filtros en diario, solo dejar poder filtrar por sedes con los circulos de colores"
+- Editado src/components/DiarioTab.tsx (eliminadas 137 líneas, añadidas 6):
+  * Estado eliminado: filterPro, filterCity, filterProvince, filterAvisoReason, showFilters
+  * Funciones eliminadas: clearAllFilters, hasAnyFilter, hasAvisoReasonMatch, hasProInRow, uniqueCities, uniqueProvinces
+  * filteredSedes simplificado: solo aplica filterColors
+  * Botón "🔍 Filtros" eliminado del toolbar
+  * Panel "Filter Bar" completo eliminado (el bloque {showFilters && (...)} con todos los dropdowns)
+  * En el grid: eliminadas proMatchM/proMatchT, reasonMatch, dimReason; dimCell ahora solo depende de visMatch
+  * Conservados: dropdown "VER PROFESIONALES" (es visibilidad, no filtro de filas) y selector "ASIGNAR PRO" (es para asignar, no para filtrar)
+  * Conservada la fila de círculos de color siempre visible con su "✕ Limpiar"
+- tsc --noEmit limpio para DiarioTab
+- Commit 01ffca8, pushed a origin/main
+
+Stage Summary:
+- En la vista Diaria solo queda un filtro visible: los círculos de color de sede (multiselección, siempre presentes bajo el toolbar).
+- El resto de filtros (Profesional/Ciudad/Provincia/Aviso) y el botón Filtros han desaparecido por completo.
