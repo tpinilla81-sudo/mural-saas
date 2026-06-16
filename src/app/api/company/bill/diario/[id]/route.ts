@@ -29,6 +29,14 @@ export async function PUT(
       );
     }
 
+    // FACTURADA items cannot be edited (already in facturación)
+    if (existing.status === "FACTURADA") {
+      return NextResponse.json(
+        { error: "No se puede editar un item ya facturado" },
+        { status: 400 }
+      );
+    }
+
     const body = await req.json();
 
     // Validate clienteId ownership if provided

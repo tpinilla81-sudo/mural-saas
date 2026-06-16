@@ -60,9 +60,10 @@ export async function POST(
   if (!item) {
     return NextResponse.json({ error: "Item no encontrado" }, { status: 404 });
   }
-  if (item.status === "FACTURADA") {
+  // Only CUMPLIDA items can have lineas added (PENDIENTE/NO_CUMPLIDA need validation first; FACTURADA is locked)
+  if (item.status !== "CUMPLIDA") {
     return NextResponse.json(
-      { error: "No se pueden añadir líneas a un item ya facturado" },
+      { error: `No se pueden añadir líneas a un item en estado ${item.status}. Valida primero la salida.` },
       { status: 400 }
     );
   }
@@ -161,9 +162,10 @@ export async function PUT(
   if (!item) {
     return NextResponse.json({ error: "Item no encontrado" }, { status: 404 });
   }
-  if (item.status === "FACTURADA") {
+  // Only CUMPLIDA items can have lineas edited
+  if (item.status !== "CUMPLIDA") {
     return NextResponse.json(
-      { error: "No se pueden editar líneas de un item ya facturado" },
+      { error: `No se pueden editar líneas de un item en estado ${item.status}. Valida primero la salida.` },
       { status: 400 }
     );
   }

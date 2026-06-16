@@ -43,12 +43,18 @@ export async function POST(req: NextRequest) {
 
     let transferred = 0;
     let skipped = 0;
+    let notCumplida = 0;
     let registrosCreated = 0;
     const created: { itemId: string; registroIds: string[] }[] = [];
 
     for (const item of items) {
       if (item.status === "FACTURADA") {
         skipped++;
+        continue;
+      }
+      // Only CUMPLIDA items can be transferred to facturación
+      if (item.status !== "CUMPLIDA") {
+        notCumplida++;
         continue;
       }
 
@@ -111,6 +117,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       transferred,
       skipped,
+      notCumplida,
       total: items.length,
       registrosCreated,
       items: created,

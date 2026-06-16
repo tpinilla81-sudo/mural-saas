@@ -198,7 +198,7 @@ export async function POST(req: NextRequest) {
               cant: 1,
               precioUnitario,
               obs: `${professionalName} — ${plan.turn === "MANANA" ? "Mañana" : "Tarde"}`,
-              status: "CUMPLIDA",
+              status: "PENDIENTE",
               sourceType: "plan",
               sourceId: plan.id,
             },
@@ -306,7 +306,7 @@ export async function POST(req: NextRequest) {
         cant: Number(body.cant ?? 1),
         precioUnitario,
         obs: String(body.obs ?? ""),
-        status: "CUMPLIDA",
+        status: "PENDIENTE",
         sourceType: "manual",
       },
     });

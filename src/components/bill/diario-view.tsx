@@ -36,6 +36,8 @@ import {
   ChevronDown,
   ChevronRight,
   ListPlus,
+  Check,
+  XCircle,
 } from 'lucide-react'
 import { fmtCurrency, fmtDate, todayISO } from '@/lib/bill-utils'
 import { useBillConfig } from '@/lib/bill-config'
@@ -157,7 +159,7 @@ export function DiarioView() {
   const [fHasta, setFHasta] = useState('')
   const [fSede, setFSede] = useState('')
   const [fCliente, setFCliente] = useState('')
-  const [fStatus, setFStatus] = useState<'all' | 'CUMPLIDA' | 'FACTURADA'>('all')
+  const [fStatus, setFStatus] = useState<'all' | 'PENDIENTE' | 'CUMPLIDA' | 'NO_CUMPLIDA' | 'FACTURADA'>('all')
   const [fQ, setFQ] = useState('')
   const [showFilters, setShowFilters] = useState(true)
 
@@ -218,7 +220,9 @@ export function DiarioView() {
   }), [items, fDesde, fHasta, fSede, fCliente, fStatus, fQ])
 
   // Stats
+  const totalPendiente = filtered.filter(r => r.status === 'PENDIENTE').length
   const totalCumplida = filtered.filter(r => r.status === 'CUMPLIDA').length
+  const totalNoCumplida = filtered.filter(r => r.status === 'NO_CUMPLIDA').length
   const totalFacturada = filtered.filter(r => r.status === 'FACTURADA').length
   // Importe = sum of líneas (if any) else fallback to item.precioUnitario*cant
   const totalImporte = filtered.reduce((sum, r) => {
@@ -331,6 +335,52 @@ export function DiarioView() {
     }
   }
 
+  // ── Validate (PENDIENTE → CUMPLIDA + 1 default línea) ──
+  async function handleValidate(id: string) {
+    try {
+      const res = await fetch(`${API}/diario/${id}/validate`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al validar')
+      showStatus('ok', 'Salida validada — línea de referencia añadida. Edita las líneas según corresponda.')
+      loadData()
+    } catch (err: any) {
+      showStatus('err', err.message)
+    }
+  }
+
+  // ── Bulk validate ──
+  async function handleBulkValidate(ids: string[]) {
+    if (ids.length === 0) return
+    let ok = 0
+    let err = 0
+    for (const id of ids) {
+      try {
+        const res = await fetch(`${API}/diario/${id}/validate`, { method: 'POST' })
+        if (res.ok) ok++
+        else err++
+      } catch {
+        err++
+      }
+    }
+    showStatus('ok', `${ok} salida(s) validada(s)${err > 0 ? ` · ${err} error(es)` : ''}`)
+    setSelectedIds(new Set())
+    loadData()
+  }
+
+  // ── Mark as no cumplida ──
+  async function handleNoCumplida(id: string) {
+    if (!confirm('¿Marcar esta salida como NO cumplida? No se facturará.')) return
+    try {
+      const res = await fetch(`${API}/diario/${id}/no-cumplida`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al marcar como no cumplida')
+      showStatus('ok', 'Marcada como no cumplida')
+      loadData()
+    } catch (err: any) {
+      showStatus('err', err.message)
+    }
+  }
+
   // ── Bulk transfer to REGISTROS (facturar) ──
   async function handleTransfer(ids: string[]) {
     if (ids.length === 0) return
@@ -345,7 +395,9 @@ export function DiarioView() {
       if (!res.ok) throw new Error(data.error || 'Error al transferir')
       showStatus(
         'ok',
-        `${data.transferred} item(s) transferido(s) → ${data.registrosCreated} registro(s) creado(s) · ${data.skipped} ya facturados`
+        `${data.transferred} item(s) transferido(s) → ${data.registrosCreated} registro(s) creado(s)` +
+          (data.skipped ? ` · ${data.skipped} ya facturados` : '') +
+          (data.notCumplida ? ` · ${data.notCumplida} no validados (se omiten)` : '')
       )
       setSelectedIds(new Set())
       loadData()
@@ -387,7 +439,13 @@ export function DiarioView() {
   }
 
   // ── Selection ──
-  function toggleSelect(id: string) {
+  // Selection allowed for CUMPLIDA (for transfer) and PENDIENTE (for bulk validate)
+  function isSelectable(r: DiarioItem): boolean {
+    return r.status === 'CUMPLIDA' || r.status === 'PENDIENTE'
+  }
+
+  function toggleSelect(id: string, item: DiarioItem) {
+    if (!isSelectable(item)) return
     setSelectedIds(prev => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
@@ -397,7 +455,7 @@ export function DiarioView() {
   }
 
   function toggleSelectAll() {
-    const selectable = filtered.filter(r => r.status === 'CUMPLIDA')
+    const selectable = filtered.filter(isSelectable)
     if (selectable.length > 0 && selectedIds.size === selectable.length) {
       setSelectedIds(new Set())
     } else {
@@ -574,7 +632,9 @@ export function DiarioView() {
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Todos</SelectItem>
+                    <SelectItem value="PENDIENTE">Pendiente</SelectItem>
                     <SelectItem value="CUMPLIDA">Cumplida</SelectItem>
+                    <SelectItem value="NO_CUMPLIDA">No cumplida</SelectItem>
                     <SelectItem value="FACTURADA">Facturada</SelectItem>
                   </SelectContent>
                 </Select>
@@ -594,27 +654,45 @@ export function DiarioView() {
       {/* Stats bar */}
       <div className="flex flex-wrap gap-4 bg-white rounded-lg px-4 py-2.5 shadow-sm text-sm font-bold border mb-3">
         <span>Total: <b className="text-emerald-700 ml-1">{filtered.length}</b></span>
-        <span>Cumplidas: <b className="text-amber-600 ml-1">{totalCumplida}</b></span>
+        <span>Pendientes: <b className="text-amber-600 ml-1">{totalPendiente}</b></span>
+        <span>Cumplidas: <b className="text-emerald-700 ml-1">{totalCumplida}</b></span>
+        <span>No cumplidas: <b className="text-rose-600 ml-1">{totalNoCumplida}</b></span>
         <span>Facturadas: <b className="text-green-600 ml-1">{totalFacturada}</b></span>
         <span className="ml-auto">Importe total: <b className="text-emerald-700 ml-1">{fmtCurrency(totalImporte, config?.currency || '€')}</b></span>
       </div>
 
       {/* Bulk actions */}
-      {selectedIds.size > 0 && (
-        <div className="flex items-center gap-3 bg-emerald-50 px-4 py-2 rounded-lg mb-3 border border-emerald-200">
+      {selectedIds.size > 0 && (() => {
+        const selectedItems = items.filter(i => selectedIds.has(i.id))
+        const cumplidasSel = selectedItems.filter(i => i.status === 'CUMPLIDA')
+        const pendientesSel = selectedItems.filter(i => i.status === 'PENDIENTE')
+        return (
+        <div className="flex items-center gap-3 bg-emerald-50 px-4 py-2 rounded-lg mb-3 border border-emerald-200 flex-wrap">
           <span className="text-sm font-bold text-emerald-700">{selectedIds.size} seleccionado(s)</span>
-          <Button
-            size="sm"
-            className="bg-emerald-600 hover:bg-emerald-700 text-white"
-            onClick={() => handleTransfer([...selectedIds])}
-          >
-            <ArrowRight className="h-4 w-4 mr-1" /> Pasar a facturar
-          </Button>
+          {pendientesSel.length > 0 && (
+            <Button
+              size="sm"
+              className="bg-amber-500 hover:bg-amber-600 text-white"
+              onClick={() => handleBulkValidate(pendientesSel.map(i => i.id))}
+            >
+              <Check className="h-4 w-4 mr-1" /> Validar ({pendientesSel.length})
+            </Button>
+          )}
+          {cumplidasSel.length > 0 && (
+            <Button
+              size="sm"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              onClick={() => handleTransfer(cumplidasSel.map(i => i.id))}
+            >
+              <ArrowRight className="h-4 w-4 mr-1" /> Pasar a facturar ({cumplidasSel.length})
+            </Button>
+          )}
           <Button size="sm" variant="outline" onClick={() => setSelectedIds(new Set())}>
             <X className="h-4 w-4 mr-1" /> Cancelar
           </Button>
         </div>
-      )}
+        )
+      })()}
 
       {/* Table */}
       <div className="flex-1 min-h-0 bg-white rounded-lg border shadow-sm flex flex-col">
@@ -646,30 +724,38 @@ export function DiarioView() {
             <tbody>
               {filtered.map(r => {
                 const isFacturada = r.status === 'FACTURADA'
+                const isCumplida = r.status === 'CUMPLIDA'
+                const isPendiente = r.status === 'PENDIENTE'
+                const isNoCumplida = r.status === 'NO_CUMPLIDA'
                 const isExpanded = expandedIds.has(r.id)
                 const numLineas = r.lineas?.length || 0
                 const importe = itemImporte(r)
+                const canExpand = isCumplida // Only CUMPLIDA can show lineas editor
                 return (
                   <>
                     <tr
                       key={r.id}
-                      className={`border-b hover:bg-gray-50 ${selectedIds.has(r.id) ? 'bg-emerald-50' : ''} ${isFacturada ? 'opacity-70' : ''}`}
+                      className={`border-b hover:bg-gray-50 ${selectedIds.has(r.id) ? 'bg-emerald-50' : ''} ${isFacturada ? 'opacity-70' : ''} ${isNoCumplida ? 'opacity-50' : ''}`}
                     >
                       <td className="p-2 text-center">
-                        <button
-                          onClick={() => toggleExpand(r)}
-                          className="text-gray-400 hover:text-emerald-600"
-                          title={isExpanded ? 'Contraer líneas' : 'Expandir líneas'}
-                        >
-                          {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                        </button>
+                        {canExpand ? (
+                          <button
+                            onClick={() => toggleExpand(r)}
+                            className="text-gray-400 hover:text-emerald-600"
+                            title={isExpanded ? 'Contraer líneas' : 'Expandir líneas'}
+                          >
+                            {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                          </button>
+                        ) : (
+                          <span className="text-gray-300">·</span>
+                        )}
                       </td>
                       <td className="p-2 text-center">
-                        {!isFacturada && (
+                        {isSelectable(r) && (
                           <input
                             type="checkbox"
                             checked={selectedIds.has(r.id)}
-                            onChange={() => toggleSelect(r.id)}
+                            onChange={() => toggleSelect(r.id, r)}
                             className="rounded"
                           />
                         )}
@@ -684,34 +770,70 @@ export function DiarioView() {
                       </td>
                       <td className="p-2">{r.cliente || '—'}</td>
                       <td className="p-2 text-center">
-                        <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full ${numLineas > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
-                          {numLineas} {numLineas === 1 ? 'línea' : 'líneas'}
-                        </span>
+                        {isCumplida || isFacturada ? (
+                          <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full ${numLineas > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>
+                            {numLineas} {numLineas === 1 ? 'línea' : 'líneas'}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-gray-400">—</span>
+                        )}
                       </td>
-                      <td className="p-2 text-right font-bold">{fmtCurrency(importe, config?.currency || '€')}</td>
+                      <td className="p-2 text-right font-bold">
+                        {isCumplida || isFacturada ? fmtCurrency(importe, config?.currency || '€') : '—'}
+                      </td>
                       <td className="p-2 text-center">
-                        <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full ${isFacturada ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-                          {isFacturada ? 'Facturada' : 'Cumplida'}
-                        </span>
+                        {isPendiente && (
+                          <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                            Pendiente
+                          </span>
+                        )}
+                        {isCumplida && (
+                          <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                            Cumplida
+                          </span>
+                        )}
+                        {isNoCumplida && (
+                          <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700">
+                            No cumplida
+                          </span>
+                        )}
+                        {isFacturada && (
+                          <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-100 text-green-700">
+                            Facturada
+                          </span>
+                        )}
                       </td>
                       <td className="p-2 text-center whitespace-nowrap">
-                        {!isFacturada && (
+                        {isPendiente && (
                           <>
-                            <Button size="icon" variant="ghost" className="h-7 w-7 text-emerald-600 hover:bg-emerald-50" onClick={() => toggleExpand(r)} title="Ver/editar líneas">
-                              <ListPlus className="h-3.5 w-3.5" />
+                            <Button size="icon" variant="ghost" className="h-7 w-7 text-emerald-600 hover:bg-emerald-50" onClick={() => handleValidate(r.id)} title="Validar salida (cumplida)">
+                              <Check className="h-3.5 w-3.5" />
                             </Button>
-                            <Button size="icon" variant="ghost" className="h-7 w-7 text-indigo-600 hover:bg-indigo-50" onClick={() => openEdit(r)} title="Editar item">
-                              <Pencil className="h-3.5 w-3.5" />
+                            <Button size="icon" variant="ghost" className="h-7 w-7 text-rose-600 hover:bg-rose-50" onClick={() => handleNoCumplida(r.id)} title="Marcar como no cumplida">
+                              <XCircle className="h-3.5 w-3.5" />
                             </Button>
-                            <Button size="icon" variant="ghost" className="h-7 w-7 text-rose-600 hover:bg-rose-50" onClick={() => handleDelete(r.id)} title="Eliminar">
+                            <Button size="icon" variant="ghost" className="h-7 w-7 text-gray-500 hover:bg-gray-100" onClick={() => handleDelete(r.id)} title="Eliminar">
                               <Trash2 className="h-3.5 w-3.5" />
                             </Button>
                           </>
                         )}
-                        {isFacturada && <span className="text-[10px] text-gray-400">—</span>}
+                        {isCumplida && (
+                          <>
+                            <Button size="icon" variant="ghost" className="h-7 w-7 text-emerald-600 hover:bg-emerald-50" onClick={() => toggleExpand(r)} title="Ver/editar líneas">
+                              <ListPlus className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button size="icon" variant="ghost" className="h-7 w-7 text-indigo-600 hover:bg-indigo-50" onClick={() => openEdit(r)} title="Editar item (fecha/cliente/obs)">
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button size="icon" variant="ghost" className="h-7 w-7 text-gray-500 hover:bg-gray-100" onClick={() => handleDelete(r.id)} title="Eliminar">
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </>
+                        )}
+                        {(isFacturada || isNoCumplida) && <span className="text-[10px] text-gray-400">—</span>}
                       </td>
                     </tr>
-                    {isExpanded && (
+                    {isExpanded && canExpand && (
                       <tr key={`${r.id}-lineas`} className="bg-gray-50/50">
                         <td colSpan={11} className="p-3">
                           <LineasEditor
@@ -750,9 +872,10 @@ export function DiarioView() {
           </DialogHeader>
           <div className="space-y-3">
             <p className="text-sm text-gray-600">
-              Importa las entradas del Diario (planes de profesionales en sedes) como salida cumplida.
+              Importa las entradas del Diario (planes de profesionales en sedes) como salida PENDIENTE.
               Se ignoran las entradas ya sincronizadas. Las sedes se mapean automáticamente a clientes
-              con el mismo nombre. Después podrás añadir líneas desde el catálogo a cada salida.
+              con el mismo nombre. Después tendrás que VALIDAR cada salida (✓ si se cumplió, ✗ si no),
+              y solo entonces se creará una línea de referencia que podrás editar/añadir antes de facturar.
             </p>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -843,7 +966,7 @@ export function DiarioView() {
               </Select>
             </div>
             <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-700">
-              Una vez creado el item, expándelo con el botón <ListPlus className="inline h-3 w-3" /> para añadir líneas desde el catálogo. Esas líneas son lo que se facturará.
+              Una vez creado el item aparecerá como PENDIENTE. Valídalo con <Check className="inline h-3 w-3" /> para marcarlo como cumplido (se añadirá una línea de referencia). Luego expándelo con <ListPlus className="inline h-3 w-3" /> para editar/añadir líneas desde el catálogo.
             </div>
             <div className="flex gap-3 mt-2">
               <Button variant="outline" onClick={() => setAddModalOpen(false)} className="flex-1">Cancelar</Button>
