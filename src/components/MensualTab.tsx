@@ -119,16 +119,16 @@ export default function MensualTab() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4 mb-3 flex gap-3 items-end flex-wrap shrink-0 no-print">
+      <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-2 sm:p-3 mb-2 sm:mb-3 flex gap-2 sm:gap-3 items-end flex-wrap shrink-0 no-print">
         <div>
           <label className="block text-xs font-extrabold text-blue-400 uppercase mb-1">AÑO</label>
-          <select value={year} onChange={e => setYear(parseInt(e.target.value))} className="w-24 px-2 py-2 bg-slate-900 border border-slate-600 rounded text-white text-xs">
+          <select value={year} onChange={e => setYear(parseInt(e.target.value))} className="w-20 sm:w-24 px-2 py-1.5 sm:py-2 bg-slate-900 border border-slate-600 rounded text-white text-xs">
             {Array.from({ length: 15 }, (_, i) => 2026 + i).map(y => <option key={y} value={y}>{y}</option>)}
           </select>
         </div>
         <div>
           <label className="block text-xs font-extrabold text-blue-400 uppercase mb-1">MES</label>
-          <select value={month} onChange={e => setMonth(parseInt(e.target.value))} className="w-32 px-2 py-2 bg-slate-900 border border-slate-600 rounded text-white text-xs">
+          <select value={month} onChange={e => setMonth(parseInt(e.target.value))} className="w-28 sm:w-32 px-2 py-1.5 sm:py-2 bg-slate-900 border border-slate-600 rounded text-white text-xs">
             {MESES.map((m, i) => <option key={i} value={i}>{m.toUpperCase()}</option>)}
           </select>
         </div>
@@ -183,7 +183,8 @@ export default function MensualTab() {
             </div>
           )}
         </div>
-        <button onClick={() => window.print()} className="bg-amber-500 hover:bg-amber-400 text-black font-bold px-4 py-2 rounded-lg text-xs transition">🖨️ IMPRIMIR PDF</button>
+        <button onClick={() => { setYear(new Date().getFullYear()); setMonth(new Date().getMonth()); }} className="bg-amber-500 hover:bg-amber-400 text-black font-black px-3 py-2 rounded-lg text-xs transition">HOY</button>
+        <button onClick={() => window.print()} className="bg-slate-700 hover:bg-slate-600 text-white font-bold px-3 py-2 rounded-lg text-xs transition hidden sm:block">🖨️ PDF</button>
       </div>
 
       <div className="flex-1 overflow-auto bg-white text-gray-900 rounded-xl p-5" id="print-target">
