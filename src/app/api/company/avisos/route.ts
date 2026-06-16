@@ -24,17 +24,18 @@ export async function POST(req: Request) {
   const companyId = user!.companyId!;
   const body = await req.json();
 
-  if (!body.date || !body.professionalId || !body.sedeId || !body.turn) {
-    return NextResponse.json({ error: "Faltan campos requeridos" }, { status: 400 });
+  if (!body.date || !body.sedeId || !body.turn) {
+    return NextResponse.json({ error: "Faltan campos requeridos (date, sedeId, turn)" }, { status: 400 });
   }
 
   const aviso = await db.aviso.create({
     data: {
       companyId,
       date: body.date,
-      professionalId: body.professionalId,
+      professionalId: body.professionalId || null, // nullable for sede-level absences
       sedeId: body.sedeId,
       turn: body.turn, // M or T
+      reason: body.reason || "",
     },
   });
 
