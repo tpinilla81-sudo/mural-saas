@@ -56,7 +56,49 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
 
-    // ── Batch creation ──
+    // ── Batch creation via { batch: [...] } ──
+    if (body.batch && Array.isArray(body.batch)) {
+      const batch = body.batch;
+      if (batch.length === 0) {
+        return NextResponse.json(
+          { error: "El array de catálogo no puede estar vacío" },
+          { status: 400 }
+        );
+      }
+
+      const data = batch.map((item: Record<string, unknown>) => ({
+        companyId,
+        clienteId: item.clienteId ? String(item.clienteId) : null,
+        c1: String(item.c1 ?? ""),
+        c2: String(item.c2 ?? ""),
+        coste: Number(item.coste ?? 0),
+        inc: Number(item.inc ?? 0),
+        final: Number(item.final ?? 0),
+        customData: String(item.customData ?? ""),
+      }));
+
+      const invalid = data.some((d) => !d.c1.trim() || !d.c2.trim());
+      if (invalid) {
+        return NextResponse.json(
+          { error: "Todos los items deben tener c1 y c2" },
+          { status: 400 }
+        );
+      }
+
+      const clienteIds = data.map((d) => d.clienteId).filter(Boolean) as string[];
+      if (clienteIds.length > 0) {
+        const uniqueIds = [...new Set(clienteIds)];
+        const count = await db.billCliente.count({ where: { id: { in: uniqueIds }, companyId } });
+        if (count !== uniqueIds.length) {
+          return NextResponse.json({ error: "Uno o más clienteId no pertenecen a la empresa" }, { status: 400 });
+        }
+      }
+
+      const created = await db.billCatalogo.createMany({ data });
+      return NextResponse.json({ count: created.count }, { status: 201 });
+    }
+
+    // ── Batch creation via plain array ──
     if (Array.isArray(body)) {
       if (body.length === 0) {
         return NextResponse.json(

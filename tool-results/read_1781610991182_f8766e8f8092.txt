@@ -1,0 +1,880 @@
+     1→'use client'
+     2→
+     3→import { useState, useCallback, useMemo, useEffect } from 'react'
+     4→import { Card, CardContent } from '@/components/ui/card'
+     5→import { Input } from '@/components/ui/input'
+     6→import { Button } from '@/components/ui/button'
+     7→import { Label } from '@/components/ui/label'
+     8→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+     9→import { Checkbox } from '@/components/ui/checkbox'
+    10→import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+    11→import { Printer, FileSpreadsheet, Receipt, RotateCcw, ArrowLeftRight, CheckCircle2, X, Filter, ChevronDown } from 'lucide-react'
+    12→import { fmtCurrency, fmtDate, fmtMonth, todayISO, currentYear, type Cliente, type CatalogoItem, type Registro } from '@/lib/hualsa-utils'
+    13→import { useConfig, DEFAULT_LABELS_FACTURAS, type ResolvedConfig } from '@/lib/config'
+    14→import { triggerBackup } from '@/lib/trigger-backup'
+    15→import * as XLSX from 'xlsx'
+    16→
+    17→interface FacturasData {
+    18→  registros: Registro[]
+    19→  clientes: Cliente[]
+    20→  catalogo: CatalogoItem[]
+    21→  seq: number
+    22→}
+    23→
+    24→type LineaFactura = { fecha: string; c1: string; c2: string; cant: number; clienteId: string; obs: string; precioUnitario: number }
+    25→interface InvoiceData {
+    26→  cli: Cliente; lineas: LineaFactura[]
+    27→  iva: number; numero: string; fechaFact: string; modo: string; base: number; ivaImp: number; total: number
+    28→}
+    29→
+    30→export function FacturasView() {
+    31→  const { config } = useConfig()
+    32→  const L = config?.labelsFacturas || DEFAULT_LABELS_FACTURAS
+    33→  const [data, setData] = useState<FacturasData>({ registros: [], clientes: [], catalogo: [], seq: 1 })
+    34→  // Filters
+    35→  const [fDesde, setFDesde] = useState('')
+    36→  const [fHasta, setFHasta] = useState('')
+    37→  const [fMes, setFMes] = useState('')
+    38→  const [fClientes, setFClientes] = useState<string[]>([])
+    39→  const [fC1s, setFC1s] = useState<string[]>([])
+    40→  const [fC2s, setFC2s] = useState<string[]>([])
+    41→  // Multi-select dropdown open states
+    42→  const [openClientes, setOpenClientes] = useState(false)
+    43→  const [openC1, setOpenC1] = useState(false)
+    44→  const [openC2, setOpenC2] = useState(false)
+    45→
+    46→  // Invoice settings
+    47→  const [fNumero, setFNumero] = useState('')
+    48→  const [fFechaFact, setFFechaFact] = useState(todayISO())
+    49→  const [fIva, setFIva] = useState('')
+    50→  const [fModo, setFModo] = useState<'dia' | 'mes'>('dia')
+    51→
+    52→  // Selection
+    53→  const [selection, setSelection] = useState<Record<string, boolean>>({})
+    54→  const [checkAll, setCheckAll] = useState(true)
+    55→
+    56→  // Invoice modal
+    57→  const [invoiceData, setInvoiceData] = useState<InvoiceData | null>(null)
+    58→  const [modalOpen, setModalOpen] = useState(false)
+    59→
+    60→  // Facturado filter
+    61→  const [showFacturados, setShowFacturados] = useState(true)
+    62→
+    63→  // UI collapse states
+    64→  const [showFilters, setShowFilters] = useState(false)
+    65→
+    66→  const loadData = useCallback(async () => {
+    67→    const [rRes, cRes, catRes, seqRes] = await Promise.all([
+    68→      fetch('/api/registros'), fetch('/api/clientes'), fetch('/api/catalogo'), fetch('/api/factura-seq')
+    69→    ])
+    70→    const seq = (await seqRes.json()).seq
+    71→    setData({ registros: await rRes.json(), clientes: await cRes.json(), catalogo: await catRes.json(), seq })
+    72→  }, [])
+    73→
+    74→  useEffect(() => {
+    75→    loadData()
+    76→  }, [loadData])
+    77→
+    78→  // Close multi-select dropdowns when clicking outside
+    79→  useEffect(() => {
+    80→    function handleClick(e: MouseEvent) {
+    81→      if (!(e.target as HTMLElement).closest('.relative')) {
+    82→        setOpenClientes(false); setOpenC1(false); setOpenC2(false)
+    83→      }
+    84→    }
+    85→    document.addEventListener('click', handleClick)
+    86→    return () => document.removeEventListener('click', handleClick)
+    87→  }, [])
+    88→
+    89→  // Set default factura number and IVA
+    90→  if (!fNumero && data.seq) {
+    91→    setFNumero(String(data.seq).padStart(4, '0') + '/' + currentYear())
+    92→  }
+    93→  if (!fIva && config) {
+    94→    setFIva(String(config.defaultIva))
+    95→  }
+    96→
+    97→  const { registros, clientes, catalogo } = data
+    98→
+    99→  function precioUnit(c1Val: string, c2Val: string, cliId: string): number {
+   100→    let it = catalogo.find(x => x.c1 === c1Val && x.c2 === c2Val && x.clienteId === cliId)
+   101→    if (!it) it = catalogo.find(x => x.c1 === c1Val && x.c2 === c2Val && !x.clienteId)
+   102→    if (!it) it = catalogo.find(x => x.c1 === c1Val && x.c2 === c2Val)
+   103→    return it ? Number(it.final) || 0 : 0
+   104→  }
+   105→
+   106→  // Use stored precioUnitario if available, otherwise fall back to catalog lookup
+   107→  function getPrecio(r: Registro): number {
+   108→    return r.precioUnitario > 0 ? r.precioUnitario : precioUnit(r.c1, r.c2, r.clienteId)
+   109→  }
+   110→
+   111→  // Derive c1/c2 options from catalog for filter dropdowns
+   112→  const allC1Options = useMemo(() => [...new Set(catalogo.map(c => c.c1).filter(Boolean))].sort(), [catalogo])
+   113→  const c2OptionsFiltered = useMemo(() => {
+   114→    if (fC1s.length === 0) return [...new Set(catalogo.map(c => c.c2).filter(Boolean))].sort()
+   115→    return [...new Set(catalogo.filter(c => fC1s.includes(c.c1)).map(c => c.c2).filter(Boolean))].sort()
+   116→  }, [catalogo, fC1s])
+   117→
+   118→  // Helper: toggle a value in a string array
+   119→  function toggleMulti(current: string[], value: string): string[] {
+   120→    return current.includes(value) ? current.filter(v => v !== value) : [...current, value]
+   121→  }
+   122→
+   123→  // Filtered registros
+   124→  const filtered = useMemo(() =>
+   125→    registros.filter(r => {
+   126→      if (fDesde && r.fecha < fDesde) return false
+   127→      if (fHasta && r.fecha > fHasta) return false
+   128→      if (fMes && r.fecha.slice(0, 7) !== fMes) return false
+   129→      if (fClientes.length > 0 && !fClientes.includes(r.clienteId)) return false
+   130→      if (fC1s.length > 0 && !fC1s.includes(r.c1)) return false
+   131→      if (fC2s.length > 0 && !fC2s.includes(r.c2)) return false
+   132→      if (!showFacturados && r.facturado) return false
+   133→      return true
+   134→    }).sort((a, b) => a.fecha.localeCompare(b.fecha))
+   135→  , [registros, fDesde, fHasta, fMes, fClientes, fC1s, fC2s, showFacturados])
+   136→
+   137→  const selectedItems = filtered.filter(r => selection[r.id] !== false)
+   138→  const totalCant = selectedItems.reduce((s, r) => s + r.cant, 0)
+   139→  const totalBase = selectedItems.reduce((s, r) => s + getPrecio(r) * r.cant, 0)
+   140→
+   141→  function toggleItem(id: string) {
+   142→    setSelection(prev => ({ ...prev, [id]: prev[id] === false ? true : false }))
+   143→  }
+   144→
+   145→  function toggleAll() {
+   146→    const newVal = !checkAll
+   147→    const s: Record<string, boolean> = {}
+   148→    filtered.forEach(r => s[r.id] = newVal)
+   149→    setSelection(s)
+   150→    setCheckAll(newVal)
+   151→  }
+   152→
+   153→  function handleAlternos() {
+   154→    const fechas = [...new Set(filtered.map(r => r.fecha))].sort()
+   155→    const quitar = new Set(fechas.filter((_, i) => i % 2 === 1))
+   156→    setSelection(prev => {
+   157→      const s = { ...prev }
+   158→      filtered.forEach(r => { if (quitar.has(r.fecha)) s[r.id] = false })
+   159→      return s
+   160→    })
+   161→  }
+   162→
+   163→  async function handleQuitarFacturado() {
+   164→    const facturados = selectedItems.filter(r => r.facturado === true)
+   165→    if (!facturados.length) { alert('Selecciona registros facturados para quitar el estado'); return }
+   166→    if (!confirm(`¿Quitar estado "Facturado" de ${facturados.length} registro(s)?`)) return
+   167→    const ids = facturados.map(r => r.id)
+   168→    try {
+   169→      await fetch('/api/registros', {
+   170→        method: 'PUT',
+   171→        headers: { 'Content-Type': 'application/json' },
+   172→        body: JSON.stringify({ batchQuitarFacturado: true, ids })
+   173→      })
+   174→      setData(prev => ({
+   175→        ...prev,
+   176→        registros: prev.registros.map(r =>
+   177→          ids.includes(r.id) ? { ...r, facturado: false } : r
+   178→        )
+   179→      }))
+   180→      triggerBackup()
+   181→    } catch (err) {
+   182→      console.error('Error quitando facturado:', err)
+   183→    }
+   184→  }
+   185→
+   186→  async function handleQuitarFacturadoSingle(id: string) {
+   187→    try {
+   188→      await fetch('/api/registros', {
+   189→        method: 'PUT',
+   190→        headers: { 'Content-Type': 'application/json' },
+   191→        body: JSON.stringify({ id, facturado: false })
+   192→      })
+   193→      setData(prev => ({
+   194→        ...prev,
+   195→        registros: prev.registros.map(r =>
+   196→          r.id === id ? { ...r, facturado: false } : r
+   197→        )
+   198→      }))
+   199→      triggerBackup()
+   200→    } catch (err) {
+   201→      console.error('Error quitando facturado:', err)
+   202→    }
+   203→  }
+   204→
+   205→  async function handleGenerar() {
+   206→    const sel = selectedItems
+   207→    if (!sel.length) { alert('No hay líneas seleccionadas'); return }
+   208→    const cliIds = [...new Set(sel.map(r => r.clienteId))]
+   209→    const effectiveFCliente = fClientes.length === 1 ? fClientes[0] : ''
+   210→    const targetCliId = effectiveFCliente || cliIds[0]
+   211→    const cli = clientes.find(c => c.id === targetCliId) || { id: '', nombre: '(varios)', cif: '', dir: '', cp: '', ciudad: '', prov: '', mail: '', tel: '' }
+   212→    const lineasBase: LineaFactura[] = (effectiveFCliente ? sel.filter(r => r.clienteId === effectiveFCliente) : sel).map(r => ({ fecha: r.fecha, c1: r.c1, c2: r.c2, cant: r.cant, clienteId: r.clienteId, obs: r.obs || '', precioUnitario: getPrecio(r) }))
+   213→    const iva = Number(fIva) || 0
+   214→
+   215→    let lineas: LineaFactura[]
+   216→    if (fModo === 'mes') {
+   217→      const map: Record<string, LineaFactura> = {}
+   218→      lineasBase.forEach(r => {
+   219→        const mes = r.fecha.slice(0, 7)
+   220→        const k = mes + '|' + r.c1 + '|' + r.c2
+   221→        if (!map[k]) map[k] = { fecha: mes + '-01', c1: r.c1, c2: r.c2, cant: 0, clienteId: r.clienteId, obs: '', precioUnitario: getPrecio(r) }
+   222→        map[k].cant += r.cant
+   223→      })
+   224→      lineas = Object.values(map).sort((a, b) => a.fecha.localeCompare(b.fecha))
+   225→    } else {
+   226→      lineas = lineasBase
+   227→    }
+   228→
+   229→    const base = lineas.reduce((s, r) => s + (r.precioUnitario > 0 ? r.precioUnitario : precioUnit(r.c1, r.c2, r.clienteId)) * r.cant, 0)
+   230→    const ivaImp = base * iva / 100
+   231→    const total = base + ivaImp
+   232→
+   233→    setInvoiceData({ cli, lineas, iva, numero: fNumero, fechaFact: fFechaFact, modo: fModo, base, ivaImp, total })
+   234→    setModalOpen(true)
+   235→
+   236→    // Mark selected registros as facturado
+   237→    const selectedIds = sel.map(r => r.id)
+   238→    try {
+   239→      await fetch('/api/registros', {
+   240→        method: 'PUT',
+   241→        headers: { 'Content-Type': 'application/json' },
+   242→        body: JSON.stringify({ batchFacturado: true, ids: selectedIds })
+   243→      })
+   244→      // Update local state
+   245→      setData(prev => ({
+   246→        ...prev,
+   247→        registros: prev.registros.map(r =>
+   248→          selectedIds.includes(r.id) ? { ...r, facturado: true } : r
+   249→        )
+   250→      }))
+   251→    } catch (err) {
+   252→      console.error('Error marking registros as facturado:', err)
+   253→    }
+   254→
+   255→    // Increment seq
+   256→    const newSeq = data.seq + 1
+   257→    await fetch('/api/factura-seq', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ seq: newSeq }) })
+   258→    setData(prev => ({ ...prev, seq: newSeq }))
+   259→    triggerBackup()
+   260→  }
+   261→
+   262→  function handlePrintInvoice(inv: InvoiceData, cat: CatalogoItem[], cfg: ResolvedConfig | null) {
+   263→    const LL = cfg?.labelsFacturas || DEFAULT_LABELS_FACTURAS
+   264→    const { cli, lineas, iva, numero, fechaFact, modo, base, ivaImp, total } = inv
+   265→    const fechaLbl = (iso: string) => modo === 'mes' ? fmtMonth(iso) : fmtDate(iso)
+   266→
+   267→    function pu(c1Val: string, c2Val: string, cliId: string): number {
+   268→      let it = cat.find(x => x.c1 === c1Val && x.c2 === c2Val && x.clienteId === cliId)
+   269→      if (!it) it = cat.find(x => x.c1 === c1Val && x.c2 === c2Val && !x.clienteId)
+   270→      if (!it) it = cat.find(x => x.c1 === c1Val && x.c2 === c2Val)
+   271→      return it ? Number(it.final) || 0 : 0
+   272→    }
+   273→
+   274→    const logoSrc = cfg?.logo
+   275→      ? (cfg.logo.startsWith('data:') ? cfg.logo : `data:image/png;base64,${cfg.logo}`)
+   276→      : ''
+   277→
+   278→    const lineasHtml = lineas.map(r => {
+   279→      const p = pu(r.c1, r.c2, r.clienteId)
+   280→      return `<tr>
+   281→        <td style="padding:7px 10px;border:1px solid #bbb;">${fechaLbl(r.fecha)}</td>
+   282→        <td style="padding:7px 10px;border:1px solid #bbb;">${r.c1}${r.c2 ? ' - ' + r.c2 : ''}${r.obs ? ' (' + r.obs + ')' : ''}</td>
+   283→        <td style="padding:7px 10px;border:1px solid #bbb;text-align:right;">${r.cant}</td>
+   284→        <td style="padding:7px 10px;border:1px solid #bbb;text-align:right;">${p.toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
+   285→        <td style="padding:7px 10px;border:1px solid #bbb;text-align:right;">${(p * r.cant).toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
+   286→      </tr>`
+   287→    }).join('')
+   288→
+   289→    const html = `<!DOCTYPE html>
+   290→<html lang="es">
+   291→<head>
+   292→<meta charset="UTF-8">
+   293→<title>Factura ${numero}</title>
+   294→<style>
+   295→  @page { size: A4 portrait; margin: 12mm 15mm; }
+   296→  * { margin: 0; padding: 0; box-sizing: border-box; }
+   297→  body {
+   298→    font-family: 'Segoe UI', Arial, Helvetica, sans-serif;
+   299→    color: #1a1a1a;
+   300→    font-size: 11pt;
+   301→    line-height: 1.45;
+   302→    -webkit-print-color-adjust: exact !important;
+   303→    print-color-adjust: exact !important;
+   304→  }
+   305→  .page { width: 100%; max-width: 210mm; }
+   306→  .header {
+   307→    display: flex;
+   308→    justify-content: space-between;
+   309→    align-items: flex-start;
+   310→    margin-bottom: 24px;
+   311→    padding-bottom: 18px;
+   312→    border-bottom: 3px solid #2bb24c;
+   313→  }
+   314→  .company-info { flex: 1; }
+   315→  .company-name { font-size: 18pt; font-weight: 800; color: #1a1a1a; margin-bottom: 4px; }
+   316→  .company-detail { font-size: 10pt; color: #444; line-height: 1.5; }
+   317→  .company-detail b { color: #1a1a1a; }
+   318→  .logo-area { margin-left: 20px; }
+   319→  .logo-area img { max-width: 240px; max-height: 100px; object-fit: contain; }
+   320→  .factura-badge {
+   321→    display: inline-block;
+   322→    margin-top: 12px;
+   323→    padding: 8px 16px;
+   324→    border: 2px solid #1a1a1a;
+   325→    background: #f5f5f5;
+   326→    font-size: 11pt;
+   327→    line-height: 1.6;
+   328→  }
+   329→  .factura-badge b { font-size: 11pt; }
+   330→  .client-box {
+   331→    border: 2px solid #1a1a1a;
+   332→    padding: 14px 18px;
+   333→    margin-bottom: 24px;
+   334→    background: #f9f9f9;
+   335→    font-size: 11pt;
+   336→    line-height: 1.6;
+   337→  }
+   338→  .client-box b { color: #1a1a1a; }
+   339→  .client-label { font-size: 9pt; text-transform: uppercase; color: #888; letter-spacing: 1px; margin-bottom: 4px; }
+   340→  table.lines { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 10.5pt; }
+   341→  table.lines thead th {
+   342→    background: #1a1a1a;
+   343→    color: #fff;
+   344→    padding: 9px 10px;
+   345→    text-align: left;
+   346→    font-size: 9.5pt;
+   347→    font-weight: 700;
+   348→    text-transform: uppercase;
+   349→    letter-spacing: 0.5px;
+   350→    border: 1px solid #1a1a1a;
+   351→  }
+   352→  table.lines thead th:nth-child(3),
+   353→  table.lines thead th:nth-child(4),
+   354→  table.lines thead th:nth-child(5) { text-align: right; }
+   355→  table.lines tbody tr:nth-child(even) { background: #fafafa; }
+   356→  table.lines tbody td { padding: 7px 10px; border: 1px solid #ccc; }
+   357→  table.lines tbody td:nth-child(3),
+   358→  table.lines tbody td:nth-child(4),
+   359→  table.lines tbody td:nth-child(5) { text-align: right; font-variant-numeric: tabular-nums; }
+   360→  .totals { margin-left: auto; border-collapse: collapse; font-size: 11pt; }
+   361→  .totals td { padding: 8px 14px; border: 1px solid #1a1a1a; }
+   362→  .totals .label { background: #e8e8e8; font-weight: 700; text-align: right; min-width: 170px; }
+   363→  .totals .value { text-align: right; min-width: 140px; font-variant-numeric: tabular-nums; }
+   364→  .totals .total-row { background: #2bb24c; color: #fff; font-weight: 800; font-size: 13pt; }
+   365→  .totals .total-row td { border-color: #2bb24c; }
+   366→  .footer { margin-top: 40px; padding-top: 12px; border-top: 1px solid #ddd; font-size: 8.5pt; color: #999; text-align: center; }
+   367→</style>
+   368→</head>
+   369→<body>
+   370→<div class="page">
+   371→  <div class="header">
+   372→    <div class="company-info">
+   373→      <div class="company-name">${cfg?.companyFullName || 'EMPRESA'}</div>
+   374→      <div class="company-detail">
+   375→        ${cfg?.companyAddress ? cfg.companyAddress + '<br>' : ''}
+   376→        ${cfg?.companyCity ? cfg.companyCity : ''}${cfg?.companyProvince ? ' ' + cfg.companyProvince : ''}${(cfg?.companyCity || cfg?.companyProvince) ? '<br>' : ''}
+   377→        ${cfg?.companyCif ? '<b>CIF:</b> ' + cfg.companyCif : ''}
+   378→      </div>
+   379→      <div class="factura-badge">
+   380→        <b>${LL.numero}:</b> ${numero}<br>
+   381→        <b>${LL.fecha}:</b> ${fmtDate(fechaFact)}
+   382→      </div>
+   383→    </div>
+   384→    ${logoSrc ? '<div class="logo-area"><img src="' + logoSrc + '" alt="Logo"></div>' : ''}
+   385→  </div>
+   386→
+   387→  <div class="client-label">DATOS DEL CLIENTE</div>
+   388→  <div class="client-box">
+   389→    <b>${LL.cliente}:</b> ${cli.nombre}<br>
+   390→    ${cli.cif ? '<b>CIF:</b> ' + cli.cif + '<br>' : ''}
+   391→    ${cli.dir ? cli.dir + '<br>' : ''}
+   392→    ${cli.cp || cli.ciudad || cli.prov ? (cli.cp ? cli.cp + ' ' : '') + (cli.ciudad || '') + (cli.prov ? ' (' + cli.prov + ')' : '') : ''}
+   393→  </div>
+   394→
+   395→  <table class="lines">
+   396→    <thead>
+   397→      <tr>
+   398→        <th style="width:90px;">${LL.fecha}</th>
+   399→        <th>${LL.concepto}</th>
+   400→        <th style="width:70px;">${LL.cantidad}</th>
+   401→        <th style="width:120px;">${LL.precioUnitario}</th>
+   402→        <th style="width:120px;">${LL.importe}</th>
+   403→      </tr>
+   404→    </thead>
+   405→    <tbody>
+   406→      ${lineasHtml}
+   407→    </tbody>
+   408→  </table>
+   409→
+   410→  <table class="totals">
+   411→    <tr>
+   412→      <td class="label">${LL.baseImponible}</td>
+   413→      <td class="value">${fmtCurrency(base)}</td>
+   414→    </tr>
+   415→    <tr>
+   416→      <td class="label">IVA ${iva}%</td>
+   417→      <td class="value">${fmtCurrency(ivaImp)}</td>
+   418→    </tr>
+   419→    <tr class="total-row">
+   420→      <td>${LL.totalFactura}</td>
+   421→      <td>${fmtCurrency(total)}</td>
+   422→    </tr>
+   423→  </table>
+   424→
+   425→  <div class="footer">${cfg?.companyFullName || 'EMPRESA'} &mdash; ${cfg?.companyAddress || ''} ${cfg?.companyCity || ''}</div>
+   426→</div>
+   427→<script>window.onload = function() { window.print(); }</script>
+   428→</body>
+   429→</html>`
+   430→
+   431→    const printWin = window.open('', '_blank', 'width=900,height=700')
+   432→    if (printWin) {
+   433→      printWin.document.write(html)
+   434→      printWin.document.close()
+   435→    }
+   436→  }
+   437→
+   438→  function handleExportExcel() {
+   439→    if (!invoiceData) return
+   440→    const { cli, lineas, iva, numero, fechaFact, base, ivaImp, total, modo } = invoiceData
+   441→    const fechaLbl = (iso: string) => modo === 'mes' ? fmtMonth(iso) : fmtDate(iso)
+   442→
+   443→    // Build professional factura layout
+   444→    const wb = XLSX.utils.book_new()
+   445→    const wsData: (string | number)[][] = []
+   446→
+   447→    // Company header
+   448→    wsData.push([config?.companyFullName || 'EMPRESA'])
+   449→    wsData.push([config?.companyAddress || ''])
+   450→    wsData.push([(config?.companyCity || '') + ' ' + (config?.companyProvince || '')])
+   451→    if (config?.companyCif) wsData.push(['CIF: ' + config.companyCif])
+   452→    else wsData.push([])
+   453→    wsData.push([])
+   454→
+   455→    // Factura info
+   456→    wsData.push([L.numero + ':', numero])
+   457→    wsData.push([L.fecha + ':', fmtDate(fechaFact)])
+   458→    wsData.push([])
+   459→
+   460→    // Client info
+   461→    wsData.push([L.cliente + ':', cli.nombre])
+   462→    wsData.push(['CIF:', cli.cif])
+   463→    wsData.push(['Dirección:', `${cli.dir} ${cli.cp} ${cli.ciudad} ${cli.prov}`])
+   464→    wsData.push([])
+   465→
+   466→    // Column headers
+   467→    wsData.push([L.fecha, L.concepto, L.cantidad, L.precioUnitario, L.importe])
+   468→
+   469→    // Line items
+   470→    lineas.forEach(r => {
+   471→      const pu = r.precioUnitario > 0 ? r.precioUnitario : precioUnit(r.c1, r.c2, r.clienteId)
+   472→      wsData.push([fechaLbl(r.fecha), r.c1 + (r.c2 ? ' - ' + r.c2 : ''), r.cant, pu, pu * r.cant])
+   473→    })
+   474→
+   475→    // Totals
+   476→    wsData.push([])
+   477→    wsData.push(['', '', '', L.baseImponible, base])
+   478→    wsData.push(['', '', '', `IVA ${iva}%`, ivaImp])
+   479→    wsData.push(['', '', '', L.totalFactura, total])
+   480→
+   481→    const ws = XLSX.utils.aoa_to_sheet(wsData)
+   482→
+   483→    // Column widths
+   484→    ws['!cols'] = [
+   485→      { wch: 14 },  // Fecha
+   486→      { wch: 40 },  // Concepto
+   487→      { wch: 10 },  // Cantidad
+   488→      { wch: 16 },  // Precio Unitario
+   489→      { wch: 16 },  // Importe
+   490→    ]
+   491→
+   492→    // Style: bold for header rows and totals
+   493→    // Company name (row 0) - bold, large
+   494→    const companyCell = ws['A1']
+   495→    if (companyCell) { companyCell.s = { font: { bold: true, sz: 16 } } }
+   496→
+   497→    // Column headers row index (after the header rows)
+   498→    const headerRowIndex = wsData.findIndex(row => row[0] === L.fecha && row[1] === L.concepto)
+   499→    if (headerRowIndex >= 0) {
+   500→      for (let c = 0; c < 5; c++) {
+   501→        const cell = ws[XLSX.utils.encode_cell({ r: headerRowIndex, c })]
+   502→        if (cell) {
+   503→          cell.s = {
+   504→            font: { bold: true, color: { rgb: 'FFFFFF' } },
+   505→            fill: { fgColor: { rgb: '1A1A1A' } },
+   506→            alignment: { horizontal: c >= 2 ? 'right' : 'left' }
+   507→          }
+   508→        }
+   509→      }
+   510→    }
+   511→
+   512→    // Total row (last row) - bold
+   513→    const totalRowIndex = wsData.length - 1
+   514→    for (let c = 0; c < 5; c++) {
+   515→      const cell = ws[XLSX.utils.encode_cell({ r: totalRowIndex, c })]
+   516→      if (cell) {
+   517→        cell.s = { font: { bold: true } }
+   518→      }
+   519→    }
+   520→
+   521→    // Number format for currency cells
+   522→    const lineStartIdx = headerRowIndex + 1
+   523→    const lineEndIdx = wsData.length - 5 // before the empty + 3 totals rows
+   524→    for (let r = lineStartIdx; r < wsData.length; r++) {
+   525→      for (const c of [3, 4]) { // Precio Unitario and Importe columns
+   526→        const cell = ws[XLSX.utils.encode_cell({ r, c })]
+   527→        if (cell && typeof cell.v === 'number') {
+   528→          cell.z = '#,##0.00'
+   529→        }
+   530→      }
+   531→    }
+   532→
+   533→    XLSX.utils.book_append_sheet(wb, ws, 'Factura')
+   534→    XLSX.writeFile(wb, `Factura_${numero.replace(/\//g, '-')}.xlsx`)
+   535→  }
+   536→
+   537→  return (
+   538→    <div className="flex flex-col flex-1 min-h-0">
+   539→      {/* ─── FIXED HEADER ─── */}
+   540→      <div className="flex-shrink-0 space-y-3 pb-2">
+   541→        {/* Title + toggle buttons */}
+   542→        <div className="flex items-center gap-2 flex-wrap">
+   543→          <Receipt className="h-5 w-5 text-[#005bb5]" />
+   544→          <h2 className="text-lg font-bold text-gray-700">Facturas</h2>
+   545→          <button onClick={() => setShowFilters(!showFilters)} className={`ml-2 inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full border transition-colors ${showFilters ? 'bg-blue-50 text-[#005bb5] border-blue-200' : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-blue-50 hover:text-[#005bb5]'}`}>
+   546→            <Filter className="h-3 w-3" /> Filtros
+   547→          </button>
+   548→        </div>
+   549→
+   550→        {/* Collapsible Filters */}
+   551→        {showFilters && (
+   552→          <Card>
+   553→            <CardContent className="p-4">
+   554→              <div className="grid grid-cols-2 md:grid-cols-[1fr_1fr_1fr_auto_auto_auto_auto] gap-3 items-end">
+   555→                <div>
+   556→                  <Label className="text-xs uppercase font-bold text-slate-500">Desde</Label>
+   557→                  <Input type="date" value={fDesde} onChange={e => setFDesde(e.target.value)} />
+   558→                </div>
+   559→                <div>
+   560→                  <Label className="text-xs uppercase font-bold text-slate-500">Hasta</Label>
+   561→                  <Input type="date" value={fHasta} onChange={e => setFHasta(e.target.value)} />
+   562→                </div>
+   563→                <div>
+   564→                  <Label className="text-xs uppercase font-bold text-slate-500">Mes</Label>
+   565→                  <Input type="month" value={fMes} onChange={e => setFMes(e.target.value)} />
+   566→                </div>
+   567→                {/* Multi-select Cliente */}
+   568→                <div className="relative">
+   569→                  <Label className="text-xs uppercase font-bold text-slate-500">Cliente{fClientes.length > 0 ? ` (${fClientes.length})` : ''}</Label>
+   570→                  <button
+   571→                    type="button"
+   572→                    onClick={() => { setOpenClientes(!openClientes); setOpenC1(false); setOpenC2(false) }}
+   573→                    className="flex h-9 w-full items-center justify-between rounded-md border border-input bg-background px-3 text-sm shadow-sm"
+   574→                  >
+   575→                    <span className="truncate">{fClientes.length === 0 ? '— Todos —' : clientes.filter(c => fClientes.includes(c.id)).map(c => c.nombre).join(', ')}</span>
+   576→                    <ChevronDown className="h-4 w-4 opacity-50 shrink-0 ml-1" />
+   577→                  </button>
+   578→                  {openClientes && (
+   579→                    <div className="absolute z-50 mt-1 w-full min-w-[200px] bg-white border rounded-md shadow-lg max-h-48 overflow-y-auto">
+   580→                      {clientes.map(c => (
+   581→                        <label key={c.id} className="flex items-center gap-2 px-3 py-1.5 hover:bg-slate-50 cursor-pointer text-sm">
+   582→                          <Checkbox checked={fClientes.includes(c.id)} onCheckedChange={() => setFClientes(prev => toggleMulti(prev, c.id))} />
+   583→                          <span className="truncate">{c.nombre}</span>
+   584→                        </label>
+   585→                      ))}
+   586→                    </div>
+   587→                  )}
+   588→                </div>
+   589→                {/* Multi-select Concepto 1 */}
+   590→                <div className="relative">
+   591→                  <Label className="text-xs uppercase font-bold text-slate-500">Concepto 1{fC1s.length > 0 ? ` (${fC1s.length})` : ''}</Label>
+   592→                  <button
+   593→                    type="button"
+   594→                    onClick={() => { setOpenC1(!openC1); setOpenClientes(false); setOpenC2(false) }}
+   595→                    className="flex h-9 w-full items-center justify-between rounded-md border border-input bg-background px-3 text-sm shadow-sm"
+   596→                  >
+   597→                    <span className="truncate">{fC1s.length === 0 ? '— Todos —' : fC1s.join(', ')}</span>
+   598→                    <ChevronDown className="h-4 w-4 opacity-50 shrink-0 ml-1" />
+   599→                  </button>
+   600→                  {openC1 && (
+   601→                    <div className="absolute z-50 mt-1 w-full min-w-[200px] bg-white border rounded-md shadow-lg max-h-48 overflow-y-auto">
+   602→                      {allC1Options.map(opt => (
+   603→                        <label key={opt} className="flex items-center gap-2 px-3 py-1.5 hover:bg-slate-50 cursor-pointer text-sm">
+   604→                          <Checkbox checked={fC1s.includes(opt)} onCheckedChange={() => { setFC1s(prev => toggleMulti(prev, opt)); setFC2s([]) }} />
+   605→                          <span className="truncate">{opt}</span>
+   606→                        </label>
+   607→                      ))}
+   608→                    </div>
+   609→                  )}
+   610→                </div>
+   611→                {/* Multi-select Concepto 2 */}
+   612→                <div className="relative">
+   613→                  <Label className="text-xs uppercase font-bold text-slate-500">Concepto 2{fC2s.length > 0 ? ` (${fC2s.length})` : ''}</Label>
+   614→                  <button
+   615→                    type="button"
+   616→                    onClick={() => { setOpenC2(!openC2); setOpenClientes(false); setOpenC1(false) }}
+   617→                    className="flex h-9 w-full items-center justify-between rounded-md border border-input bg-background px-3 text-sm shadow-sm"
+   618→                  >
+   619→                    <span className="truncate">{fC2s.length === 0 ? '— Todos —' : fC2s.join(', ')}</span>
+   620→                    <ChevronDown className="h-4 w-4 opacity-50 shrink-0 ml-1" />
+   621→                  </button>
+   622→                  {openC2 && (
+   623→                    <div className="absolute z-50 mt-1 w-full min-w-[200px] bg-white border rounded-md shadow-lg max-h-48 overflow-y-auto">
+   624→                      {c2OptionsFiltered.map(opt => (
+   625→                        <label key={opt} className="flex items-center gap-2 px-3 py-1.5 hover:bg-slate-50 cursor-pointer text-sm">
+   626→                          <Checkbox checked={fC2s.includes(opt)} onCheckedChange={() => setFC2s(prev => toggleMulti(prev, opt))} />
+   627→                          <span className="truncate">{opt}</span>
+   628→                        </label>
+   629→                      ))}
+   630→                    </div>
+   631→                  )}
+   632→                </div>
+   633→                <Button variant="outline" onClick={() => { setFDesde(''); setFHasta(''); setFMes(''); setFClientes([]); setFC1s([]); setFC2s([]) }}>
+   634→                  <RotateCcw className="h-4 w-4" />
+   635→                </Button>
+   636→              </div>
+   637→            </CardContent>
+   638→          </Card>
+   639→        )}
+   640→
+   641→        {/* Invoice settings */}
+   642→        <Card>
+   643→          <CardContent className="p-4">
+   644→            <div className="grid grid-cols-2 md:grid-cols-[1fr_1fr_1fr_1fr_auto_auto_auto] gap-3 items-end">
+   645→              <div>
+   646→                <Label className="text-xs uppercase font-bold text-slate-500">Nº Factura</Label>
+   647→                <Input value={fNumero} onChange={e => setFNumero(e.target.value)} placeholder="auto" />
+   648→              </div>
+   649→              <div>
+   650→                <Label className="text-xs uppercase font-bold text-slate-500">Fecha factura</Label>
+   651→                <Input type="date" value={fFechaFact} onChange={e => setFFechaFact(e.target.value)} />
+   652→              </div>
+   653→              <div>
+   654→                <Label className="text-xs uppercase font-bold text-slate-500">IVA %</Label>
+   655→                <Input type="number" value={fIva} onChange={e => setFIva(e.target.value)} step="0.01" />
+   656→              </div>
+   657→              <div>
+   658→                <Label className="text-xs uppercase font-bold text-slate-500">Agrupar por</Label>
+   659→                <Select value={fModo} onValueChange={v => setFModo(v as 'dia' | 'mes')}>
+   660→                  <SelectTrigger><SelectValue /></SelectTrigger>
+   661→                  <SelectContent>
+   662→                    <SelectItem value="dia">Días</SelectItem>
+   663→                    <SelectItem value="mes">Mes</SelectItem>
+   664→                  </SelectContent>
+   665→                </Select>
+   666→              </div>
+   667→              <Button variant="outline" onClick={handleAlternos} title="Desmarca días alternos">
+   668→                <ArrowLeftRight className="h-4 w-4 mr-1" /> Alternos
+   669→              </Button>
+   670→              <Button variant="outline" onClick={() => { setFDesde(''); setFHasta(''); setFMes(''); setFClientes([]); setFC1s([]); setFC2s([]); setFNumero('') }}>
+   671→                <RotateCcw className="h-4 w-4 mr-1" /> Limpiar
+   672→              </Button>
+   673→              <Button onClick={handleGenerar} className="bg-green-600 hover:bg-green-700 text-white">
+   674→                <Receipt className="h-4 w-4 mr-1" /> GENERAR
+   675→              </Button>
+   676→            </div>
+   677→          </CardContent>
+   678→        </Card>
+   679→
+   680→        {/* Totals + Facturado filter */}
+   681→        <div className="flex flex-wrap gap-4 bg-white rounded-lg px-4 py-2.5 shadow-sm text-sm font-bold border items-center">
+   682→          <span>Líneas:<b className="text-[#005bb5] ml-1">{filtered.length}</b></span>
+   683→          <span>Seleccionadas:<b className="text-[#005bb5] ml-1">{selectedItems.length}</b></span>
+   684→          <span>Cantidad:<b className="text-[#005bb5] ml-1">{totalCant}</b></span>
+   685→          <span>Base:<b className="text-[#005bb5] ml-1">{fmtCurrency(totalBase)}</b></span>
+   686→          {selectedItems.some(r => r.facturado) && (
+   687→            <Button variant="outline" size="sm" onClick={handleQuitarFacturado} className="text-orange-600 border-orange-300 hover:bg-orange-50 text-xs h-7">
+   688→              <X className="h-3 w-3 mr-1" /> Quitar facturado
+   689→            </Button>
+   690→          )}
+   691→          <div className="ml-auto flex items-center gap-2">
+   692→            <Checkbox
+   693→              id="showFacturados"
+   694→              checked={showFacturados}
+   695→              onCheckedChange={(v) => setShowFacturados(v === true)}
+   696→            />
+   697→            <Label htmlFor="showFacturados" className="text-xs font-semibold text-slate-600 cursor-pointer select-none">
+   698→              Mostrar facturados
+   699→            </Label>
+   700→          </div>
+   701→        </div>
+   702→      </div>
+   703→
+   704→      {/* ─── SCROLLABLE TABLE ─── */}
+   705→      <div className="flex-1 min-h-0 bg-white rounded-lg border shadow-sm flex flex-col">
+   706→        <div className="flex-1 min-h-0 overflow-auto">
+   707→          <table className="w-full text-sm min-w-[700px]">
+   708→            <thead className="sticky top-0 z-10 shadow-sm">
+   709→              <tr className="bg-indigo-50">
+   710→                <th className="p-2 text-left border-b w-10 bg-indigo-50">
+   711→                  <Checkbox checked={checkAll} onCheckedChange={toggleAll} />
+   712→                </th>
+   713→                <th className="p-2 text-left font-semibold border-b bg-indigo-50">Fecha</th>
+   714→                <th className="p-2 text-left font-semibold border-b bg-indigo-50">Cliente</th>
+   715→                <th className="p-2 text-left font-semibold border-b bg-indigo-50">C1</th>
+   716→                <th className="p-2 text-left font-semibold border-b bg-indigo-50">C2</th>
+   717→                <th className="p-2 text-left font-semibold border-b bg-indigo-50">Cant</th>
+   718→                <th className="p-2 text-left font-semibold border-b bg-indigo-50">P.Unit</th>
+   719→                <th className="p-2 text-left font-semibold border-b bg-indigo-50">Importe</th>
+   720→                <th className="p-2 text-left font-semibold border-b bg-indigo-50">Obs</th>
+   721→              </tr>
+   722→            </thead>
+   723→            <tbody>
+   724→              {filtered.map(r => {
+   725→                const pu = getPrecio(r)
+   726→                const imp = pu * r.cant
+   727→                const sel = selection[r.id] !== false
+   728→                const isFacturado = r.facturado === true
+   729→                return (
+   730→                  <tr key={r.id} className={`border-b ${sel ? '' : 'opacity-40'} ${isFacturado ? 'border-l-4 border-l-green-500 bg-green-50/40' : ''}`}>
+   731→                    <td className="p-2 flex items-center gap-1">
+   732→                      <Checkbox checked={sel} onCheckedChange={() => toggleItem(r.id)} />
+   733→                      {isFacturado && (
+   734→                        <button
+   735→                          onClick={() => handleQuitarFacturadoSingle(r.id)}
+   736→                          title="Quitar estado facturado"
+   737→                          className="inline-flex items-center gap-0.5 text-[10px] font-bold text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full whitespace-nowrap hover:bg-red-100 hover:text-red-600 transition-colors cursor-pointer"
+   738→                        >
+   739→                          <CheckCircle2 className="h-3 w-3" /> Facturado
+   740→                          <X className="h-2.5 w-2.5 ml-0.5 opacity-60" />
+   741→                        </button>
+   742→                      )}
+   743→                    </td>
+   744→                    <td className="p-2">{fmtDate(r.fecha)}</td>
+   745→                    <td className="p-2">{r.cliente}</td>
+   746→                    <td className="p-2">{r.c1}</td>
+   747→                    <td className="p-2">{r.c2}</td>
+   748→                    <td className="p-2">{r.cant}</td>
+   749→                    <td className="p-2">{fmtCurrency(pu)}</td>
+   750→                    <td className="p-2 font-bold">{fmtCurrency(imp)}</td>
+   751→                    <td className="p-2">{r.obs}</td>
+   752→                  </tr>
+   753→                )
+   754→              })}
+   755→              {filtered.length === 0 && (
+   756→                <tr><td colSpan={9} className="p-6 text-center text-gray-400">No hay registros para facturar</td></tr>
+   757→              )}
+   758→            </tbody>
+   759→          </table>
+   760→        </div>
+   761→      </div>
+   762→
+   763→      {/* Invoice Modal */}
+   764→      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+   765→        <DialogContent className="max-w-[900px] max-h-[95vh] overflow-auto">
+   766→          <DialogHeader>
+   767→            <DialogTitle>Factura</DialogTitle>
+   768→          </DialogHeader>
+   769→          {invoiceData && <InvoicePreview data={invoiceData} catalogo={catalogo} config={config} />}
+   770→          <div className="flex gap-3 justify-end mt-4">
+   771→            <Button variant="outline" onClick={() => handlePrintInvoice(invoiceData!, catalogo, config)}>
+   772→              <Printer className="h-4 w-4 mr-1" /> Imprimir A4
+   773→            </Button>
+   774→            <Button className="bg-green-600 hover:bg-green-700 text-white" onClick={handleExportExcel}>
+   775→              <FileSpreadsheet className="h-4 w-4 mr-1" /> Excel
+   776→            </Button>
+   777→          </div>
+   778→        </DialogContent>
+   779→      </Dialog>
+   780→    </div>
+   781→  )
+   782→}
+   783→
+   784→function InvoicePreview({ data, catalogo, config }: {
+   785→  data: InvoiceData
+   786→  catalogo: CatalogoItem[]
+   787→  config: import('@/lib/config').ResolvedConfig | null
+   788→}) {
+   789→  const L = config?.labelsFacturas || DEFAULT_LABELS_FACTURAS
+   790→  const { cli, lineas, iva, numero, fechaFact, modo, base, ivaImp, total } = data
+   791→  const fechaLbl = (iso: string) => modo === 'mes' ? fmtMonth(iso) : fmtDate(iso)
+   792→
+   793→  function precioUnit(c1Val: string, c2Val: string, cliId: string): number {
+   794→    let it = catalogo.find(x => x.c1 === c1Val && x.c2 === c2Val && x.clienteId === cliId)
+   795→    if (!it) it = catalogo.find(x => x.c1 === c1Val && x.c2 === c2Val && !x.clienteId)
+   796→    if (!it) it = catalogo.find(x => x.c1 === c1Val && x.c2 === c2Val)
+   797→    return it ? Number(it.final) || 0 : 0
+   798→  }
+   799→
+   800→  return (
+   801→    <div id="invoice-print-area" className="font-[family-name:var(--font-geist-sans)] text-black text-[11pt] leading-[1.35]">
+   802→      {/* Header */}
+   803→      <div className="flex justify-between items-start gap-4 mb-4">
+   804→        <div className="text-[10.5pt] leading-[1.4]">
+   805→          <h2 className="text-[14pt] font-extrabold text-black mb-1">{config?.companyFullName || 'EMPRESA'}</h2>
+   806→          {config?.companyAddress && <>{config.companyAddress}<br /></>}
+   807→          {config?.companyCity && <>{config.companyCity}</>}
+   808→          {config?.companyProvince && <> {config.companyProvince}</>}
+   809→          {(config?.companyCity || config?.companyProvince) && <br />}
+   810→          {config?.companyCif && <><b>CIF:</b> {config.companyCif}<br /></>}
+   811→          <div className="mt-2 border border-black p-2 text-[10.5pt] w-fit">
+   812→            <b>{L.numero}:</b> {numero}<br />
+   813→            <b>{L.fecha}:</b> {fmtDate(fechaFact)}
+   814→          </div>
+   815→        </div>
+   816→        {config?.logo ? (
+   817→          <img
+   818→            src={config.logo.startsWith('data:') ? config.logo : `data:image/png;base64,${config.logo}`}
+   819→            alt="Logo"
+   820→            style={{ maxWidth: '230px', height: 'auto', objectFit: 'contain' }}
+   821→          />
+   822→        ) : null}
+   823→      </div>
+   824→
+   825→      {/* Client */}
+   826→      <div className="border border-black p-3 mb-4 text-[11pt] bg-gray-50">
+   827→        <b>{L.cliente}:</b> {cli.nombre}<br />
+   828→        {cli.cif && <><b>CIF:</b> {cli.cif}<br /></>}
+   829→        {cli.dir}{cli.dir && <br />}
+   830→        {cli.cp} {cli.ciudad} {cli.prov}
+   831→      </div>
+   832→
+   833→      {/* Lines */}
+   834→      <table className="w-full border-collapse text-[10.5pt] mb-3">
+   835→        <thead>
+   836→          <tr>
+   837→            <th className="bg-[#1a1a1a] text-white p-2 text-left border border-black text-[10pt] w-[90px]">{L.fecha}</th>
+   838→            <th className="bg-[#1a1a1a] text-white p-2 text-left border border-black text-[10pt]">{L.concepto}</th>
+   839→            <th className="bg-[#1a1a1a] text-white p-2 text-left border border-black text-[10pt] w-[60px]">{L.cantidad}</th>
+   840→            <th className="bg-[#1a1a1a] text-white p-2 text-left border border-black text-[10pt] w-[110px]">{L.precioUnitario}</th>
+   841→            <th className="bg-[#1a1a1a] text-white p-2 text-left border border-black text-[10pt] w-[110px]">{L.importe}</th>
+   842→          </tr>
+   843→        </thead>
+   844→        <tbody>
+   845→          {lineas.map((r, i) => {
+   846→            const pu = r.precioUnitario > 0 ? r.precioUnitario : precioUnit(r.c1, r.c2, r.clienteId)
+   847→            return (
+   848→              <tr key={i}>
+   849→                <td className="p-2 border border-gray-400">{fechaLbl(r.fecha)}</td>
+   850→                <td className="p-2 border border-gray-400">{r.c1}{r.c2 ? ' - ' + r.c2 : ''}{r.obs ? ` (${r.obs})` : ''}</td>
+   851→                <td className="p-2 border border-gray-400 text-right">{r.cant}</td>
+   852→                <td className="p-2 border border-gray-400 text-right">{pu.toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
+   853→                <td className="p-2 border border-gray-400 text-right">{(pu * r.cant).toLocaleString('es-ES', { minimumFractionDigits: 2 })}</td>
+   854→              </tr>
+   855→            )
+   856→          })}
+   857→        </tbody>
+   858→      </table>
+   859→
+   860→      {/* Totals */}
+   861→      <table className="ml-auto border-collapse text-[11pt]">
+   862→        <tbody>
+   863→          <tr>
+   864→            <td className="p-2 border border-black bg-gray-200 font-bold text-right min-w-[160px]">{L.baseImponible}</td>
+   865→            <td className="p-2 border border-black text-right min-w-[140px]">{fmtCurrency(base)}</td>
+   866→          </tr>
+   867→          <tr>
+   868→            <td className="p-2 border border-black bg-gray-200 font-bold text-right">IVA {iva}%</td>
+   869→            <td className="p-2 border border-black text-right">{fmtCurrency(ivaImp)}</td>
+   870→          </tr>
+   871→          <tr className="bg-[#2bb24c] text-white font-extrabold text-[12pt]">
+   872→            <td className="p-2 border border-black text-right">{L.totalFactura}</td>
+   873→            <td className="p-2 border border-black text-right">{fmtCurrency(total)}</td>
+   874→          </tr>
+   875→        </tbody>
+   876→      </table>
+   877→    </div>
+   878→  )
+   879→}
+   880→

@@ -1,0 +1,688 @@
+     1→     1→'use client'
+     2→     2→
+     3→     3→import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
+     4→     4→import { Card, CardContent } from '@/components/ui/card'
+     5→     5→import { Input } from '@/components/ui/input'
+     6→     6→import { Button } from '@/components/ui/button'
+     7→     7→import { Label } from '@/components/ui/label'
+     8→     8→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+     9→     9→import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+    10→    10→import { Filter, RotateCcw, FileSpreadsheet, Table2, CheckCircle2, Upload, Download, CheckCircle, AlertCircle, ChevronDown, Pencil, Trash2, Save, SquareCheck, X } from 'lucide-react'
+    11→    11→import { fmtCurrency, fmtDate, getISOWeek, type Cliente, type CatalogoItem, type Registro } from '@/lib/hualsa-utils'
+    12→    12→import { useConfig, DEFAULT_FIELDS_REGISTROS, type FieldDef, parseCustomData } from '@/lib/config'
+    13→    13→import { triggerBackup } from '@/lib/trigger-backup'
+    14→    14→
+    15→    15→interface RegistrosViewData {
+    16→    16→  registros: Registro[]
+    17→    17→  clientes: Cliente[]
+    18→    18→  catalogo: CatalogoItem[]
+    19→    19→}
+    20→    20→
+    21→    21→function useRegistrosData() {
+    22→    22→  const [data, setData] = useState<RegistrosViewData>({ registros: [], clientes: [], catalogo: [] })
+    23→    23→  const [loading, setLoading] = useState(false)
+    24→    24→
+    25→    25→  const loadData = useCallback(async () => {
+    26→    26→    setLoading(true)
+    27→    27→    const [rRes, cRes, catRes] = await Promise.all([
+    28→    28→      fetch('/api/registros?filter=registros'), fetch('/api/clientes'), fetch('/api/catalogo')
+    29→    29→    ])
+    30→    30→    setData({ registros: await rRes.json(), clientes: await cRes.json(), catalogo: await catRes.json() })
+    31→    31→    setLoading(false)
+    32→    32→  }, [])
+    33→    33→
+    34→    34→  return { data, loadData, loading }
+    35→    35→}
+    36→    36→
+    37→    37→export function RegistrosView() {
+    38→    38→  const { data, loadData, loading } = useRegistrosData()
+    39→    39→  const { config } = useConfig()
+    40→    40→  const fieldDefs = config?.fieldsRegistros || DEFAULT_FIELDS_REGISTROS
+    41→    41→  const visibleFields = fieldDefs.filter(f => f.visible)
+    42→    42→
+    43→    43→  const [fDesde, setFDesde] = useState('')
+    44→    44→  const [fHasta, setFHasta] = useState('')
+    45→    45→  const [fCliente, setFCliente] = useState('')
+    46→    46→  const [fC1, setFC1] = useState('')
+    47→    47→  const [fC2, setFC2] = useState('')
+    48→    48→  const [fQ, setFQ] = useState('')
+    49→    49→
+    50→    50→  // Excel import
+    51→    51→  const [importModalOpen, setImportModalOpen] = useState(false)
+    52→    52→  const [importPreview, setImportPreview] = useState<Partial<Registro & { precioUnitario?: number; importe?: number }>[]>([])
+    53→    53→  const [importErrors, setImportErrors] = useState<string[]>([])
+    54→    54→  const [importing, setImporting] = useState(false)
+    55→    55→  const [showExcelTools, setShowExcelTools] = useState(false)
+    56→    56→  const fileInputRef = useRef<HTMLInputElement>(null)
+    57→    57→
+    58→    58→  // Bulk selection
+    59→    59→  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+    60→    60→  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false)
+    61→    61→  const [deletingBulk, setDeletingBulk] = useState(false)
+    62→    62→
+    63→    63→  // UI collapse states
+    64→    64→  const [showFilters, setShowFilters] = useState(true)
+    65→    65→
+    66→    66→  // Edit state
+    67→    67→  const [editingId, setEditingId] = useState<string | null>(null)
+    68→    68→  const [editFecha, setEditFecha] = useState('')
+    69→    69→  const [editClienteId, setEditClienteId] = useState('')
+    70→    70→  const [editC1, setEditC1] = useState('')
+    71→    71→  const [editC2, setEditC2] = useState('')
+    72→    72→  const [editCant, setEditCant] = useState('')
+    73→    73→  const [editObs, setEditObs] = useState('')
+    74→    74→  const [editPrecioUnitario, setEditPrecioUnitario] = useState('')
+    75→    75→  const [editModalOpen, setEditModalOpen] = useState(false)
+    76→    76→
+    77→    77→  const [statusMsg, setStatusMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null)
+    78→    78→
+    79→    79→  useEffect(() => { loadData() }, [loadData])
+    80→    80→
+    81→    81→  const { registros, clientes, catalogo } = data
+    82→    82→
+    83→    83→  // Helper: get label for a field key
+    84→    84→  function getLabel(key: string): string {
+    85→    85→    return fieldDefs.find(f => f.key === key)?.label || key
+    86→    86→  }
+    87→    87→
+    88→    88→  function precioUnit(c1Val: string, c2Val: string, cliId: string): number {
+    89→    89→    let it = catalogo.find(x => x.c1 === c1Val && x.c2 === c2Val && x.clienteId === cliId)
+    90→    90→    if (!it) it = catalogo.find(x => x.c1 === c1Val && x.c2 === c2Val && !x.clienteId)
+    91→    91→    if (!it) it = catalogo.find(x => x.c1 === c1Val && x.c2 === c2Val)
+    92→    92→    return it ? Number(it.final) || 0 : 0
+    93→    93→  }
+    94→    94→
+    95→    95→  // Use stored precioUnitario if available, otherwise fall back to catalog lookup
+    96→    96→  function getPrecio(r: Registro): number {
+    97→    97→    return r.precioUnitario > 0 ? r.precioUnitario : precioUnit(r.c1, r.c2, r.clienteId)
+    98→    98→  }
+    99→    99→
+   100→   100→  const c1FilterOptions = [...new Set(catalogo.map(x => x.c1))].sort()
+   101→   101→  const c2FilterOptions = useMemo(() => [...new Set(catalogo.filter(x => !fC1 || fC1 === '__all__' || x.c1 === fC1).map(x => x.c2))].sort(), [catalogo, fC1])
+   102→   102→
+   103→   103→  const filtered = registros.filter(r => {
+   104→   104→    if (fDesde && r.fecha < fDesde) return false
+   105→   105→    if (fHasta && r.fecha > fHasta) return false
+   106→   106→    if (fCliente && fCliente !== '__all__' && r.clienteId !== fCliente) return false
+   107→   107→    if (fC1 && fC1 !== '__all__' && r.c1 !== fC1) return false
+   108→   108→    if (fC2 && fC2 !== '__all__' && r.c2 !== fC2) return false
+   109→   109→    if (fQ) { const blob = (r.c1 + ' ' + r.c2 + ' ' + (r.obs || '') + ' ' + (r.cliente || '')).toLowerCase(); if (!blob.includes(fQ.toLowerCase())) return false }
+   110→   110→    return true
+   111→   111→  }).sort((a, b) => a.fecha.localeCompare(b.fecha))
+   112→   112→
+   113→   113→  let tCant = 0, tImp = 0
+   114→   114→  filtered.forEach(r => { tCant += r.cant; tImp += getPrecio(r) * r.cant })
+   115→   115→
+   116→   116→  function showStatus(type: 'ok' | 'err', text: string) {
+   117→   117→    setStatusMsg({ type, text }); setTimeout(() => setStatusMsg(null), 4000)
+   118→   118→  }
+   119→   119→
+   120→   120→  // ─── Excel helpers ─────────────────────────────────────────
+   121→   121→
+   122→   122→  function getRowVal(row: Record<string, unknown>, ...keys: string[]): string {
+   123→   123→    for (const k of keys) { if (row[k] !== undefined && row[k] !== null && row[k] !== '') return String(row[k]).trim() }
+   124→   124→    return ''
+   125→   125→  }
+   126→   126→
+   127→   127→  function parseExcelDate(val: string): string {
+   128→   128→    if (!val) return ''
+   129→   129→    // Try ISO format: 2024-01-15
+   130→   130→    const isoMatch = String(val).match(/^(\d{4})-(\d{2})-(\d{2})/)
+   131→   131→    if (isoMatch) return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`
+   132→   132→    // Try DD/MM/YYYY
+   133→   133→    const dmyMatch = String(val).match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})/)
+   134→   134→    if (dmyMatch) return `${dmyMatch[3]}-${dmyMatch[2].padStart(2, '0')}-${dmyMatch[1].padStart(2, '0')}`
+   135→   135→    // Try Excel serial number
+   136→   136→    const num = Number(val)
+   137→   137→    if (!isNaN(num) && num > 30000 && num < 60000) {
+   138→   138→      const excelEpoch = new Date(1899, 11, 30)
+   139→   139→      excelEpoch.setDate(excelEpoch.getDate() + Math.floor(num))
+   140→   140→      // Use local date methods to avoid timezone offset (toISOString uses UTC)
+   141→   141→      const y = excelEpoch.getFullYear()
+   142→   142→      const m = String(excelEpoch.getMonth() + 1).padStart(2, '0')
+   143→   143→      const d = String(excelEpoch.getDate()).padStart(2, '0')
+   144→   144→      return `${y}-${m}-${d}`
+   145→   145→    }
+   146→   146→    return ''
+   147→   147→  }
+   148→   148→
+   149→   149→  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+   150→   150→    const file = e.target.files?.[0]; if (!file) return
+   151→   151→    const reader = new FileReader()
+   152→   152→    reader.onload = async (evt) => {
+   153→   153→      try {
+   154→   154→        const XLSX = await import('xlsx')
+   155→   155→        const arrData = new Uint8Array(evt.target?.result as ArrayBuffer)
+   156→   156→        const workbook = XLSX.read(arrData, { type: 'array', cellDates: false })
+   157→   157→        const sheet = workbook.Sheets[workbook.SheetNames[0]]
+   158→   158→        const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '', blankrows: false, raw: true })
+   159→   159→        if (rawRows.length === 0) { setImportErrors(['El archivo está vacío']); setImportPreview([]); setImportModalOpen(true); return }
+   160→   160→
+   161→   161→        const errors: string[] = []
+   162→   162→        const preview: Partial<Registro & { precioUnitario?: number; importe?: number }>[] = []
+   163→   163→
+   164→   164→        // Fetch clientes for matching
+   165→   165→        const clientesRes = await fetch('/api/clientes')
+   166→   166→        const clientesList: Cliente[] = await clientesRes.json()
+   167→   167→
+   168→   168→        rawRows.forEach((row, idx) => {
+   169→   169→          const rowNum = idx + 2
+   170→   170→          const rawFecha = getRowVal(row, getLabel('fecha'), 'FECHA', 'Fecha', 'fecha', 'DATE')
+   171→   171→          const rawCliente = getRowVal(row, getLabel('cliente'), 'CLIENTE', 'Cliente', 'cliente')
+   172→   172→          const rawC1 = getRowVal(row, getLabel('c1'), 'CONCEPTO 1', 'Concepto 1', 'C1', 'c1')
+   173→   173→          const rawC2 = getRowVal(row, getLabel('c2'), 'CONCEPTO 2', 'Concepto 2', 'C2', 'c2')
+   174→   174→          const rawCant = getRowVal(row, getLabel('cantidad'), 'CANTIDAD', 'Cant', 'Cantidad', 'CANT', 'cantidad')
+   175→   175→          const rawObs = getRowVal(row, getLabel('observaciones'), 'OBSERVACIONES', 'Obs', 'Observaciones', 'obs')
+   176→   176→
+   177→   177→          // Skip empty rows
+   178→   178→          if (!rawFecha && !rawCliente && !rawC1 && !rawC2 && !rawCant) return
+   179→   179→
+   180→   180→          const fechaParsed = parseExcelDate(rawFecha)
+   181→   181→          if (!fechaParsed) errors.push(`Fila ${rowNum}: Fecha inválida "${rawFecha}"`)
+   182→   182→          if (!rawC1) errors.push(`Fila ${rowNum}: Concepto 1 vacío`)
+   183→   183→          if (!rawC2) errors.push(`Fila ${rowNum}: Concepto 2 vacío`)
+   184→   184→
+   185→   185→          // Match cliente
+   186→   186→          const matchedCliente = rawCliente
+   187→   187→            ? clientesList.find(c => c.nombre.toLowerCase() === rawCliente.toLowerCase() || c.nombre.toLowerCase().includes(rawCliente.toLowerCase()))
+   188→   188→            : null
+   189→   189→
+   190→   190→          if (rawCliente && !matchedCliente) errors.push(`Fila ${rowNum}: Cliente "${rawCliente}" no encontrado`)
+   191→   191→
+   192→   192→          const cantNum = Number(rawCant) || 1
+   193→   193→          const clienteId = matchedCliente?.id || ''
+   194→   194→          const pu = precioUnit(rawC1, rawC2, clienteId)
+   195→   195→          const imp = pu * cantNum
+   196→   196→
+   197→   197→          preview.push({
+   198→   198→            fecha: fechaParsed,
+   199→   199→            clienteId,
+   200→   200→            cliente: matchedCliente?.nombre || rawCliente || '',
+   201→   201→            c1: rawC1,
+   202→   202→            c2: rawC2,
+   203→   203→            cant: cantNum,
+   204→   204→            obs: rawObs,
+   205→   205→            precioUnitario: pu,
+   206→   206→            importe: imp,
+   207→   207→          })
+   208→   208→        })
+   209→   209→
+   210→   210→        setImportErrors(errors); setImportPreview(preview); setImportModalOpen(true)
+   211→   211→      } catch (err) {
+   212→   212→        setImportErrors(['Error leyendo el archivo: ' + String(err)]); setImportPreview([]); setImportModalOpen(true)
+   213→   213→      }
+   214→   214→    }
+   215→   215→    reader.readAsArrayBuffer(file)
+   216→   216→    if (fileInputRef.current) fileInputRef.current.value = ''
+   217→   217→  }
+   218→   218→
+   219→   219→  async function handleImportConfirm() {
+   220→   220→    if (importPreview.length === 0) return
+   221→   221→    setImporting(true)
+   222→   222→    try {
+   223→   223→      const validRows = importPreview.filter(r => r.fecha && r.c1 && r.c2)
+   224→   224→      if (validRows.length === 0) { showStatus('err', 'No hay filas válidas (requieren fecha y conceptos)'); setImporting(false); return }
+   225→   225→
+   226→   226→      const res = await fetch('/api/registros', {
+   227→   227→        method: 'POST',
+   228→   228→        headers: { 'Content-Type': 'application/json' },
+   229→   229→        body: JSON.stringify({
+   230→   230→          batch: validRows.map(r => ({
+   231→   231→            fecha: r.fecha,
+   232→   232→            clienteId: r.clienteId || '',
+   233→   233→            cliente: r.cliente || '',
+   234→   234→            c1: r.c1 || '',
+   235→   235→            c2: r.c2 || '',
+   236→   236→            cant: r.cant || 1,
+   237→   237→            obs: r.obs || '',
+   238→   238→          }))
+   239→   239→        })
+   240→   240→      })
+   241→   241→      if (res.ok) {
+   242→   242→        const result = await res.json()
+   243→   243→        showStatus('ok', `${result.count || validRows.length} registros importados ✓`)
+   244→   244→        setImportModalOpen(false); setImportPreview([]); setImportErrors([])
+   245→   245→        triggerBackup(); loadData()
+   246→   246→      } else {
+   247→   247→        const d = await res.json().catch(() => ({}))
+   248→   248→        showStatus('err', d.error || 'Error importando')
+   249→   249→      }
+   250→   250→    } catch (err) {
+   251→   251→      showStatus('err', 'Error: ' + String(err))
+   252→   252→    }
+   253→   253→    setImporting(false)
+   254→   254→  }
+   255→   255→
+   256→   256→  async function handleExportTemplate() {
+   257→   257→    const XLSX = await import('xlsx')
+   258→   258→    const header = [getLabel('fecha'), getLabel('cliente'), getLabel('c1'), getLabel('c2'), getLabel('cantidad'), getLabel('observaciones')]
+   259→   259→    const exampleRow = ['15/01/2025', 'Cliente Ejemplo', 'Grupo', 'Servicio', '5', 'Observaciones opcionales']
+   260→   260→    const ws = XLSX.utils.aoa_to_sheet([header, exampleRow])
+   261→   261→    ws['!cols'] = [{ wch: 14 }, { wch: 25 }, { wch: 20 }, { wch: 20 }, { wch: 10 }, { wch: 30 }]
+   262→   262→    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Registros')
+   263→   263→    const appName = config?.appName || 'HUALSA'; XLSX.writeFile(wb, `Plantilla_Registros_${appName}.xlsx`)
+   264→   264→  }
+   265→   265→
+   266→   266→  async function handleExportData() {
+   267→   267→    const XLSX = await import('xlsx')
+   268→   268→    const rows = filtered.map(r => {
+   269→   269→      const pu = getPrecio(r)
+   270→   270→      const imp = pu * r.cant
+   271→   271→      const customData = parseCustomData((r as Record<string, unknown>).customData as string || '')
+   272→   272→      const row: Record<string, unknown> = {
+   273→   273→        Fecha: fmtDate(r.fecha), Mes: new Date(r.fecha).getMonth() + 1, Sem: getISOWeek(r.fecha),
+   274→   274→        Cliente: r.cliente, 'Concepto 1': r.c1, 'Concepto 2': r.c2,
+   275→   275→        Cantidad: r.cant, 'P.Unitario': pu, Importe: imp, Observaciones: r.obs,
+   276→   276→      }
+   277→   277→      // Add custom fields
+   278→   278→      visibleFields.filter(f => f.isCustom).forEach(f => { row[f.label] = customData[f.key] || '' })
+   279→   279→      return row
+   280→   280→    })
+   281→   281→    const ws = XLSX.utils.json_to_sheet(rows)
+   282→   282→    ws['!cols'] = [{ wch: 12 }, { wch: 8 }, { wch: 6 }, { wch: 25 }, { wch: 20 }, { wch: 20 }, { wch: 10 }, { wch: 12 }, { wch: 14 }, { wch: 30 }]
+   283→   283→    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Registros')
+   284→   284→    const totalsWs = XLSX.utils.json_to_sheet([{ 'TOTAL CANTIDAD': tCant, 'TOTAL IMPORTE': tImp, 'Nº LÍNEAS': filtered.length }])
+   285→   285→    XLSX.utils.book_append_sheet(wb, totalsWs, 'Resumen')
+   286→   286→    const appName = config?.appName || 'HUALSA'; const _d = new Date(); const _p = (n: number) => String(n).padStart(2, '0'); XLSX.writeFile(wb, `Registros_${appName}_${_d.getFullYear()}-${_p(_d.getMonth() + 1)}-${_p(_d.getDate())}.xlsx`)
+   287→   287→  }
+   288→   288→
+   289→   289→  function handleEdit(r: Registro) {
+   290→   290→    setEditingId(r.id)
+   291→   291→    setEditFecha(r.fecha)
+   292→   292→    setEditClienteId(r.clienteId)
+   293→   293→    setEditC1(r.c1)
+   294→   294→    setEditC2(r.c2)
+   295→   295→    setEditCant(String(r.cant))
+   296→   296→    setEditObs(r.obs || '')
+   297→   297→    setEditPrecioUnitario(r.precioUnitario > 0 ? String(r.precioUnitario) : '')
+   298→   298→    setEditModalOpen(true)
+   299→   299→  }
+   300→   300→
+   301→   301→  function resetEditForm() {
+   302→   302→    setEditingId(null); setEditFecha(''); setEditClienteId(''); setEditC1(''); setEditC2(''); setEditCant(''); setEditObs(''); setEditPrecioUnitario(''); setEditModalOpen(false)
+   303→   303→  }
+   304→   304→
+   305→   305→  async function handleUpdate() {
+   306→   306→    if (!editingId) return
+   307→   307→    if (!editFecha || !editClienteId || !editC1 || !editC2 || !editCant) {
+   308→   308→      showStatus('err', 'Completa fecha, cliente, conceptos y cantidad')
+   309→   309→      return
+   310→   310→    }
+   311→   311→    const matchedCliente = clientes.find(c => c.id === editClienteId)
+   312→   312→    try {
+   313→   313→      const res = await fetch('/api/registros', {
+   314→   314→        method: 'PUT',
+   315→   315→        headers: { 'Content-Type': 'application/json' },
+   316→   316→        body: JSON.stringify({
+   317→   317→          id: editingId,
+   318→   318→          fecha: editFecha,
+   319→   319→          clienteId: editClienteId,
+   320→   320→          cliente: matchedCliente?.nombre || '',
+   321→   321→          c1: editC1,
+   322→   322→          c2: editC2,
+   323→   323→          cant: Number(editCant) || 1,
+   324→   324→          obs: editObs,
+   325→   325→          precioUnitario: editPrecioUnitario ? Number(editPrecioUnitario) : undefined,
+   326→   326→        })
+   327→   327→      })
+   328→   328→      if (res.ok) {
+   329→   329→        showStatus('ok', 'Registro actualizado ✓')
+   330→   330→        resetEditForm()
+   331→   331→        triggerBackup()
+   332→   332→        loadData()
+   333→   333→      } else {
+   334→   334→        const d = await res.json().catch(() => ({}))
+   335→   335→        showStatus('err', d.error || 'Error actualizando')
+   336→   336→      }
+   337→   337→    } catch (err) {
+   338→   338→      showStatus('err', 'Error: ' + String(err))
+   339→   339→    }
+   340→   340→  }
+   341→   341→
+   342→   342→  async function handleDelete(id: string) {
+   343→   343→    if (!confirm('¿Eliminar registro?')) return
+   344→   344→    try {
+   345→   345→      const res = await fetch(`/api/registros?id=${id}`, { method: 'DELETE' })
+   346→   346→      if (res.ok) {
+   347→   347→        showStatus('ok', 'Registro eliminado')
+   348→   348→        triggerBackup()
+   349→   349→        loadData()
+   350→   350→      } else {
+   351→   351→        showStatus('err', 'Error eliminando registro')
+   352→   352→      }
+   353→   353→    } catch (err) {
+   354→   354→      showStatus('err', 'Error: ' + String(err))
+   355→   355→    }
+   356→   356→  }
+   357→   357→
+   358→   358→  function toggleSelect(id: string) {
+   359→   359→    setSelectedIds(prev => {
+   360→   360→      const next = new Set(prev)
+   361→   361→      if (next.has(id)) next.delete(id); else next.add(id)
+   362→   362→      return next
+   363→   363→    })
+   364→   364→  }
+   365→   365→
+   366→   366→  function toggleSelectAll() {
+   367→   367→    if (selectedIds.size === filtered.length && filtered.length > 0) {
+   368→   368→      setSelectedIds(new Set())
+   369→   369→    } else {
+   370→   370→      setSelectedIds(new Set(filtered.map(r => r.id)))
+   371→   371→    }
+   372→   372→  }
+   373→   373→
+   374→   374→  function selectVisible() {
+   375→   375→    setSelectedIds(new Set(filtered.map(r => r.id)))
+   376→   376→  }
+   377→   377→
+   378→   378→  function clearSelection() {
+   379→   379→    setSelectedIds(new Set())
+   380→   380→  }
+   381→   381→
+   382→   382→  async function handleBulkDelete() {
+   383→   383→    if (selectedIds.size === 0) return
+   384→   384→    setDeletingBulk(true)
+   385→   385→    try {
+   386→   386→      const ids = Array.from(selectedIds)
+   387→   387→      const res = await fetch('/api/registros', {
+   388→   388→        method: 'DELETE',
+   389→   389→        headers: { 'Content-Type': 'application/json' },
+   390→   390→        body: JSON.stringify({ ids })
+   391→   391→      })
+   392→   392→      if (res.ok) {
+   393→   393→        const result = await res.json()
+   394→   394→        showStatus('ok', `${result.count || ids.length} registros eliminados`)
+   395→   395→        setSelectedIds(new Set())
+   396→   396→        setBulkDeleteConfirm(false)
+   397→   397→        triggerBackup()
+   398→   398→        loadData()
+   399→   399→      } else {
+   400→   400→        const d = await res.json().catch(() => ({}))
+   401→   401→        showStatus('err', d.error || 'Error eliminando registros')
+   402→   402→      }
+   403→   403→    } catch (err) {
+   404→   404→      showStatus('err', 'Error: ' + String(err))
+   405→   405→    }
+   406→   406→    setDeletingBulk(false)
+   407→   407→  }
+   408→   408→
+   409→   409→  // Get cell value for a field
+   410→   410→  function getCellValue(r: Registro, field: FieldDef): React.ReactNode {
+   411→   411→    const pu = getPrecio(r)
+   412→   412→    const imp = pu * r.cant
+   413→   413→    const d = new Date(r.fecha)
+   414→   414→    const customData = parseCustomData((r as Record<string, unknown>).customData as string || '')
+   415→   415→
+   416→   416→    if (field.isCustom) return String(customData[field.key] || '')
+   417→   417→
+   418→   418→    switch (field.key) {
+   419→   419→      case 'fecha': return fmtDate(r.fecha)
+   420→   420→      case 'mes': return d.getMonth() + 1
+   421→   421→      case 'semana': return getISOWeek(r.fecha)
+   422→   422→      case 'cliente': return r.cliente
+   423→   423→      case 'c1': return r.c1
+   424→   424→      case 'c2': return r.c2
+   425→   425→      case 'cantidad': return r.cant
+   426→   426→      case 'precioUnitario': return fmtCurrency(pu)
+   427→   427→      case 'importe': return fmtCurrency(imp)
+   428→   428→      case 'observaciones': return r.obs
+   429→   429→      case 'facturado': return r.facturado
+   430→   430→        ? <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-green-700 bg-green-100 px-1.5 py-0.5 rounded-full whitespace-nowrap"><CheckCircle2 className="h-3 w-3" /> Facturado</span>
+   431→   431→        : <span className="text-[10px] text-gray-400">—</span>
+   432→   432→      default: return ''
+   433→   433→    }
+   434→   434→  }
+   435→   435→
+   436→   436→  return (
+   437→   437→    <div className="flex flex-col flex-1 min-h-0">
+   438→   438→      {/* ─── FIXED HEADER ─── */}
+   439→   439→      <div className="flex-shrink-0 space-y-3 pb-2">
+   440→   440→        {statusMsg && (
+   441→   441→          <div className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium ${statusMsg.type === 'ok' ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+   442→   442→            {statusMsg.type === 'ok' ? <CheckCircle className="h-4 w-4" /> : <AlertCircle className="h-4 w-4" />}{statusMsg.text}
+   443→   443→          </div>
+   444→   444→        )}
+   445→   445→
+   446→   446→        {/* Title + toggle buttons */}
+   447→   447→        <div className="flex items-center gap-2 flex-wrap">
+   448→   448→          <Table2 className="h-5 w-5 text-[#005bb5]" />
+   449→   449→          <h2 className="text-lg font-bold text-gray-700">Registros</h2>
+   450→   450→          <button onClick={() => setShowFilters(!showFilters)} className={`ml-2 inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full border transition-colors ${showFilters ? 'bg-blue-50 text-[#005bb5] border-blue-200' : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-blue-50 hover:text-[#005bb5]'}`}>
+   451→   451→            <Filter className="h-3 w-3" /> Filtros
+   452→   452→          </button>
+   453→   453→          <button onClick={() => setShowExcelTools(!showExcelTools)} className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full border transition-colors ${showExcelTools ? 'bg-blue-50 text-[#005bb5] border-blue-200' : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-blue-50 hover:text-[#005bb5]'}`}>
+   454→   454→            <FileSpreadsheet className="h-3 w-3" /> Transferir tabla
+   455→   455→          </button>
+   456→   456→        </div>
+   457→   457→
+   458→   458→        {/* Collapsible Filters */}
+   459→   459→        {showFilters && (
+   460→   460→          <Card>
+   461→   461→            <CardContent className="p-4">
+   462→   462→              <div className="grid grid-cols-2 md:grid-cols-[1fr_1fr_1fr_1fr_1fr_1fr_auto_auto] gap-3 items-end">
+   463→   463→                <div><Label className="text-xs uppercase font-bold text-slate-500">Desde</Label><Input type="date" value={fDesde} onChange={e => setFDesde(e.target.value)} /></div>
+   464→   464→                <div><Label className="text-xs uppercase font-bold text-slate-500">Hasta</Label><Input type="date" value={fHasta} onChange={e => setFHasta(e.target.value)} /></div>
+   465→   465→                <div><Label className="text-xs uppercase font-bold text-slate-500">Cliente</Label><Select value={fCliente} onValueChange={setFCliente}><SelectTrigger><SelectValue placeholder="— Todos —" /></SelectTrigger><SelectContent><SelectItem value="__all__">— Todos —</SelectItem>{clientes.map(c => <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>)}</SelectContent></Select></div>
+   466→   466→                <div><Label className="text-xs uppercase font-bold text-slate-500">Concepto 1</Label><Select value={fC1} onValueChange={v => { setFC1(v); setFC2('') }}><SelectTrigger><SelectValue placeholder="— Todos —" /></SelectTrigger><SelectContent><SelectItem value="__all__">— Todos —</SelectItem>{c1FilterOptions.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select></div>
+   467→   467→                <div><Label className="text-xs uppercase font-bold text-slate-500">Concepto 2</Label><Select value={fC2} onValueChange={setFC2}><SelectTrigger><SelectValue placeholder="— Todos —" /></SelectTrigger><SelectContent><SelectItem value="__all__">— Todos —</SelectItem>{c2FilterOptions.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent></Select></div>
+   468→   468→                <div><Label className="text-xs uppercase font-bold text-slate-500">Buscar</Label><Input value={fQ} onChange={e => setFQ(e.target.value)} placeholder="Texto..." /></div>
+   469→   469→                <Button variant="default" className="bg-[#005bb5] hover:bg-[#003d7a] text-white"><Filter className="h-4 w-4 mr-1" /> FILTRAR</Button>
+   470→   470→                <Button variant="outline" onClick={() => { setFDesde(''); setFHasta(''); setFCliente(''); setFC1(''); setFC2(''); setFQ('') }}><RotateCcw className="h-4 w-4" /></Button>
+   471→   471→              </div>
+   472→   472→            </CardContent>
+   473→   473→          </Card>
+   474→   474→        )}
+   475→   475→
+   476→   476→        {/* Collapsible Transferir tabla */}
+   477→   477→        {showExcelTools && (
+   478→   478→          <Card>
+   479→   479→            <CardContent className="p-4">
+   480→   480→              <div className="flex flex-wrap gap-3">
+   481→   481→                <Button onClick={() => fileInputRef.current?.click()} className="bg-[#005bb5] hover:bg-[#003d7a] text-white"><Upload className="h-4 w-4 mr-2" /> IMPORTAR</Button>
+   482→   482→                <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFileSelect} />
+   483→   483→                <Button onClick={handleExportData} variant="outline" disabled={filtered.length === 0}><Download className="h-4 w-4 mr-2" /> EXPORTAR</Button>
+   484→   484→                <Button onClick={handleExportTemplate} variant="outline" className="border-dashed"><FileSpreadsheet className="h-4 w-4 mr-2" /> PLANTILLA</Button>
+   485→   485→              </div>
+   486→   486→              <p className="text-[11px] text-gray-400 leading-relaxed mt-2">Columnas: {getLabel('fecha')} · {getLabel('cliente')} · {getLabel('c1')} · {getLabel('c2')} · {getLabel('cantidad')} · {getLabel('observaciones')} (opcional)</p>
+   487→   487→            </CardContent>
+   488→   488→          </Card>
+   489→   489→        )}
+   490→   490→
+   491→   491→        {/* Bulk selection bar */}
+   492→   492→        {selectedIds.size > 0 && (
+   493→   493→          <div className="flex items-center gap-3 bg-rose-50 border border-rose-200 rounded-lg px-4 py-3">
+   494→   494→            <SquareCheck className="h-5 w-5 text-rose-600" />
+   495→   495→            <span className="text-sm font-bold text-rose-700">{selectedIds.size} seleccionado{selectedIds.size > 1 ? 's' : ''}</span>
+   496→   496→            <Button onClick={selectVisible} variant="outline" size="sm" className="text-xs h-8">Todos visibles</Button>
+   497→   497→            <Button onClick={clearSelection} variant="outline" size="sm" className="text-xs h-8">Ninguno</Button>
+   498→   498→            <div className="flex-1" />
+   499→   499→            <Button onClick={() => setBulkDeleteConfirm(true)} className="bg-rose-600 hover:bg-rose-700 text-white h-9"><Trash2 className="h-4 w-4 mr-2" />ELIMINAR SELECCIONADOS</Button>
+   500→   500→            <Button onClick={clearSelection} variant="ghost" size="icon" className="h-8 w-8 text-rose-400"><X className="h-4 w-4" /></Button>
+   501→   501→          </div>
+   502→   502→        )}
+   503→   503→
+   504→   504→        {/* Stats bar — always visible */}
+   505→   505→        <div className="flex flex-wrap gap-4 bg-white rounded-lg px-4 py-2.5 shadow-sm text-sm font-bold border">
+   506→   506→          <span>Líneas:<b className="text-[#005bb5] ml-1">{filtered.length}</b></span>
+   507→   507→          <span>Cantidad:<b className="text-[#005bb5] ml-1">{tCant}</b></span>
+   508→   508→          <span>Importe:<b className="text-[#2bb24c] ml-1">{fmtCurrency(tImp)}</b></span>
+   509→   509→          {selectedIds.size === 0 && filtered.length > 0 && (
+   510→   510→            <>
+   511→   511→              <div className="flex-1" />
+   512→   512→              <Button onClick={toggleSelectAll} variant="outline" size="sm" className="text-xs h-7 border-dashed"><SquareCheck className="h-3.5 w-3.5 mr-1" /> Seleccionar</Button>
+   513→   513→            </>
+   514→   514→          )}
+   515→   515→        </div>
+   516→   516→      </div>
+   517→   517→
+   518→   518→      {/* ─── SCROLLABLE TABLE ─── */}
+   519→   519→      <div className="flex-1 min-h-0 bg-white rounded-lg border shadow-sm flex flex-col">
+   520→   520→        <div className="flex-1 min-h-0 overflow-auto">
+   521→   521→          <table className="w-full text-sm min-w-[900px]">
+   522→   522→            <thead className="sticky top-0 z-10 shadow-sm">
+   523→   523→              <tr className="bg-[#005bb5] text-white">
+   524→   524→                {selectedIds.size > 0 && (
+   525→   525→                  <th className="p-2.5 text-center border-b border-[#004a94] w-10 bg-[#005bb5]">
+   526→   526→                    <input type="checkbox" checked={selectedIds.size === filtered.length && filtered.length > 0} onChange={toggleSelectAll} className="h-4 w-4 accent-[#005bb5] cursor-pointer" />
+   527→   527→                  </th>
+   528→   528→                )}
+   529→   529→                {visibleFields.map(f => (
+   530→   530→                  <th key={f.key} className="p-2.5 text-left font-semibold border-b border-[#004a94] bg-[#005bb5]">{f.label}</th>
+   531→   531→                ))}
+   532→   532→                <th className="p-2.5 text-left font-semibold border-b border-[#004a94] bg-[#005bb5]">Acc.</th>
+   533→   533→              </tr>
+   534→   534→            </thead>
+   535→   535→            <tbody>
+   536→   536→              {filtered.map(r => {
+   537→   537→                const isSelected = selectedIds.has(r.id)
+   538→   538→                return (
+   539→   539→                <tr key={r.id} className={`border-b transition-colors ${isSelected ? 'bg-rose-50' : 'hover:bg-blue-50/50'}`}>
+   540→   540→                  {selectedIds.size > 0 && (
+   541→   541→                    <td className="p-2 text-center">
+   542→   542→                      <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(r.id)} className="h-4 w-4 accent-[#005bb5] cursor-pointer" />
+   543→   543→                    </td>
+   544→   544→                  )}
+   545→   545→                  {visibleFields.map(f => (
+   546→   546→                    <td key={f.key} className={`p-2 ${f.key === 'importe' ? 'font-bold text-[#005bb5]' : f.key === 'precioUnitario' ? 'text-gray-600' : f.key === 'observaciones' ? 'text-gray-500 text-xs' : ''}`}>
+   547→   547→                      {getCellValue(r, f)}
+   548→   548→                    </td>
+   549→   549→                  ))}
+   550→   550→                  <td className="p-2 whitespace-nowrap">
+   551→   551→                    <Button size="icon" variant="ghost" className="h-7 w-7 text-indigo-600 hover:bg-indigo-50" onClick={() => handleEdit(r)}><Pencil className="h-3.5 w-3.5" /></Button>
+   552→   552→                    <Button size="icon" variant="ghost" className="h-7 w-7 text-rose-600 hover:bg-rose-50" onClick={() => handleDelete(r.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
+   553→   553→                  </td>
+   554→   554→                </tr>
+   555→   555→                )
+   556→   556→              })}
+   557→   557→              {filtered.length === 0 && (
+   558→   558→                <tr><td colSpan={visibleFields.length + (selectedIds.size > 0 ? 2 : 1)} className="p-8 text-center text-gray-400">{loading ? 'Cargando...' : 'No hay registros con estos filtros'}</td></tr>
+   559→   559→              )}
+   560→   560→            </tbody>
+   561→   561→          </table>
+   562→   562→        </div>
+   563→   563→        {/* Fixed footer totals */}
+   564→   564→        {filtered.length > 0 && (
+   565→   565→          <div className="flex-shrink-0 bg-gray-100 font-bold text-sm px-2.5 py-2.5 border-t flex items-center gap-4">
+   566→   566→            <span>TOTALES</span>
+   567→   567→            <span>Cantidad: <span className="text-[#005bb5]">{tCant}</span></span>
+   568→   568→            <span>Importe: <span className="text-[#005bb5]">{fmtCurrency(tImp)}</span></span>
+   569→   569→          </div>
+   570→   570→        )}
+   571→   571→      </div>
+   572→   572→
+   573→   573→      {/* Bulk Delete Confirmation */}
+   574→   574→      <Dialog open={bulkDeleteConfirm} onOpenChange={setBulkDeleteConfirm}>
+   575→   575→        <DialogContent className="max-w-[420px]">
+   576→   576→          <DialogHeader><DialogTitle className="flex items-center gap-2"><Trash2 className="h-5 w-5 text-rose-600" />Eliminar Registros</DialogTitle></DialogHeader>
+   577→   577→          <p className="text-sm text-gray-600">¿Seguro que quieres eliminar <b className="text-rose-600">{selectedIds.size} registro{selectedIds.size > 1 ? 's' : ''}</b>? Esta acción no se puede deshacer.</p>
+   578→   578→          <div className="flex gap-3 mt-4">
+   579→   579→            <Button variant="outline" onClick={() => setBulkDeleteConfirm(false)} className="flex-1 h-11 rounded-xl">Cancelar</Button>
+   580→   580→            <Button onClick={handleBulkDelete} className="flex-1 h-11 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold" disabled={deletingBulk}>{deletingBulk ? <span className="animate-pulse">Eliminando...</span> : <>ELIMINAR {selectedIds.size}</>}</Button>
+   581→   581→          </div>
+   582→   582→        </DialogContent>
+   583→   583→      </Dialog>
+   584→   584→
+   585→   585→      {/* Edit Modal */}
+   586→   586→      <Dialog open={editModalOpen} onOpenChange={(open) => { if (!open) resetEditForm() }}>
+   587→   587→        <DialogContent className="max-w-[600px]">
+   588→   588→          <DialogHeader><DialogTitle className="flex items-center gap-2"><Pencil className="h-5 w-5 text-indigo-600" />Editar Registro</DialogTitle></DialogHeader>
+   589→   589→          <div className="grid grid-cols-2 gap-3 mt-2">
+   590→   590→            <div>
+   591→   591→              <Label className="text-xs uppercase font-bold text-slate-500">Fecha</Label>
+   592→   592→              <Input type="date" value={editFecha} onChange={e => setEditFecha(e.target.value)} />
+   593→   593→            </div>
+   594→   594→            <div>
+   595→   595→              <Label className="text-xs uppercase font-bold text-slate-500">Cliente</Label>
+   596→   596→              <Select value={editClienteId} onValueChange={setEditClienteId}>
+   597→   597→                <SelectTrigger><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+   598→   598→                <SelectContent>{clientes.map(c => <SelectItem key={c.id} value={c.id}>{c.nombre}</SelectItem>)}</SelectContent>
+   599→   599→              </Select>
+   600→   600→            </div>
+   601→   601→            <div>
+   602→   602→              <Label className="text-xs uppercase font-bold text-slate-500">Concepto 1</Label>
+   603→   603→              <Input value={editC1} onChange={e => setEditC1(e.target.value)} />
+   604→   604→            </div>
+   605→   605→            <div>
+   606→   606→              <Label className="text-xs uppercase font-bold text-slate-500">Concepto 2</Label>
+   607→   607→              <Input value={editC2} onChange={e => setEditC2(e.target.value)} />
+   608→   608→            </div>
+   609→   609→            <div>
+   610→   610→              <Label className="text-xs uppercase font-bold text-slate-500">Cantidad</Label>
+   611→   611→              <Input type="number" step="1" value={editCant} onChange={e => setEditCant(e.target.value)} />
+   612→   612→            </div>
+   613→   613→            <div>
+   614→   614→              <Label className="text-xs uppercase font-bold text-slate-500">Observaciones</Label>
+   615→   615→              <Input value={editObs} onChange={e => setEditObs(e.target.value)} />
+   616→   616→            </div>
+   617→   617→            <div>
+   618→   618→              <Label className="text-xs uppercase font-bold text-slate-500">P. Unitario</Label>
+   619→   619→              <Input type="number" step="0.01" value={editPrecioUnitario} onChange={e => setEditPrecioUnitario(e.target.value)} placeholder={editC1 && editC2 ? String(precioUnit(editC1, editC2, editClienteId)) : ''} />
+   620→   620→            </div>
+   621→   621→          </div>
+   622→   622→          {editC1 && editC2 && (
+   623→   623→            <div className="mt-3 p-3 bg-gray-50 rounded-lg text-sm">
+   624→   624→              <span className="text-gray-500">Catálogo: </span><span className="font-bold">{fmtCurrency(precioUnit(editC1, editC2, editClienteId))}</span>
+   625→   625→              <span className="text-gray-500 ml-4">Importe: </span><span className="font-bold text-[#005bb5]">{fmtCurrency((editPrecioUnitario ? Number(editPrecioUnitario) : precioUnit(editC1, editC2, editClienteId)) * (Number(editCant) || 1))}</span>
+   626→   626→            </div>
+   627→   627→          )}
+   628→   628→          <div className="flex gap-3 mt-4">
+   629→   629→            <Button variant="outline" onClick={resetEditForm} className="flex-1 h-11 rounded-xl">Cancelar</Button>
+   630→   630→            <Button onClick={handleUpdate} className="flex-1 h-11 rounded-xl bg-[#005bb5] hover:bg-[#003d7a] text-white font-bold"><Save className="h-4 w-4 mr-2" />ACTUALIZAR</Button>
+   631→   631→          </div>
+   632→   632→        </DialogContent>
+   633→   633→      </Dialog>
+   634→   634→
+   635→   635→      {/* Import Preview Modal */}
+   636→   636→      <Dialog open={importModalOpen} onOpenChange={setImportModalOpen}>
+   637→   637→        <DialogContent className="max-w-[900px] max-h-[85vh] overflow-auto">
+   638→   638→          <DialogHeader><DialogTitle className="flex items-center gap-2"><FileSpreadsheet className="h-5 w-5 text-[#005bb5]" />Vista Previa - Importar Registros</DialogTitle></DialogHeader>
+   639→   639→          {importErrors.length > 0 && (
+   640→   640→            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-3">
+   641→   641→              <p className="text-sm font-bold text-amber-700 mb-1">Advertencias ({importErrors.length})</p>
+   642→   642→              <div className="max-h-28 overflow-auto text-xs text-amber-600 space-y-0.5">{importErrors.slice(0, 15).map((err, i) => <div key={i}>{err}</div>)}{importErrors.length > 15 && <div>... y {importErrors.length - 15} más</div>}</div>
+   643→   643→            </div>
+   644→   644→          )}
+   645→   645→          <div className="text-sm text-gray-600 mb-2"><b>{importPreview.filter(r => r.fecha && r.c1 && r.c2).length}</b> filas válidas · <b className="text-amber-600">{importPreview.filter(r => !(r.fecha && r.c1 && r.c2)).length} con errores</b> · <b className="text-green-600">{importPreview.length} total</b></div>
+   646→   646→          <div className="overflow-auto max-h-[350px] border rounded-xl">
+   647→   647→            <table className="w-full text-xs">
+   648→   648→              <thead className="sticky top-0"><tr className="bg-gray-100">
+   649→   649→                <th className="p-2 text-left border-b">✓</th>
+   650→   650→                <th className="p-2 text-left border-b">{getLabel('fecha')}</th>
+   651→   651→                <th className="p-2 text-left border-b">{getLabel('cliente')}</th>
+   652→   652→                <th className="p-2 text-left border-b">{getLabel('c1')}</th>
+   653→   653→                <th className="p-2 text-left border-b">{getLabel('c2')}</th>
+   654→   654→                <th className="p-2 text-right border-b">{getLabel('cantidad')}</th>
+   655→   655→                <th className="p-2 text-right border-b">P.Unit</th>
+   656→   656→                <th className="p-2 text-right border-b">Importe</th>
+   657→   657→                <th className="p-2 text-left border-b">{getLabel('observaciones')}</th>
+   658→   658→              </tr></thead>
+   659→   659→              <tbody>
+   660→   660→                {importPreview.map((r, i) => {
+   661→   661→                  const ok = !!(r.fecha && r.c1 && r.c2)
+   662→   662→                  return (
+   663→   663→                    <tr key={i} className={`border-b ${ok ? '' : 'bg-red-50'}`}>
+   664→   664→                      <td className="p-2">{ok ? <CheckCircle className="h-4 w-4 text-green-500" /> : <AlertCircle className="h-4 w-4 text-red-400" />}</td>
+   665→   665→                      <td className="p-2">{r.fecha ? fmtDate(r.fecha) : '—'}</td>
+   666→   666→                      <td className="p-2">{r.cliente || <span className="text-amber-500">Sin cliente</span>}</td>
+   667→   667→                      <td className="p-2">{r.c1 || '—'}</td>
+   668→   668→                      <td className="p-2">{r.c2 || '—'}</td>
+   669→   669→                      <td className="p-2 text-right">{r.cant || 1}</td>
+   670→   670→                      <td className="p-2 text-right">{(r.precioUnitario || 0).toFixed(2)}</td>
+   671→   671→                      <td className="p-2 text-right font-bold">{(r.importe || 0).toFixed(2)}</td>
+   672→   672→                      <td className="p-2 text-gray-500">{r.obs || ''}</td>
+   673→   673→                    </tr>
+   674→   674→                  )
+   675→   675→                })}
+   676→   676→              </tbody>
+   677→   677→            </table>
+   678→   678→          </div>
+   679→   679→          <div className="flex gap-3 mt-4">
+   680→   680→            <Button variant="outline" onClick={() => setImportModalOpen(false)} className="flex-1 h-12 rounded-xl">Cancelar</Button>
+   681→   681→            <Button onClick={handleImportConfirm} className="flex-1 h-12 rounded-xl bg-[#2bb24c] hover:bg-[#23963e] text-white font-bold" disabled={importing || importPreview.filter(r => r.fecha && r.c1 && r.c2).length === 0}>{importing ? <span className="animate-pulse">Importando...</span> : <>IMPORTAR {importPreview.filter(r => r.fecha && r.c1 && r.c2).length} FILAS</>}</Button>
+   682→   682→          </div>
+   683→   683→        </DialogContent>
+   684→   684→      </Dialog>
+   685→   685→    </div>
+   686→   686→  )
+   687→   687→}
+   688→   688→

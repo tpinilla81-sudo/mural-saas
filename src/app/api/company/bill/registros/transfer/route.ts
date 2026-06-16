@@ -3,8 +3,11 @@ import { requireCompanyAdmin } from "@/lib/api-auth";
 import { db } from "@/lib/db";
 
 // ── POST /api/company/bill/registros/transfer ──
-// Mark all un-transferred registros (pasadoRegistro=false) as transferred (pasadoRegistro=true).
-// Optional: ?before=YYYY-MM-DD → only transfer registros with fecha <= before
+// Transfer registros from Entrada to Registros (set pasadoRegistro=true).
+// Body options:
+//   { ids: string[] }            → transfer specific registros by ID
+//   {} (no ids)                  → transfer ALL un-transferred registros
+//   ?before=YYYY-MM-DD           → only transfer registros with fecha <= before (when no ids)
 export async function POST(req: NextRequest) {
   const { error, status, user } = await requireCompanyAdmin();
   if (error) return NextResponse.json({ error }, { status });
@@ -15,6 +18,22 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    const body = await req.json();
+    const ids: string[] | undefined = body.ids;
+
+    if (ids && ids.length > 0) {
+      // Transfer specific registros by ID
+      const result = await db.billRegistro.updateMany({
+        where: { id: { in: ids }, companyId, pasadoRegistro: false },
+        data: { pasadoRegistro: true },
+      });
+      return NextResponse.json({
+        transferred: result.count,
+        message: `${result.count} registro(s) transferido(s) correctamente`,
+      });
+    }
+
+    // Transfer all un-transferred registros
     const { searchParams } = new URL(req.url);
     const before = searchParams.get("before") ?? undefined;
 
@@ -23,7 +42,6 @@ export async function POST(req: NextRequest) {
       pasadoRegistro: false,
     };
 
-    // Optionally restrict to dates before a given date
     if (before) {
       where.fecha = { lte: before };
     }

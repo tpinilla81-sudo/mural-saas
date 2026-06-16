@@ -1,0 +1,1743 @@
+     1→     1→"use client";
+     2→     2→
+     3→     3→import { useState, useEffect, useRef, useCallback } from "react";
+     4→     4→
+     5→     5→// ═══════════════════════════════════════════
+     6→     6→// TYPES
+     7→     7→// ═══════════════════════════════════════════
+     8→     8→
+     9→     9→type Toast = { id: number; message: string; type: "success" | "error" };
+    10→    10→type BillTabKey = "entrada" | "registros" | "clientes" | "catalogo" | "facturas" | "config";
+    11→    11→
+    12→    12→interface BillCliente {
+    13→    13→  id: string;
+    14→    14→  nombre: string;
+    15→    15→  cif: string;
+    16→    16→  dir: string;
+    17→    17→  cp: string;
+    18→    18→  ciudad: string;
+    19→    19→  prov: string;
+    20→    20→  mail: string;
+    21→    21→  tel: string;
+    22→    22→}
+    23→    23→
+    24→    24→interface BillCatalogo {
+    25→    25→  id: string;
+    26→    26→  clienteId: string | null;
+    27→    27→  c1: string;
+    28→    28→  c2: string;
+    29→    29→  coste: number;
+    30→    30→  inc: number;
+    31→    31→  final: number;
+    32→    32→  cliente?: { id: string; nombre: string } | null;
+    33→    33→}
+    34→    34→
+    35→    35→interface BillRegistro {
+    36→    36→  id: string;
+    37→    37→  fecha: string;
+    38→    38→  clienteId: string | null;
+    39→    39→  cliente: string;
+    40→    40→  c1: string;
+    41→    41→  c2: string;
+    42→    42→  cant: number;
+    43→    43→  precioUnitario: number;
+    44→    44→  obs: string;
+    45→    45→  pasadoRegistro: boolean;
+    46→    46→  facturado: boolean;
+    47→    47→}
+    48→    48→
+    49→    49→interface BillConfigData {
+    50→    50→  id: string;
+    51→    51→  companyFullName: string;
+    52→    52→  companyAddress: string;
+    53→    53→  companyCity: string;
+    54→    54→  companyProvince: string;
+    55→    55→  companyCif: string;
+    56→    56→  logo: string;
+    57→    57→  defaultIva: number;
+    58→    58→}
+    59→    59→
+    60→    60→interface BillFacturaSeq {
+    61→    61→  id: string;
+    62→    62→  seq: number;
+    63→    63→}
+    64→    64→
+    65→    65→// ═══════════════════════════════════════════
+    66→    66→// HELPERS
+    67→    67→// ═══════════════════════════════════════════
+    68→    68→
+    69→    69→const fmt = (n: number) => n.toFixed(2);
+    70→    70→const today = () => new Date().toISOString().split("T")[0];
+    71→    71→const fmtDate = (d: string) => {
+    72→    72→  if (!d) return "—";
+    73→    73→  try {
+    74→    74→    return new Date(d + "T00:00:00").toLocaleDateString("es-ES", { day: "2-digit", month: "2-digit", year: "numeric" });
+    75→    75→  } catch {
+    76→    76→    return d;
+    77→    77→  }
+    78→    78→};
+    79→    79→
+    80→    80→// ═══════════════════════════════════════════
+    81→    81→// MAIN COMPONENT
+    82→    82→// ═══════════════════════════════════════════
+    83→    83→
+    84→    84→export default function BillTab() {
+    85→    85→  // ─── State ───
+    86→    86→  const [tab, setTab] = useState<BillTabKey>("entrada");
+    87→    87→  const [loading, setLoading] = useState(true);
+    88→    88→  const [toasts, setToasts] = useState<Toast[]>([]);
+    89→    89→
+    90→    90→  // Data
+    91→    91→  const [clientes, setClientes] = useState<BillCliente[]>([]);
+    92→    92→  const [catalogo, setCatalogo] = useState<BillCatalogo[]>([]);
+    93→    93→  const [registros, setRegistros] = useState<BillRegistro[]>([]);
+    94→    94→  const [config, setConfig] = useState<BillConfigData | null>(null);
+    95→    95→  const [facturaSeq, setFacturaSeq] = useState<BillFacturaSeq | null>(null);
+    96→    96→
+    97→    97→  // Modals
+    98→    98→  const [showClienteModal, setShowClienteModal] = useState(false);
+    99→    99→  const [editClienteId, setEditClienteId] = useState<string | null>(null);
+   100→   100→  const [showCatalogoModal, setShowCatalogoModal] = useState(false);
+   101→   101→  const [editCatalogoId, setEditCatalogoId] = useState<string | null>(null);
+   102→   102→  const [showFacturaPreview, setShowFacturaPreview] = useState(false);
+   103→   103→
+   104→   104→  // ─── Toast helper ───
+   105→   105→  const addToast = useCallback((message: string, type: "success" | "error" = "success") => {
+   106→   106→    const id = Date.now() + Math.random();
+   107→   107→    setToasts(prev => [...prev, { id, message, type }]);
+   108→   108→    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000);
+   109→   109→  }, []);
+   110→   110→
+   111→   111→  // ─── Data loading ───
+   112→   112→  const loadAll = useCallback(async () => {
+   113→   113→    setLoading(true);
+   114→   114→    try {
+   115→   115→      const [clRes, catRes, regRes, cfgRes, seqRes] = await Promise.all([
+   116→   116→        fetch("/api/company/bill/clientes"),
+   117→   117→        fetch("/api/company/bill/catalogo"),
+   118→   118→        fetch("/api/company/bill/registros?filter=all"),
+   119→   119→        fetch("/api/company/bill/config"),
+   120→   120→        fetch("/api/company/bill/factura-seq"),
+   121→   121→      ]);
+   122→   122→      if (clRes.ok) setClientes(await clRes.json());
+   123→   123→      if (catRes.ok) setCatalogo(await catRes.json());
+   124→   124→      if (regRes.ok) setRegistros(await regRes.json());
+   125→   125→      if (cfgRes.ok) setConfig(await cfgRes.json());
+   126→   126→      if (seqRes.ok) setFacturaSeq(await seqRes.json());
+   127→   127→    } catch {
+   128→   128→      addToast("Error al cargar datos", "error");
+   129→   129→    } finally {
+   130→   130→      setLoading(false);
+   131→   131→    }
+   132→   132→  }, [addToast]);
+   133→   133→
+   134→   134→  useEffect(() => { loadAll(); }, [loadAll]);
+   135→   135→
+   136→   136→  // ─── Registros filtered helpers ───
+   137→   137→  const entradaRegistros = registros.filter(r => !r.pasadoRegistro);
+   138→   138→  const pasadosRegistros = registros.filter(r => r.pasadoRegistro);
+   139→   139→
+   140→   140→  // ═══════════════════════════════════════════
+   141→   141→  // ENTRADA TAB
+   142→   142→  // ═══════════════════════════════════════════
+   143→   143→
+   144→   144→  const [entradaForm, setEntradaForm] = useState({
+   145→   145→    fecha: today(),
+   146→   146→    clienteId: "",
+   147→   147→    c1: "",
+   148→   148→    c2: "",
+   149→   149→    cant: 1,
+   150→   150→    precioUnitario: 0,
+   151→   151→    obs: "",
+   152→   152→  });
+   153→   153→
+   154→   154→  // Autocomplete state
+   155→   155→  const [c1Suggestions, setC1Suggestions] = useState<string[]>([]);
+   156→   156→  const [c2Suggestions, setC2Suggestions] = useState<string[]>([]);
+   157→   157→  const [showC1Drop, setShowC1Drop] = useState(false);
+   158→   158→  const [showC2Drop, setShowC2Drop] = useState(false);
+   159→   159→  const c1Ref = useRef<HTMLDivElement>(null);
+   160→   160→  const c2Ref = useRef<HTMLDivElement>(null);
+   161→   161→
+   162→   162→  // Close dropdowns on outside click
+   163→   163→  useEffect(() => {
+   164→   164→    function handleClick(e: MouseEvent) {
+   165→   165→      if (c1Ref.current && !c1Ref.current.contains(e.target as Node)) setShowC1Drop(false);
+   166→   166→      if (c2Ref.current && !c2Ref.current.contains(e.target as Node)) setShowC2Drop(false);
+   167→   167→    }
+   168→   168→    document.addEventListener("mousedown", handleClick);
+   169→   169→    return () => document.removeEventListener("mousedown", handleClick);
+   170→   170→  }, []);
+   171→   171→
+   172→   172→  // C1 autocomplete
+   173→   173→  useEffect(() => {
+   174→   174→    if (!entradaForm.c1) { setC1Suggestions([]); return; }
+   175→   175→    const uniqueC1s = [...new Set(catalogo.map(c => c.c1))];
+   176→   176→    setC1Suggestions(uniqueC1s.filter(c => c.toLowerCase().includes(entradaForm.c1.toLowerCase())));
+   177→   177→  }, [entradaForm.c1, catalogo]);
+   178→   178→
+   179→   179→  // C2 autocomplete (filtered by selected C1)
+   180→   180→  useEffect(() => {
+   181→   181→    if (!entradaForm.c2) { setC2Suggestions([]); return; }
+   182→   182→    const filtered = entradaForm.c1
+   183→   183→      ? catalogo.filter(c => c.c1 === entradaForm.c1)
+   184→   184→      : catalogo;
+   185→   185→    const items = entradaForm.c1
+   186→   186→      ? filtered.filter(c => c.c2.toLowerCase().includes(entradaForm.c2.toLowerCase()))
+   187→   187→      : filtered.filter(c => c.c2.toLowerCase().includes(entradaForm.c2.toLowerCase()));
+   188→   188→    setC2Suggestions([...new Set(items.map(c => c.c2))]);
+   189→   189→  }, [entradaForm.c2, entradaForm.c1, catalogo]);
+   190→   190→
+   191→   191→  // Auto-fill price when C1+C2 match a catalog item
+   192→   192→  useEffect(() => {
+   193→   193→    if (!entradaForm.c1 || !entradaForm.c2) return;
+   194→   194→    const match = catalogo.find(c =>
+   195→   195→      c.c1 === entradaForm.c1 && c.c2 === entradaForm.c2 &&
+   196→   196→      (!c.clienteId || c.clienteId === entradaForm.clienteId)
+   197→   197→    );
+   198→   198→    if (match) {
+   199→   199→      setEntradaForm(f => ({ ...f, precioUnitario: match.final }));
+   200→   200→    }
+   201→   201→  }, [entradaForm.c1, entradaForm.c2, entradaForm.clienteId, catalogo]);
+   202→   202→
+   203→   203→  async function addEntrada() {
+   204→   204→    const clienteObj = clientes.find(c => c.id === entradaForm.clienteId);
+   205→   205→    try {
+   206→   206→      const res = await fetch("/api/company/bill/registros", {
+   207→   207→        method: "POST",
+   208→   208→        headers: { "Content-Type": "application/json" },
+   209→   209→        body: JSON.stringify({
+   210→   210→          ...entradaForm,
+   211→   211→          cliente: clienteObj?.nombre || "",
+   212→   212→        }),
+   213→   213→      });
+   214→   214→      if (res.ok) {
+   215→   215→        const newReg = await res.json();
+   216→   216→        setRegistros(prev => [newReg, ...prev]);
+   217→   217→        setEntradaForm({ fecha: today(), clienteId: "", c1: "", c2: "", cant: 1, precioUnitario: 0, obs: "" });
+   218→   218→        addToast("Entrada añadida");
+   219→   219→      } else {
+   220→   220→        addToast("Error al añadir entrada", "error");
+   221→   221→      }
+   222→   222→    } catch {
+   223→   223→      addToast("Error de conexión", "error");
+   224→   224→    }
+   225→   225→  }
+   226→   226→
+   227→   227→  async function transferAllEntradas() {
+   228→   228→    if (entradaRegistros.length === 0) return;
+   229→   229→    if (!confirm(`¿Pasar ${entradaRegistros.length} entrada(s) a Registros?`)) return;
+   230→   230→    try {
+   231→   231→      const res = await fetch("/api/company/bill/registros/transfer", {
+   232→   232→        method: "POST",
+   233→   233→        headers: { "Content-Type": "application/json" },
+   234→   234→        body: JSON.stringify({ ids: entradaRegistros.map(r => r.id) }),
+   235→   235→      });
+   236→   236→      if (res.ok) {
+   237→   237→        const data = await res.json();
+   238→   238→        setRegistros(prev => prev.map(r =>
+   239→   239→          !r.pasadoRegistro ? { ...r, pasadoRegistro: true } : r
+   240→   240→        ));
+   241→   241→        addToast(`${data.transferred} entrada(s) transferida(s)`);
+   242→   242→      } else {
+   243→   243→        addToast("Error al transferir", "error");
+   244→   244→      }
+   245→   245→    } catch {
+   246→   246→      addToast("Error de conexión", "error");
+   247→   247→    }
+   248→   248→  }
+   249→   249→
+   250→   250→  async function deleteRegistro(id: string) {
+   251→   251→    if (!confirm("¿Eliminar este registro?")) return;
+   252→   252→    try {
+   253→   253→      const res = await fetch(`/api/company/bill/registros/${id}`, { method: "DELETE" });
+   254→   254→      if (res.ok) {
+   255→   255→        setRegistros(prev => prev.filter(r => r.id !== id));
+   256→   256→        addToast("Registro eliminado");
+   257→   257→      } else {
+   258→   258→        addToast("Error al eliminar", "error");
+   259→   259→      }
+   260→   260→    } catch {
+   261→   261→      addToast("Error de conexión", "error");
+   262→   262→    }
+   263→   263→  }
+   264→   264→
+   265→   265→  // ═══════════════════════════════════════════
+   266→   266→  // REGISTROS TAB
+   267→   267→  // ═══════════════════════════════════════════
+   268→   268→
+   269→   269→  const [regFilter, setRegFilter] = useState({ dateFrom: "", dateTo: "", clienteId: "", search: "" });
+   270→   270→  const [editingRegId, setEditingRegId] = useState<string | null>(null);
+   271→   271→  const [editRegForm, setEditRegForm] = useState<Partial<BillRegistro>>({});
+   272→   272→
+   273→   273→  const filteredRegistros = pasadosRegistros.filter(r => {
+   274→   274→    if (regFilter.dateFrom && r.fecha < regFilter.dateFrom) return false;
+   275→   275→    if (regFilter.dateTo && r.fecha > regFilter.dateTo) return false;
+   276→   276→    if (regFilter.clienteId && r.clienteId !== regFilter.clienteId) return false;
+   277→   277→    if (regFilter.search) {
+   278→   278→      const s = regFilter.search.toLowerCase();
+   279→   279→      if (!r.cliente.toLowerCase().includes(s) && !r.c1.toLowerCase().includes(s) &&
+   280→   280→          !r.c2.toLowerCase().includes(s) && !r.obs.toLowerCase().includes(s)) return false;
+   281→   281→    }
+   282→   282→    return true;
+   283→   283→  });
+   284→   284→
+   285→   285→  const regTotal = filteredRegistros.reduce((sum, r) => sum + r.cant * r.precioUnitario, 0);
+   286→   286→
+   287→   287→  function startEditReg(r: BillRegistro) {
+   288→   288→    setEditingRegId(r.id);
+   289→   289→    setEditRegForm({ ...r });
+   290→   290→  }
+   291→   291→
+   292→   292→  async function saveEditReg() {
+   293→   293→    if (!editingRegId) return;
+   294→   294→    try {
+   295→   295→      const res = await fetch(`/api/company/bill/registros/${editingRegId}`, {
+   296→   296→        method: "PUT",
+   297→   297→        headers: { "Content-Type": "application/json" },
+   298→   298→        body: JSON.stringify(editRegForm),
+   299→   299→      });
+   300→   300→      if (res.ok) {
+   301→   301→        const updated = await res.json();
+   302→   302→        setRegistros(prev => prev.map(r => r.id === editingRegId ? updated : r));
+   303→   303→        setEditingRegId(null);
+   304→   304→        addToast("Registro actualizado");
+   305→   305→      } else {
+   306→   306→        addToast("Error al actualizar", "error");
+   307→   307→      }
+   308→   308→    } catch {
+   309→   309→      addToast("Error de conexión", "error");
+   310→   310→    }
+   311→   311→  }
+   312→   312→
+   313→   313→  // ═══════════════════════════════════════════
+   314→   314→  // CLIENTES TAB
+   315→   315→  // ═══════════════════════════════════════════
+   316→   316→
+   317→   317→  const emptyClienteForm = { nombre: "", cif: "", dir: "", cp: "", ciudad: "", prov: "", mail: "", tel: "" };
+   318→   318→  const [clienteForm, setClienteForm] = useState(emptyClienteForm);
+   319→   319→
+   320→   320→  function openNewCliente() {
+   321→   321→    setEditClienteId(null);
+   322→   322→    setClienteForm(emptyClienteForm);
+   323→   323→    setShowClienteModal(true);
+   324→   324→  }
+   325→   325→
+   326→   326→  function openEditCliente(c: BillCliente) {
+   327→   327→    setEditClienteId(c.id);
+   328→   328→    setClienteForm({ nombre: c.nombre, cif: c.cif, dir: c.dir, cp: c.cp, ciudad: c.ciudad, prov: c.prov, mail: c.mail, tel: c.tel });
+   329→   329→    setShowClienteModal(true);
+   330→   330→  }
+   331→   331→
+   332→   332→  async function saveCliente() {
+   333→   333→    if (!clienteForm.nombre) { addToast("Nombre es obligatorio", "error"); return; }
+   334→   334→    try {
+   335→   335→      if (editClienteId) {
+   336→   336→        const res = await fetch(`/api/company/bill/clientes/${editClienteId}`, {
+   337→   337→          method: "PUT",
+   338→   338→          headers: { "Content-Type": "application/json" },
+   339→   339→          body: JSON.stringify(clienteForm),
+   340→   340→        });
+   341→   341→        if (res.ok) {
+   342→   342→          const updated = await res.json();
+   343→   343→          setClientes(prev => prev.map(c => c.id === editClienteId ? updated : c));
+   344→   344→          addToast("Cliente actualizado");
+   345→   345→        } else { addToast("Error al actualizar", "error"); }
+   346→   346→      } else {
+   347→   347→        const res = await fetch("/api/company/bill/clientes", {
+   348→   348→          method: "POST",
+   349→   349→          headers: { "Content-Type": "application/json" },
+   350→   350→          body: JSON.stringify(clienteForm),
+   351→   351→        });
+   352→   352→        if (res.ok) {
+   353→   353→          const created = await res.json();
+   354→   354→          setClientes(prev => [...prev, created]);
+   355→   355→          addToast("Cliente creado");
+   356→   356→        } else { addToast("Error al crear", "error"); }
+   357→   357→      }
+   358→   358→      setShowClienteModal(false);
+   359→   359→    } catch {
+   360→   360→      addToast("Error de conexión", "error");
+   361→   361→    }
+   362→   362→  }
+   363→   363→
+   364→   364→  async function deleteCliente(id: string) {
+   365→   365→    if (!confirm("¿Eliminar este cliente?")) return;
+   366→   366→    try {
+   367→   367→      const res = await fetch(`/api/company/bill/clientes/${id}`, { method: "DELETE" });
+   368→   368→      if (res.ok) {
+   369→   369→        setClientes(prev => prev.filter(c => c.id !== id));
+   370→   370→        addToast("Cliente eliminado");
+   371→   371→      } else { addToast("Error al eliminar", "error"); }
+   372→   372→    } catch {
+   373→   373→      addToast("Error de conexión", "error");
+   374→   374→    }
+   375→   375→  }
+   376→   376→
+   377→   377→  // ═══════════════════════════════════════════
+   378→   378→  // CATÁLOGO TAB
+   379→   379→  // ═══════════════════════════════════════════
+   380→   380→
+   381→   381→  const emptyCatalogoForm = { clienteId: "", c1: "", c2: "", coste: 0, inc: 0 };
+   382→   382→  const [catalogoForm, setCatalogoForm] = useState(emptyCatalogoForm);
+   383→   383→
+   384→   384→  function openNewCatalogo() {
+   385→   385→    setEditCatalogoId(null);
+   386→   386→    setCatalogoForm(emptyCatalogoForm);
+   387→   387→    setShowCatalogoModal(true);
+   388→   388→  }
+   389→   389→
+   390→   390→  function openEditCatalogo(c: BillCatalogo) {
+   391→   391→    setEditCatalogoId(c.id);
+   392→   392→    setCatalogoForm({ clienteId: c.clienteId || "", c1: c.c1, c2: c.c2, coste: c.coste, inc: c.inc });
+   393→   393→    setShowCatalogoModal(true);
+   394→   394→  }
+   395→   395→
+   396→   396→  async function saveCatalogo() {
+   397→   397→    if (!catalogoForm.c1 || !catalogoForm.c2) { addToast("C1 y C2 son obligatorios", "error"); return; }
+   398→   398→    try {
+   399→   399→      if (editCatalogoId) {
+   400→   400→        const res = await fetch(`/api/company/bill/catalogo/${editCatalogoId}`, {
+   401→   401→          method: "PUT",
+   402→   402→          headers: { "Content-Type": "application/json" },
+   403→   403→          body: JSON.stringify(catalogoForm),
+   404→   404→        });
+   405→   405→        if (res.ok) {
+   406→   406→          const updated = await res.json();
+   407→   407→          setCatalogo(prev => prev.map(c => c.id === editCatalogoId ? updated : c));
+   408→   408→          addToast("Catálogo actualizado");
+   409→   409→        } else { addToast("Error al actualizar", "error"); }
+   410→   410→      } else {
+   411→   411→        const res = await fetch("/api/company/bill/catalogo", {
+   412→   412→          method: "POST",
+   413→   413→          headers: { "Content-Type": "application/json" },
+   414→   414→          body: JSON.stringify(catalogoForm),
+   415→   415→        });
+   416→   416→        if (res.ok) {
+   417→   417→          const created = await res.json();
+   418→   418→          setCatalogo(prev => [...prev, created]);
+   419→   419→          addToast("Ítem de catálogo creado");
+   420→   420→        } else { addToast("Error al crear", "error"); }
+   421→   421→      }
+   422→   422→      setShowCatalogoModal(false);
+   423→   423→    } catch {
+   424→   424→      addToast("Error de conexión", "error");
+   425→   425→    }
+   426→   426→  }
+   427→   427→
+   428→   428→  async function deleteCatalogoItem(id: string) {
+   429→   429→    if (!confirm("¿Eliminar este ítem?")) return;
+   430→   430→    try {
+   431→   431→      const res = await fetch(`/api/company/bill/catalogo/${id}`, { method: "DELETE" });
+   432→   432→      if (res.ok) {
+   433→   433→        setCatalogo(prev => prev.filter(c => c.id !== id));
+   434→   434→        addToast("Ítem eliminado");
+   435→   435→      } else { addToast("Error al eliminar", "error"); }
+   436→   436→    } catch {
+   437→   437→      addToast("Error de conexión", "error");
+   438→   438→    }
+   439→   439→  }
+   440→   440→
+   441→   441→  // ═══════════════════════════════════════════
+   442→   442→  // FACTURAS TAB
+   443→   443→  // ═══════════════════════════════════════════
+   444→   444→
+   445→   445→  const [selectedFacturaIds, setSelectedFacturaIds] = useState<Set<string>>(new Set());
+   446→   446→  const [facturaGroupBy, setFacturaGroupBy] = useState<"day" | "month">("day");
+   447→   447→  const [facturaClienteFilter, setFacturaClienteFilter] = useState("");
+   448→   448→
+   449→   449→  const facturableRegistros = pasadosRegistros.filter(r => !r.facturado && (!facturaClienteFilter || r.clienteId === facturaClienteFilter));
+   450→   450→
+   451→   451→  // Group registros
+   452→   452→  const groupedFacturas: Record<string, BillRegistro[]> = {};
+   453→   453→  facturableRegistros.forEach(r => {
+   454→   454→    const key = facturaGroupBy === "day" ? r.fecha : r.fecha.substring(0, 7);
+   455→   455→    if (!groupedFacturas[key]) groupedFacturas[key] = [];
+   456→   456→    groupedFacturas[key].push(r);
+   457→   457→  });
+   458→   458→
+   459→   459→  const sortedGroupKeys = Object.keys(groupedFacturas).sort().reverse();
+   460→   460→
+   461→   461→  function toggleFacturaSelect(id: string) {
+   462→   462→    setSelectedFacturaIds(prev => {
+   463→   463→      const next = new Set(prev);
+   464→   464→      if (next.has(id)) next.delete(id); else next.add(id);
+   465→   465→      return next;
+   466→   466→    });
+   467→   467→  }
+   468→   468→
+   469→   469→  function toggleGroupSelect(key: string) {
+   470→   470→    const groupIds = groupedFacturas[key].map(r => r.id);
+   471→   471→    const allSelected = groupIds.every(id => selectedFacturaIds.has(id));
+   472→   472→    setSelectedFacturaIds(prev => {
+   473→   473→      const next = new Set(prev);
+   474→   474→      if (allSelected) {
+   475→   475→        groupIds.forEach(id => next.delete(id));
+   476→   476→      } else {
+   477→   477→        groupIds.forEach(id => next.add(id));
+   478→   478→      }
+   479→   479→      return next;
+   480→   480→    });
+   481→   481→  }
+   482→   482→
+   483→   483→  function selectAllFacturas() {
+   484→   484→    setSelectedFacturaIds(new Set(facturableRegistros.map(r => r.id)));
+   485→   485→  }
+   486→   486→
+   487→   487→  function clearFacturaSelection() {
+   488→   488→    setSelectedFacturaIds(new Set());
+   489→   489→  }
+   490→   490→
+   491→   491→  const selectedRegistros = facturableRegistros.filter(r => selectedFacturaIds.has(r.id));
+   492→   492→  const facturaBase = selectedRegistros.reduce((sum, r) => sum + r.cant * r.precioUnitario, 0);
+   493→   493→  const facturaIvaRate = config?.defaultIva ?? 21;
+   494→   494→  const facturaIva = facturaBase * (facturaIvaRate / 100);
+   495→   495→  const facturaTotal = facturaBase + facturaIva;
+   496→   496→
+   497→   497→  function generateInvoiceNumber() {
+   498→   498→    const seq = facturaSeq?.seq || 1;
+   499→   499→    const year = new Date().getFullYear();
+   500→   500→    return `${String(seq).padStart(4, "0")}/${year}`;
+   501→   501→  }
+   502→   502→
+   503→   503→  async function generateFactura() {
+   504→   504→    if (selectedRegistros.length === 0) { addToast("Selecciona al menos un registro", "error"); return; }
+   505→   505→
+   506→   506→    const invoiceNumber = generateInvoiceNumber();
+   507→   507→    const clienteId = selectedRegistros[0]?.clienteId;
+   508→   508→    const clienteObj = clientes.find(c => c.id === clienteId);
+   509→   509→
+   510→   510→    // Build print-friendly HTML invoice
+   511→   511→    const items = selectedRegistros.map(r => ({
+   512→   512→      fecha: r.fecha,
+   513→   513→      c1: r.c1,
+   514→   514→      c2: r.c2,
+   515→   515→      cant: r.cant,
+   516→   516→      precio: r.precioUnitario,
+   517→   517→      total: r.cant * r.precioUnitario,
+   518→   518→      obs: r.obs,
+   519→   519→    }));
+   520→   520→
+   521→   521→    const cfg = config || {
+   522→   522→      companyFullName: "",
+   523→   523→      companyAddress: "",
+   524→   524→      companyCity: "",
+   525→   525→      companyProvince: "",
+   526→   526→      companyCif: "",
+   527→   527→      logo: "",
+   528→   528→    };
+   529→   529→
+   530→   530→    const printHtml = `<!DOCTYPE html>
+   531→   531→<html lang="es">
+   532→   532→<head>
+   533→   533→<meta charset="UTF-8">
+   534→   534→<title>Factura ${invoiceNumber}</title>
+   535→   535→<style>
+   536→   536→  @page { size: A4; margin: 20mm; }
+   537→   537→  * { box-sizing: border-box; margin: 0; padding: 0; }
+   538→   538→  body { font-family: 'Segoe UI', Arial, sans-serif; color: #1a1a1a; font-size: 11pt; line-height: 1.5; }
+   539→   539→  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 3px solid #2E5D3A; }
+   540→   540→  .company-info h1 { font-size: 18pt; color: #2E5D3A; margin-bottom: 4px; }
+   541→   541→  .company-info p { font-size: 9pt; color: #555; line-height: 1.4; }
+   542→   542→  .invoice-box { background: #f8f9fa; border: 1px solid #ddd; border-radius: 8px; padding: 16px; min-width: 220px; }
+   543→   543→  .invoice-box h2 { font-size: 13pt; color: #2E5D3A; margin-bottom: 8px; }
+   544→   544→  .invoice-box p { font-size: 9pt; color: #333; line-height: 1.5; }
+   545→   545→  .parties { display: flex; gap: 30px; margin-bottom: 24px; }
+   546→   546→  .party { flex: 1; }
+   547→   547→  .party h3 { font-size: 10pt; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; border-bottom: 1px solid #ddd; padding-bottom: 4px; }
+   548→   548→  .party p { font-size: 9.5pt; line-height: 1.6; }
+   549→   549→  .party .name { font-weight: bold; font-size: 11pt; }
+   550→   550→  table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+   551→   551→  thead th { background: #2E5D3A; color: white; padding: 8px 10px; text-align: left; font-size: 8.5pt; text-transform: uppercase; letter-spacing: 0.3px; }
+   552→   552→  thead th:last-child, thead th:nth-child(n+3) { text-align: right; }
+   553→   553→  tbody td { padding: 7px 10px; border-bottom: 1px solid #eee; font-size: 9.5pt; }
+   554→   554→  tbody td:last-child, tbody td:nth-child(n+3) { text-align: right; }
+   555→   555→  tbody tr:nth-child(even) { background: #fafafa; }
+   556→   556→  tfoot td { padding: 6px 10px; font-weight: bold; border-top: 1px solid #ddd; }
+   557→   557→  tfoot .total-row { background: #2E5D3A; color: white; font-size: 12pt; }
+   558→   558→  .totals { width: 280px; margin-left: auto; margin-bottom: 30px; }
+   559→   559→  .totals table { margin: 0; }
+   560→   560→  .footnotes { margin-top: 40px; padding-top: 12px; border-top: 1px solid #ddd; font-size: 8pt; color: #888; text-align: center; }
+   561→   561→  @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+   562→   562→</style>
+   563→   563→</head>
+   564→   564→<body>
+   565→   565→  <div class="header">
+   566→   566→    <div class="company-info">
+   567→   567→      ${cfg.logo ? `<img src="${cfg.logo}" style="max-height:60px; margin-bottom:8px;" alt="Logo" />` : ""}
+   568→   568→      <h1>${cfg.companyFullName || "Empresa"}</h1>
+   569→   569→      <p>${cfg.companyAddress}${cfg.companyCity ? ", " + cfg.companyCity : ""}${cfg.companyProvince ? " (" + cfg.companyProvince + ")" : ""}</p>
+   570→   570→      <p>${cfg.companyCif ? "CIF: " + cfg.companyCif : ""}</p>
+   571→   571→    </div>
+   572→   572→    <div class="invoice-box">
+   573→   573→      <h2>FACTURA</h2>
+   574→   574→      <p><strong>Nº:</strong> ${invoiceNumber}</p>
+   575→   575→      <p><strong>Fecha:</strong> ${new Date().toLocaleDateString("es-ES")}</p>
+   576→   576→    </div>
+   577→   577→  </div>
+   578→   578→
+   579→   579→  <div class="parties">
+   580→   580→    <div class="party">
+   581→   581→      <h3>Datos del Emisor</h3>
+   582→   582→      <p class="name">${cfg.companyFullName || "Empresa"}</p>
+   583→   583→      <p>${cfg.companyAddress}</p>
+   584→   584→      <p>${cfg.companyCity}${cfg.companyProvince ? " (" + cfg.companyProvince + ")" : ""}</p>
+   585→   585→      <p>${cfg.companyCif ? "CIF: " + cfg.companyCif : ""}</p>
+   586→   586→    </div>
+   587→   587→    <div class="party">
+   588→   588→      <h3>Datos del Cliente</h3>
+   589→   589→      <p class="name">${clienteObj?.nombre || "—"}</p>
+   590→   590→      <p>${clienteObj?.dir || ""}</p>
+   591→   591→      <p>${clienteObj?.cp ? clienteObj.cp + " " : ""}${clienteObj?.ciudad || ""}${clienteObj?.prov ? " (" + clienteObj.prov + ")" : ""}</p>
+   592→   592→      <p>${clienteObj?.cif ? "CIF: " + clienteObj.cif : ""}</p>
+   593→   593→      <p>${clienteObj?.mail ? clienteObj.mail : ""}</p>
+   594→   594→    </div>
+   595→   595→  </div>
+   596→   596→
+   597→   597→  <table>
+   598→   598→    <thead>
+   599→   599→      <tr>
+   600→   600→        <th>Fecha</th>
+   601→   601→        <th>Concepto</th>
+   602→   602→        <th>Obs</th>
+   603→   603→        <th>Cant.</th>
+   604→   604→        <th>Precio</th>
+   605→   605→        <th>Total</th>
+   606→   606→      </tr>
+   607→   607→    </thead>
+   608→   608→    <tbody>
+   609→   609→      ${items.map(it => `
+   610→   610→      <tr>
+   611→   611→        <td>${fmtDate(it.fecha)}</td>
+   612→   612→        <td>${it.c1}${it.c2 ? " — " + it.c2 : ""}</td>
+   613→   613→        <td>${it.obs || ""}</td>
+   614→   614→        <td>${it.cant}</td>
+   615→   615→        <td>${fmt(it.precio)}€</td>
+   616→   616→        <td>${fmt(it.total)}€</td>
+   617→   617→      </tr>`).join("")}
+   618→   618→    </tbody>
+   619→   619→  </table>
+   620→   620→
+   621→   621→  <div class="totals">
+   622→   622→    <table>
+   623→   623→      <tr><td>Base Imponible</td><td style="text-align:right">${fmt(facturaBase)}€</td></tr>
+   624→   624→      <tr><td>IVA (${facturaIvaRate}%)</td><td style="text-align:right">${fmt(facturaIva)}€</td></tr>
+   625→   625→      <tr class="total-row"><td>TOTAL</td><td style="text-align:right">${fmt(facturaTotal)}€</td></tr>
+   626→   626→    </table>
+   627→   627→  </div>
+   628→   628→
+   629→   629→  <div class="footnotes">
+   630→   630→    <p>Factura generada por BILL by Método — MURAL Scheduling</p>
+   631→   631→  </div>
+   632→   632→</body>
+   633→   633→</html>`;
+   634→   634→
+   635→   635→    // Open print window
+   636→   636→    const printWindow = window.open("", "_blank");
+   637→   637→    if (printWindow) {
+   638→   638→      printWindow.document.write(printHtml);
+   639→   639→      printWindow.document.close();
+   640→   640→      printWindow.focus();
+   641→   641→      setTimeout(() => printWindow.print(), 500);
+   642→   642→    }
+   643→   643→
+   644→   644→    // Mark as facturado
+   645→   645→    try {
+   646→   646→      const res = await fetch("/api/company/bill/registros/mark-facturado", {
+   647→   647→        method: "POST",
+   648→   648→        headers: { "Content-Type": "application/json" },
+   649→   649→        body: JSON.stringify({ ids: Array.from(selectedFacturaIds) }),
+   650→   650→      });
+   651→   651→      if (res.ok) {
+   652→   652→        setRegistros(prev => prev.map(r =>
+   653→   653→          selectedFacturaIds.has(r.id) ? { ...r, facturado: true } : r
+   654→   654→        ));
+   655→   655→        // Increment sequence
+   656→   656→        const newSeq = (facturaSeq?.seq || 1) + 1;
+   657→   657→        await fetch("/api/company/bill/factura-seq", {
+   658→   658→          method: "PUT",
+   659→   659→          headers: { "Content-Type": "application/json" },
+   660→   660→          body: JSON.stringify({ seq: newSeq }),
+   661→   661→        });
+   662→   662→        setFacturaSeq(prev => prev ? { ...prev, seq: newSeq } : null);
+   663→   663→        setSelectedFacturaIds(new Set());
+   664→   664→        addToast(`Factura ${invoiceNumber} generada`);
+   665→   665→      } else {
+   666→   666→        addToast("Error al marcar como facturado", "error");
+   667→   667→      }
+   668→   668→    } catch {
+   669→   669→      addToast("Error de conexión", "error");
+   670→   670→    }
+   671→   671→  }
+   672→   672→
+   673→   673→  // ═══════════════════════════════════════════
+   674→   674→  // CONFIGURACIÓN TAB
+   675→   675→  // ═══════════════════════════════════════════
+   676→   676→
+   677→   677→  const [configForm, setConfigForm] = useState({
+   678→   678→    companyFullName: "",
+   679→   679→    companyAddress: "",
+   680→   680→    companyCity: "",
+   681→   681→    companyProvince: "",
+   682→   682→    companyCif: "",
+   683→   683→    logo: "",
+   684→   684→    defaultIva: 21,
+   685→   685→  });
+   686→   686→  const [savingConfig, setSavingConfig] = useState(false);
+   687→   687→
+   688→   688→  useEffect(() => {
+   689→   689→    if (config) {
+   690→   690→      setConfigForm({
+   691→   691→        companyFullName: config.companyFullName || "",
+   692→   692→        companyAddress: config.companyAddress || "",
+   693→   693→        companyCity: config.companyCity || "",
+   694→   694→        companyProvince: config.companyProvince || "",
+   695→   695→        companyCif: config.companyCif || "",
+   696→   696→        logo: config.logo || "",
+   697→   697→        defaultIva: config.defaultIva ?? 21,
+   698→   698→      });
+   699→   699→    }
+   700→   700→  }, [config]);
+   701→   701→
+   702→   702→  async function saveConfig() {
+   703→   703→    setSavingConfig(true);
+   704→   704→    try {
+   705→   705→      const res = await fetch("/api/company/bill/config", {
+   706→   706→        method: "PUT",
+   707→   707→        headers: { "Content-Type": "application/json" },
+   708→   708→        body: JSON.stringify(configForm),
+   709→   709→      });
+   710→   710→      if (res.ok) {
+   711→   711→        const updated = await res.json();
+   712→   712→        setConfig(updated);
+   713→   713→        addToast("Configuración guardada");
+   714→   714→      } else {
+   715→   715→        addToast("Error al guardar", "error");
+   716→   716→      }
+   717→   717→    } catch {
+   718→   718→      addToast("Error de conexión", "error");
+   719→   719→    } finally {
+   720→   720→      setSavingConfig(false);
+   721→   721→    }
+   722→   722→  }
+   723→   723→
+   724→   724→  // ═══════════════════════════════════════════
+   725→   725→  // SHARED STYLES
+   726→   726→  // ═══════════════════════════════════════════
+   727→   727→
+   728→   728→  const inputCls = "w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:border-[#2E5D3A] focus:outline-none";
+   729→   729→  const labelCls = "block text-xs font-extrabold text-blue-400 uppercase mb-1";
+   730→   730→  const cardCls = "bg-slate-800/50 border border-slate-700 rounded-xl p-3 sm:p-4";
+   731→   731→  const btnPrimary = "bg-[#2E5D3A] hover:bg-[#3a7a4c] text-white font-bold px-3 py-1.5 rounded-lg text-xs sm:text-sm transition";
+   732→   732→  const btnSecondary = "bg-slate-700 hover:bg-slate-600 text-white font-bold px-3 py-1.5 rounded-lg text-xs sm:text-sm transition";
+   733→   733→  const btnDanger = "bg-red-600/20 hover:bg-red-600/30 text-red-400 font-bold px-2 py-1 rounded text-xs transition";
+   734→   734→
+   735→   735→  // ═══════════════════════════════════════════
+   736→   736→  // LOADING
+   737→   737→  // ═══════════════════════════════════════════
+   738→   738→
+   739→   739→  if (loading) {
+   740→   740→    return (
+   741→   741→      <div className="flex items-center justify-center py-20">
+   742→   742→        <div className="w-8 h-8 border-3 border-[#2E5D3A] border-t-transparent rounded-full animate-spin" />
+   743→   743→      </div>
+   744→   744→    );
+   745→   745→  }
+   746→   746→
+   747→   747→  // ═══════════════════════════════════════════
+   748→   748→  // RENDER
+   749→   749→  // ═══════════════════════════════════════════
+   750→   750→
+   751→   751→  const tabs: { key: BillTabKey; label: string }[] = [
+   752→   752→    { key: "entrada", label: "ENTRADA" },
+   753→   753→    { key: "registros", label: "REGISTROS" },
+   754→   754→    { key: "clientes", label: "CLIENTES" },
+   755→   755→    { key: "catalogo", label: "CATÁLOGO" },
+   756→   756→    { key: "facturas", label: "FACTURAS" },
+   757→   757→    { key: "config", label: "CONFIG" },
+   758→   758→  ];
+   759→   759→
+   760→   760→  return (
+   761→   761→    <div className="space-y-3 relative">
+   762→   762→      {/* ═══════ Toasts ═══════ */}
+   763→   763→      <div className="fixed top-4 right-4 z-50 space-y-2">
+   764→   764→        {toasts.map(t => (
+   765→   765→          <div key={t.id} className={`px-4 py-2 rounded-lg text-sm font-bold shadow-lg ${
+   766→   766→            t.type === "success" ? "bg-green-600 text-white" : "bg-red-600 text-white"
+   767→   767→          }`}>
+   768→   768→            {t.message}
+   769→   769→          </div>
+   770→   770→        ))}
+   771→   771→      </div>
+   772→   772→
+   773→   773→      {/* ═══════ Tab buttons ═══════ */}
+   774→   774→      <div className="flex gap-1.5 overflow-x-auto pb-1">
+   775→   775→        {tabs.map(t => (
+   776→   776→          <button key={t.key} onClick={() => setTab(t.key)}
+   777→   777→            className={`px-3 py-1.5 rounded-lg font-bold text-xs transition whitespace-nowrap ${
+   778→   778→              tab === t.key ? "bg-[#6BBE7A] text-black" : "bg-slate-800 text-slate-400 hover:bg-slate-700"
+   779→   779→            }`}>
+   780→   780→            {t.label}
+   781→   781→            {t.key === "entrada" && entradaRegistros.length > 0 && (
+   782→   782→              <span className="ml-1.5 bg-amber-500 text-black text-[10px] font-black px-1.5 py-0.5 rounded-full">{entradaRegistros.length}</span>
+   783→   783→            )}
+   784→   784→            {t.key === "facturas" && facturableRegistros.length > 0 && (
+   785→   785→              <span className="ml-1.5 bg-blue-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full">{facturableRegistros.length}</span>
+   786→   786→            )}
+   787→   787→          </button>
+   788→   788→        ))}
+   789→   789→      </div>
+   790→   790→
+   791→   791→      {/* ═══════════════════════════════════════════
+   792→   792→          ENTRADA TAB
+   793→   793→          ═══════════════════════════════════════════ */}
+   794→   794→      {tab === "entrada" && (
+   795→   795→        <div className="space-y-3">
+   796→   796→          {/* Entry form */}
+   797→   797→          <div className={cardCls}>
+   798→   798→            <h3 className="font-bold text-white mb-3 text-sm">Nueva Entrada</h3>
+   799→   799→            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+   800→   800→              <div>
+   801→   801→                <label className={labelCls}>Fecha</label>
+   802→   802→                <input type="date" value={entradaForm.fecha}
+   803→   803→                  onChange={e => setEntradaForm(f => ({ ...f, fecha: e.target.value }))}
+   804→   804→                  className={inputCls} />
+   805→   805→              </div>
+   806→   806→              <div>
+   807→   807→                <label className={labelCls}>Cliente</label>
+   808→   808→                <select value={entradaForm.clienteId}
+   809→   809→                  onChange={e => setEntradaForm(f => ({ ...f, clienteId: e.target.value }))}
+   810→   810→                  className={inputCls}>
+   811→   811→                  <option value="">— Seleccionar —</option>
+   812→   812→                  {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+   813→   813→                </select>
+   814→   814→              </div>
+   815→   815→              {/* C1 with autocomplete */}
+   816→   816→              <div className="relative" ref={c1Ref}>
+   817→   817→                <label className={labelCls}>C1 (Grupo)</label>
+   818→   818→                <input value={entradaForm.c1}
+   819→   819→                  onChange={e => { setEntradaForm(f => ({ ...f, c1: e.target.value, c2: "", precioUnitario: 0 })); setShowC1Drop(true); }}
+   820→   820→                  onFocus={() => setShowC1Drop(true)}
+   821→   821→                  className={inputCls}
+   822→   822→                  placeholder="Grupo concepto..." />
+   823→   823→                {showC1Drop && c1Suggestions.length > 0 && (
+   824→   824→                  <div className="absolute z-30 top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-600 rounded-lg shadow-xl max-h-40 overflow-y-auto">
+   825→   825→                    {c1Suggestions.map(s => (
+   826→   826→                      <button key={s} className="w-full text-left px-3 py-2 text-sm text-white hover:bg-slate-700 transition"
+   827→   827→                        onClick={() => { setEntradaForm(f => ({ ...f, c1: s, c2: "", precioUnitario: 0 })); setShowC1Drop(false); }}>
+   828→   828→                        {s}
+   829→   829→                      </button>
+   830→   830→                    ))}
+   831→   831→                  </div>
+   832→   832→                )}
+   833→   833→              </div>
+   834→   834→              {/* C2 with autocomplete */}
+   835→   835→              <div className="relative" ref={c2Ref}>
+   836→   836→                <label className={labelCls}>C2 (Servicio)</label>
+   837→   837→                <input value={entradaForm.c2}
+   838→   838→                  onChange={e => { setEntradaForm(f => ({ ...f, c2: e.target.value })); setShowC2Drop(true); }}
+   839→   839→                  onFocus={() => setShowC2Drop(true)}
+   840→   840→                  className={inputCls}
+   841→   841→                  placeholder="Servicio..." />
+   842→   842→                {showC2Drop && c2Suggestions.length > 0 && (
+   843→   843→                  <div className="absolute z-30 top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-600 rounded-lg shadow-xl max-h-40 overflow-y-auto">
+   844→   844→                    {c2Suggestions.map(s => (
+   845→   845→                      <button key={s} className="w-full text-left px-3 py-2 text-sm text-white hover:bg-slate-700 transition"
+   846→   846→                        onClick={() => { setEntradaForm(f => ({ ...f, c2: s })); setShowC2Drop(false); }}>
+   847→   847→                        {s}
+   848→   848→                      </button>
+   849→   849→                    ))}
+   850→   850→                  </div>
+   851→   851→                )}
+   852→   852→              </div>
+   853→   853→              <div>
+   854→   854→                <label className={labelCls}>Cantidad</label>
+   855→   855→                <input type="number" min="1" value={entradaForm.cant}
+   856→   856→                  onChange={e => setEntradaForm(f => ({ ...f, cant: parseInt(e.target.value) || 1 }))}
+   857→   857→                  className={inputCls} />
+   858→   858→              </div>
+   859→   859→              <div>
+   860→   860→                <label className={labelCls}>Precio Unitario</label>
+   861→   861→                <input type="number" step="0.01" value={entradaForm.precioUnitario}
+   862→   862→                  onChange={e => setEntradaForm(f => ({ ...f, precioUnitario: parseFloat(e.target.value) || 0 }))}
+   863→   863→                  className={inputCls} />
+   864→   864→              </div>
+   865→   865→              <div className="sm:col-span-2 lg:col-span-3">
+   866→   866→                <label className={labelCls}>Observaciones</label>
+   867→   867→                <input value={entradaForm.obs}
+   868→   868→                  onChange={e => setEntradaForm(f => ({ ...f, obs: e.target.value }))}
+   869→   869→                  className={inputCls} placeholder="Observaciones..." />
+   870→   870→              </div>
+   871→   871→            </div>
+   872→   872→            <div className="flex justify-between items-center mt-3">
+   873→   873→              <div className="text-sm text-slate-400">
+   874→   874→                Total: <span className="text-amber-400 font-bold">{fmt(entradaForm.cant * entradaForm.precioUnitario)}€</span>
+   875→   875→              </div>
+   876→   876→              <button onClick={addEntrada} className={btnPrimary}>+ Añadir Entrada</button>
+   877→   877→            </div>
+   878→   878→          </div>
+   879→   879→
+   880→   880→          {/* Un-transferred entries */}
+   881→   881→          <div className={cardCls}>
+   882→   882→            <div className="flex justify-between items-center mb-3">
+   883→   883→              <h3 className="font-bold text-white text-sm">
+   884→   884→                Entradas Pendientes
+   885→   885→                <span className="ml-2 text-amber-400 font-bold">({entradaRegistros.length})</span>
+   886→   886→              </h3>
+   887→   887→              {entradaRegistros.length > 0 && (
+   888→   888→                <button onClick={transferAllEntradas}
+   889→   889→                  className="bg-amber-600 hover:bg-amber-500 text-black font-bold px-3 py-1.5 rounded-lg text-xs transition">
+   890→   890→                  Pasar a Registros →
+   891→   891→                </button>
+   892→   892→              )}
+   893→   893→            </div>
+   894→   894→
+   895→   895→            {entradaRegistros.length === 0 ? (
+   896→   896→              <div className="text-center text-slate-500 py-6 text-sm">No hay entradas pendientes</div>
+   897→   897→            ) : (
+   898→   898→              <>
+   899→   899→                {/* Mobile cards */}
+   900→   900→                <div className="sm:hidden space-y-2 max-h-96 overflow-y-auto">
+   901→   901→                  {entradaRegistros.map(r => (
+   902→   902→                    <div key={r.id} className="bg-slate-900/50 border border-slate-700/50 rounded-lg p-3 space-y-1">
+   903→   903→                      <div className="flex justify-between items-start">
+   904→   904→                        <div>
+   905→   905→                          <div className="text-xs text-slate-400">{fmtDate(r.fecha)}</div>
+   906→   906→                          <div className="text-sm font-bold text-white">{r.c1}{r.c2 ? " — " + r.c2 : ""}</div>
+   907→   907→                          <div className="text-xs text-slate-400">{r.cliente || "Sin cliente"}</div>
+   908→   908→                        </div>
+   909→   909→                        <div className="text-right">
+   910→   910→                          <div className="text-amber-400 font-bold text-sm">{fmt(r.cant * r.precioUnitario)}€</div>
+   911→   911→                          <div className="text-[10px] text-slate-500">{r.cant} × {fmt(r.precioUnitario)}€</div>
+   912→   912→                        </div>
+   913→   913→                      </div>
+   914→   914→                      {r.obs && <div className="text-xs text-slate-500 italic">{r.obs}</div>}
+   915→   915→                      <div className="flex justify-end">
+   916→   916→                        <button onClick={() => deleteRegistro(r.id)} className={btnDanger}>Eliminar</button>
+   917→   917→                      </div>
+   918→   918→                    </div>
+   919→   919→                  ))}
+   920→   920→                </div>
+   921→   921→
+   922→   922→                {/* Desktop table */}
+   923→   923→                <div className="hidden sm:block overflow-x-auto max-h-96">
+   924→   924→                  <table className="w-full">
+   925→   925→                    <thead className="sticky top-0 bg-slate-900 z-10">
+   926→   926→                      <tr>
+   927→   927→                        <th className="text-left px-3 py-2 text-xs font-extrabold text-blue-400 uppercase">Fecha</th>
+   928→   928→                        <th className="text-left px-3 py-2 text-xs font-extrabold text-blue-400 uppercase">Cliente</th>
+   929→   929→                        <th className="text-left px-3 py-2 text-xs font-extrabold text-blue-400 uppercase">C1</th>
+   930→   930→                        <th className="text-left px-3 py-2 text-xs font-extrabold text-blue-400 uppercase">C2</th>
+   931→   931→                        <th className="text-right px-3 py-2 text-xs font-extrabold text-blue-400 uppercase">Cant</th>
+   932→   932→                        <th className="text-right px-3 py-2 text-xs font-extrabold text-blue-400 uppercase">Precio</th>
+   933→   933→                        <th className="text-right px-3 py-2 text-xs font-extrabold text-blue-400 uppercase">Total</th>
+   934→   934→                        <th className="text-left px-3 py-2 text-xs font-extrabold text-blue-400 uppercase">Obs</th>
+   935→   935→                        <th className="text-center px-3 py-2 text-xs font-extrabold text-blue-400 uppercase">Acc</th>
+   936→   936→                      </tr>
+   937→   937→                    </thead>
+   938→   938→                    <tbody>
+   939→   939→                      {entradaRegistros.map(r => (
+   940→   940→                        <tr key={r.id} className="border-b border-slate-700/50 hover:bg-slate-700/20">
+   941→   941→                          <td className="px-3 py-2 text-sm text-slate-300">{fmtDate(r.fecha)}</td>
+   942→   942→                          <td className="px-3 py-2 text-sm text-white font-medium">{r.cliente || "—"}</td>
+   943→   943→                          <td className="px-3 py-2 text-sm text-white">{r.c1}</td>
+   944→   944→                          <td className="px-3 py-2 text-sm text-slate-300">{r.c2}</td>
+   945→   945→                          <td className="px-3 py-2 text-sm text-white text-right">{r.cant}</td>
+   946→   946→                          <td className="px-3 py-2 text-sm text-slate-300 text-right">{fmt(r.precioUnitario)}€</td>
+   947→   947→                          <td className="px-3 py-2 text-sm text-amber-400 font-bold text-right">{fmt(r.cant * r.precioUnitario)}€</td>
+   948→   948→                          <td className="px-3 py-2 text-xs text-slate-500 max-w-[120px] truncate">{r.obs}</td>
+   949→   949→                          <td className="px-3 py-2 text-center">
+   950→   950→                            <button onClick={() => deleteRegistro(r.id)} className={btnDanger}>✕</button>
+   951→   951→                          </td>
+   952→   952→                        </tr>
+   953→   953→                      ))}
+   954→   954→                    </tbody>
+   955→   955→                  </table>
+   956→   956→                </div>
+   957→   957→              </>
+   958→   958→            )}
+   959→   959→          </div>
+   960→   960→        </div>
+   961→   961→      )}
+   962→   962→
+   963→   963→      {/* ═══════════════════════════════════════════
+   964→   964→          REGISTROS TAB
+   965→   965→          ═══════════════════════════════════════════ */}
+   966→   966→      {tab === "registros" && (
+   967→   967→        <div className="space-y-3">
+   968→   968→          {/* Filters */}
+   969→   969→          <div className={cardCls}>
+   970→   970→            <h3 className="font-bold text-white mb-3 text-sm">Filtros</h3>
+   971→   971→            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+   972→   972→              <div>
+   973→   973→                <label className={labelCls}>Desde</label>
+   974→   974→                <input type="date" value={regFilter.dateFrom}
+   975→   975→                  onChange={e => setRegFilter(f => ({ ...f, dateFrom: e.target.value }))}
+   976→   976→                  className={inputCls} />
+   977→   977→              </div>
+   978→   978→              <div>
+   979→   979→                <label className={labelCls}>Hasta</label>
+   980→   980→                <input type="date" value={regFilter.dateTo}
+   981→   981→                  onChange={e => setRegFilter(f => ({ ...f, dateTo: e.target.value }))}
+   982→   982→                  className={inputCls} />
+   983→   983→              </div>
+   984→   984→              <div>
+   985→   985→                <label className={labelCls}>Cliente</label>
+   986→   986→                <select value={regFilter.clienteId}
+   987→   987→                  onChange={e => setRegFilter(f => ({ ...f, clienteId: e.target.value }))}
+   988→   988→                  className={inputCls}>
+   989→   989→                  <option value="">Todos</option>
+   990→   990→                  {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+   991→   991→                </select>
+   992→   992→              </div>
+   993→   993→              <div>
+   994→   994→                <label className={labelCls}>Buscar</label>
+   995→   995→                <input value={regFilter.search}
+   996→   996→                  onChange={e => setRegFilter(f => ({ ...f, search: e.target.value }))}
+   997→   997→                  className={inputCls} placeholder="Buscar..." />
+   998→   998→              </div>
+   999→   999→            </div>
+  1000→  1000→          </div>
+  1001→  1001→
+  1002→  1002→          {/* Registros table/cards */}
+  1003→  1003→          <div className={cardCls}>
+  1004→  1004→            <div className="flex justify-between items-center mb-3">
+  1005→  1005→              <h3 className="font-bold text-white text-sm">
+  1006→  1006→                Registros
+  1007→  1007→                <span className="ml-2 text-slate-400 font-normal">({filteredRegistros.length})</span>
+  1008→  1008→              </h3>
+  1009→  1009→              <div className="text-sm">
+  1010→  1010→                Total: <span className="text-amber-400 font-bold">{fmt(regTotal)}€</span>
+  1011→  1011→              </div>
+  1012→  1012→            </div>
+  1013→  1013→
+  1014→  1014→            {filteredRegistros.length === 0 ? (
+  1015→  1015→              <div className="text-center text-slate-500 py-6 text-sm">No hay registros</div>
+  1016→  1016→            ) : (
+  1017→  1017→              <>
+  1018→  1018→                {/* Mobile cards */}
+  1019→  1019→                <div className="sm:hidden space-y-2 max-h-[500px] overflow-y-auto">
+  1020→  1020→                  {filteredRegistros.map(r => (
+  1021→  1021→                    <div key={r.id} className="bg-slate-900/50 border border-slate-700/50 rounded-lg p-3 space-y-2">
+  1022→  1022→                      {editingRegId === r.id ? (
+  1023→  1023→                        <div className="space-y-2">
+  1024→  1024→                          <div className="grid grid-cols-2 gap-2">
+  1025→  1025→                            <div>
+  1026→  1026→                              <label className="block text-[10px] text-blue-400 font-bold mb-0.5">Fecha</label>
+  1027→  1027→                              <input type="date" value={editRegForm.fecha}
+  1028→  1028→                                onChange={e => setEditRegForm(f => ({ ...f, fecha: e.target.value }))}
+  1029→  1029→                                className="w-full px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-xs" />
+  1030→  1030→                            </div>
+  1031→  1031→                            <div>
+  1032→  1032→                              <label className="block text-[10px] text-blue-400 font-bold mb-0.5">Cliente</label>
+  1033→  1033→                              <select value={editRegForm.clienteId || ""}
+  1034→  1034→                                onChange={e => {
+  1035→  1035→                                  const cid = e.target.value;
+  1036→  1036→                                  const cname = clientes.find(c => c.id === cid)?.nombre || "";
+  1037→  1037→                                  setEditRegForm(f => ({ ...f, clienteId: cid, cliente: cname }));
+  1038→  1038→                                }}
+  1039→  1039→                                className="w-full px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-xs">
+  1040→  1040→                                <option value="">—</option>
+  1041→  1041→                                {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+  1042→  1042→                              </select>
+  1043→  1043→                            </div>
+  1044→  1044→                            <div>
+  1045→  1045→                              <label className="block text-[10px] text-blue-400 font-bold mb-0.5">C1</label>
+  1046→  1046→                              <input value={editRegForm.c1 || ""}
+  1047→  1047→                                onChange={e => setEditRegForm(f => ({ ...f, c1: e.target.value }))}
+  1048→  1048→                                className="w-full px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-xs" />
+  1049→  1049→                            </div>
+  1050→  1050→                            <div>
+  1051→  1051→                              <label className="block text-[10px] text-blue-400 font-bold mb-0.5">C2</label>
+  1052→  1052→                              <input value={editRegForm.c2 || ""}
+  1053→  1053→                                onChange={e => setEditRegForm(f => ({ ...f, c2: e.target.value }))}
+  1054→  1054→                                className="w-full px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-xs" />
+  1055→  1055→                            </div>
+  1056→  1056→                            <div>
+  1057→  1057→                              <label className="block text-[10px] text-blue-400 font-bold mb-0.5">Cant</label>
+  1058→  1058→                              <input type="number" value={editRegForm.cant || 1}
+  1059→  1059→                                onChange={e => setEditRegForm(f => ({ ...f, cant: parseInt(e.target.value) || 1 }))}
+  1060→  1060→                                className="w-full px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-xs" />
+  1061→  1061→                            </div>
+  1062→  1062→                            <div>
+  1063→  1063→                              <label className="block text-[10px] text-blue-400 font-bold mb-0.5">Precio</label>
+  1064→  1064→                              <input type="number" step="0.01" value={editRegForm.precioUnitario || 0}
+  1065→  1065→                                onChange={e => setEditRegForm(f => ({ ...f, precioUnitario: parseFloat(e.target.value) || 0 }))}
+  1066→  1066→                                className="w-full px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-xs" />
+  1067→  1067→                            </div>
+  1068→  1068→                          </div>
+  1069→  1069→                          <div>
+  1070→  1070→                            <label className="block text-[10px] text-blue-400 font-bold mb-0.5">Obs</label>
+  1071→  1071→                            <input value={editRegForm.obs || ""}
+  1072→  1072→                              onChange={e => setEditRegForm(f => ({ ...f, obs: e.target.value }))}
+  1073→  1073→                              className="w-full px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-xs" />
+  1074→  1074→                          </div>
+  1075→  1075→                          <div className="flex gap-2">
+  1076→  1076→                            <button onClick={saveEditReg} className="flex-1 bg-[#2E5D3A] text-white text-xs font-bold py-1.5 rounded">Guardar</button>
+  1077→  1077→                            <button onClick={() => setEditingRegId(null)} className="flex-1 bg-slate-700 text-white text-xs font-bold py-1.5 rounded">Cancelar</button>
+  1078→  1078→                          </div>
+  1079→  1079→                        </div>
+  1080→  1080→                      ) : (
+  1081→  1081→                        <>
+  1082→  1082→                          <div className="flex justify-between items-start">
+  1083→  1083→                            <div>
+  1084→  1084→                              <div className="text-xs text-slate-400">{fmtDate(r.fecha)}</div>
+  1085→  1085→                              <div className="text-sm font-bold text-white">{r.c1}{r.c2 ? " — " + r.c2 : ""}</div>
+  1086→  1086→                              <div className="text-xs text-slate-400">{r.cliente || "Sin cliente"}</div>
+  1087→  1087→                            </div>
+  1088→  1088→                            <div className="text-right">
+  1089→  1089→                              <div className="text-amber-400 font-bold text-sm">{fmt(r.cant * r.precioUnitario)}€</div>
+  1090→  1090→                              <div className="text-[10px] text-slate-500">{r.cant} × {fmt(r.precioUnitario)}€</div>
+  1091→  1091→                            </div>
+  1092→  1092→                          </div>
+  1093→  1093→                          <div className="flex items-center justify-between">
+  1094→  1094→                            <div className="flex items-center gap-2">
+  1095→  1095→                              {r.obs && <span className="text-xs text-slate-500 italic truncate max-w-[150px]">{r.obs}</span>}
+  1096→  1096→                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+  1097→  1097→                                r.facturado ? "bg-green-600/20 text-green-400" : "bg-slate-600/30 text-slate-400"
+  1098→  1098→                              }`}>
+  1099→  1099→                                {r.facturado ? "Facturado" : "Pendiente"}
+  1100→  1100→                              </span>
+  1101→  1101→                            </div>
+  1102→  1102→                            <div className="flex gap-1">
+  1103→  1103→                              <button onClick={() => startEditReg(r)} className="px-2 py-1 rounded text-xs font-bold bg-blue-600/20 text-blue-400">✎</button>
+  1104→  1104→                              <button onClick={() => deleteRegistro(r.id)} className={btnDanger}>✕</button>
+  1105→  1105→                            </div>
+  1106→  1106→                          </div>
+  1107→  1107→                        </>
+  1108→  1108→                      )}
+  1109→  1109→                    </div>
+  1110→  1110→                  ))}
+  1111→  1111→                </div>
+  1112→  1112→
+  1113→  1113→                {/* Desktop table */}
+  1114→  1114→                <div className="hidden sm:block overflow-x-auto max-h-[500px]">
+  1115→  1115→                  <table className="w-full">
+  1116→  1116→                    <thead className="sticky top-0 bg-slate-900 z-10">
+  1117→  1117→                      <tr>
+  1118→  1118→                        <th className="text-left px-3 py-2 text-xs font-extrabold text-blue-400 uppercase">Fecha</th>
+  1119→  1119→                        <th className="text-left px-3 py-2 text-xs font-extrabold text-blue-400 uppercase">Cliente</th>
+  1120→  1120→                        <th className="text-left px-3 py-2 text-xs font-extrabold text-blue-400 uppercase">C1</th>
+  1121→  1121→                        <th className="text-left px-3 py-2 text-xs font-extrabold text-blue-400 uppercase">C2</th>
+  1122→  1122→                        <th className="text-right px-3 py-2 text-xs font-extrabold text-blue-400 uppercase">Cant</th>
+  1123→  1123→                        <th className="text-right px-3 py-2 text-xs font-extrabold text-blue-400 uppercase">Precio</th>
+  1124→  1124→                        <th className="text-right px-3 py-2 text-xs font-extrabold text-blue-400 uppercase">Total</th>
+  1125→  1125→                        <th className="text-left px-3 py-2 text-xs font-extrabold text-blue-400 uppercase">Obs</th>
+  1126→  1126→                        <th className="text-center px-3 py-2 text-xs font-extrabold text-blue-400 uppercase">Fact</th>
+  1127→  1127→                        <th className="text-center px-3 py-2 text-xs font-extrabold text-blue-400 uppercase">Acc</th>
+  1128→  1128→                      </tr>
+  1129→  1129→                    </thead>
+  1130→  1130→                    <tbody>
+  1131→  1131→                      {filteredRegistros.map(r => (
+  1132→  1132→                        editingRegId === r.id ? (
+  1133→  1133→                          <tr key={r.id} className="border-b border-amber-600/30 bg-slate-800">
+  1134→  1134→                            <td className="px-2 py-1"><input type="date" value={editRegForm.fecha} onChange={e => setEditRegForm(f => ({ ...f, fecha: e.target.value }))} className="w-full px-2 py-1 bg-slate-900 border border-slate-600 rounded text-white text-xs" /></td>
+  1135→  1135→                            <td className="px-2 py-1">
+  1136→  1136→                              <select value={editRegForm.clienteId || ""} onChange={e => { const cid = e.target.value; const cname = clientes.find(c => c.id === cid)?.nombre || ""; setEditRegForm(f => ({ ...f, clienteId: cid, cliente: cname })); }} className="w-full px-2 py-1 bg-slate-900 border border-slate-600 rounded text-white text-xs">
+  1137→  1137→                                <option value="">—</option>
+  1138→  1138→                                {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+  1139→  1139→                              </select>
+  1140→  1140→                            </td>
+  1141→  1141→                            <td className="px-2 py-1"><input value={editRegForm.c1 || ""} onChange={e => setEditRegForm(f => ({ ...f, c1: e.target.value }))} className="w-full px-2 py-1 bg-slate-900 border border-slate-600 rounded text-white text-xs" /></td>
+  1142→  1142→                            <td className="px-2 py-1"><input value={editRegForm.c2 || ""} onChange={e => setEditRegForm(f => ({ ...f, c2: e.target.value }))} className="w-full px-2 py-1 bg-slate-900 border border-slate-600 rounded text-white text-xs" /></td>
+  1143→  1143→                            <td className="px-2 py-1"><input type="number" value={editRegForm.cant || 1} onChange={e => setEditRegForm(f => ({ ...f, cant: parseInt(e.target.value) || 1 }))} className="w-full px-2 py-1 bg-slate-900 border border-slate-600 rounded text-white text-xs text-right" /></td>
+  1144→  1144→                            <td className="px-2 py-1"><input type="number" step="0.01" value={editRegForm.precioUnitario || 0} onChange={e => setEditRegForm(f => ({ ...f, precioUnitario: parseFloat(e.target.value) || 0 }))} className="w-full px-2 py-1 bg-slate-900 border border-slate-600 rounded text-white text-xs text-right" /></td>
+  1145→  1145→                            <td className="px-3 py-2 text-amber-400 font-bold text-sm text-right">{fmt((editRegForm.cant || 1) * (editRegForm.precioUnitario || 0))}€</td>
+  1146→  1146→                            <td className="px-2 py-1"><input value={editRegForm.obs || ""} onChange={e => setEditRegForm(f => ({ ...f, obs: e.target.value }))} className="w-full px-2 py-1 bg-slate-900 border border-slate-600 rounded text-white text-xs" /></td>
+  1147→  1147→                            <td className="px-3 py-2"></td>
+  1148→  1148→                            <td className="px-3 py-2 text-center">
+  1149→  1149→                              <div className="flex gap-1 justify-center">
+  1150→  1150→                                <button onClick={saveEditReg} className="px-2 py-1 rounded text-xs font-bold bg-[#2E5D3A] text-white">✓</button>
+  1151→  1151→                                <button onClick={() => setEditingRegId(null)} className="px-2 py-1 rounded text-xs font-bold bg-slate-700 text-white">✕</button>
+  1152→  1152→                              </div>
+  1153→  1153→                            </td>
+  1154→  1154→                          </tr>
+  1155→  1155→                        ) : (
+  1156→  1156→                          <tr key={r.id} className="border-b border-slate-700/50 hover:bg-slate-700/20">
+  1157→  1157→                            <td className="px-3 py-2 text-sm text-slate-300">{fmtDate(r.fecha)}</td>
+  1158→  1158→                            <td className="px-3 py-2 text-sm text-white font-medium">{r.cliente || "—"}</td>
+  1159→  1159→                            <td className="px-3 py-2 text-sm text-white">{r.c1}</td>
+  1160→  1160→                            <td className="px-3 py-2 text-sm text-slate-300">{r.c2}</td>
+  1161→  1161→                            <td className="px-3 py-2 text-sm text-white text-right">{r.cant}</td>
+  1162→  1162→                            <td className="px-3 py-2 text-sm text-slate-300 text-right">{fmt(r.precioUnitario)}€</td>
+  1163→  1163→                            <td className="px-3 py-2 text-sm text-amber-400 font-bold text-right">{fmt(r.cant * r.precioUnitario)}€</td>
+  1164→  1164→                            <td className="px-3 py-2 text-xs text-slate-500 max-w-[120px] truncate">{r.obs}</td>
+  1165→  1165→                            <td className="px-3 py-2 text-center">
+  1166→  1166→                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+  1167→  1167→                                r.facturado ? "bg-green-600/20 text-green-400" : "bg-slate-600/30 text-slate-400"
+  1168→  1168→                              }`}>
+  1169→  1169→                                {r.facturado ? "Sí" : "No"}
+  1170→  1170→                              </span>
+  1171→  1171→                            </td>
+  1172→  1172→                            <td className="px-3 py-2 text-center">
+  1173→  1173→                              <div className="flex gap-1 justify-center">
+  1174→  1174→                                <button onClick={() => startEditReg(r)} className="px-2 py-1 rounded text-xs font-bold bg-blue-600/20 text-blue-400">✎</button>
+  1175→  1175→                                <button onClick={() => deleteRegistro(r.id)} className={btnDanger}>✕</button>
+  1176→  1176→                              </div>
+  1177→  1177→                            </td>
+  1178→  1178→                          </tr>
+  1179→  1179→                        )
+  1180→  1180→                      ))}
+  1181→  1181→                    </tbody>
+  1182→  1182→                    <tfoot className="sticky bottom-0 bg-slate-900">
+  1183→  1183→                      <tr className="border-t-2 border-[#2E5D3A]">
+  1184→  1184→                        <td colSpan={6} className="px-3 py-2 text-sm font-bold text-white text-right">TOTAL</td>
+  1185→  1185→                        <td className="px-3 py-2 text-sm font-black text-amber-400 text-right">{fmt(regTotal)}€</td>
+  1186→  1186→                        <td colSpan={3}></td>
+  1187→  1187→                      </tr>
+  1188→  1188→                    </tfoot>
+  1189→  1189→                  </table>
+  1190→  1190→                </div>
+  1191→  1191→              </>
+  1192→  1192→            )}
+  1193→  1193→          </div>
+  1194→  1194→        </div>
+  1195→  1195→      )}
+  1196→  1196→
+  1197→  1197→      {/* ═══════════════════════════════════════════
+  1198→  1198→          CLIENTES TAB
+  1199→  1199→          ═══════════════════════════════════════════ */}
+  1200→  1200→      {tab === "clientes" && (
+  1201→  1201→        <div className="space-y-3">
+  1202→  1202→          <div className="flex justify-between items-center">
+  1203→  1203→            <h3 className="font-bold text-white text-sm">Clientes ({clientes.length})</h3>
+  1204→  1204→            <button onClick={openNewCliente} className={btnPrimary}>+ Nuevo Cliente</button>
+  1205→  1205→          </div>
+  1206→  1206→
+  1207→  1207→          {clientes.length === 0 ? (
+  1208→  1208→            <div className={cardCls}>
+  1209→  1209→              <div className="text-center text-slate-500 py-8 text-sm">No hay clientes</div>
+  1210→  1210→            </div>
+  1211→  1211→          ) : (
+  1212→  1212→            <>
+  1213→  1213→              {/* Mobile cards */}
+  1214→  1214→              <div className="sm:hidden space-y-2 max-h-[600px] overflow-y-auto">
+  1215→  1215→                {clientes.map(c => (
+  1216→  1216→                  <div key={c.id} className="bg-slate-800/50 border border-slate-700 rounded-xl p-3 space-y-2">
+  1217→  1217→                    <div className="flex justify-between items-start">
+  1218→  1218→                      <div>
+  1219→  1219→                        <div className="text-sm font-bold text-white">{c.nombre}</div>
+  1220→  1220→                        {c.cif && <div className="text-xs text-slate-400">CIF: {c.cif}</div>}
+  1221→  1221→                        {c.dir && <div className="text-xs text-slate-400">{c.dir}</div>}
+  1222→  1222→                        {(c.cp || c.ciudad || c.prov) && (
+  1223→  1223→                          <div className="text-xs text-slate-400">{[c.cp, c.ciudad, c.prov].filter(Boolean).join(", ")}</div>
+  1224→  1224→                        )}
+  1225→  1225→                      </div>
+  1226→  1226→                      <div className="flex gap-1">
+  1227→  1227→                        <button onClick={() => openEditCliente(c)} className="px-2 py-1 rounded text-xs font-bold bg-blue-600/20 text-blue-400">✎</button>
+  1228→  1228→                        <button onClick={() => deleteCliente(c.id)} className={btnDanger}>✕</button>
+  1229→  1229→                      </div>
+  1230→  1230→                    </div>
+  1231→  1231→                    <div className="flex gap-3 text-xs text-slate-500">
+  1232→  1232→                      {c.mail && <span>✉ {c.mail}</span>}
+  1233→  1233→                      {c.tel && <span>☎ {c.tel}</span>}
+  1234→  1234→                    </div>
+  1235→  1235→                  </div>
+  1236→  1236→                ))}
+  1237→  1237→              </div>
+  1238→  1238→
+  1239→  1239→              {/* Desktop table */}
+  1240→  1240→              <div className="hidden sm:block bg-slate-800/50 border border-slate-700 rounded-xl overflow-hidden">
+  1241→  1241→                <div className="overflow-x-auto max-h-[600px]">
+  1242→  1242→                  <table className="w-full">
+  1243→  1243→                    <thead className="sticky top-0 bg-slate-900 z-10">
+  1244→  1244→                      <tr>
+  1245→  1245→                        <th className="text-left px-3 py-2 text-xs font-extrabold text-blue-400 uppercase">Nombre</th>
+  1246→  1246→                        <th className="text-left px-3 py-2 text-xs font-extrabold text-blue-400 uppercase">CIF</th>
+  1247→  1247→                        <th className="text-left px-3 py-2 text-xs font-extrabold text-blue-400 uppercase">Dirección</th>
+  1248→  1248→                        <th className="text-left px-3 py-2 text-xs font-extrabold text-blue-400 uppercase">Ciudad</th>
+  1249→  1249→                        <th className="text-left px-3 py-2 text-xs font-extrabold text-blue-400 uppercase">Email</th>
+  1250→  1250→                        <th className="text-left px-3 py-2 text-xs font-extrabold text-blue-400 uppercase">Tel</th>
+  1251→  1251→                        <th className="text-center px-3 py-2 text-xs font-extrabold text-blue-400 uppercase">Acc</th>
+  1252→  1252→                      </tr>
+  1253→  1253→                    </thead>
+  1254→  1254→                    <tbody>
+  1255→  1255→                      {clientes.map(c => (
+  1256→  1256→                        <tr key={c.id} className="border-b border-slate-700/50 hover:bg-slate-700/20">
+  1257→  1257→                          <td className="px-3 py-2 text-sm font-bold text-white">{c.nombre}</td>
+  1258→  1258→                          <td className="px-3 py-2 text-sm text-slate-300">{c.cif || "—"}</td>
+  1259→  1259→                          <td className="px-3 py-2 text-xs text-slate-400 max-w-[150px] truncate">{c.dir || "—"}</td>
+  1260→  1260→                          <td className="px-3 py-2 text-xs text-slate-400">{[c.cp, c.ciudad, c.prov].filter(Boolean).join(", ") || "—"}</td>
+  1261→  1261→                          <td className="px-3 py-2 text-xs text-slate-400">{c.mail || "—"}</td>
+  1262→  1262→                          <td className="px-3 py-2 text-xs text-slate-400">{c.tel || "—"}</td>
+  1263→  1263→                          <td className="px-3 py-2 text-center">
+  1264→  1264→                            <div className="flex gap-1 justify-center">
+  1265→  1265→                              <button onClick={() => openEditCliente(c)} className="px-2 py-1 rounded text-xs font-bold bg-blue-600/20 text-blue-400">✎</button>
+  1266→  1266→                              <button onClick={() => deleteCliente(c.id)} className={btnDanger}>✕</button>
+  1267→  1267→                            </div>
+  1268→  1268→                          </td>
+  1269→  1269→                        </tr>
+  1270→  1270→                      ))}
+  1271→  1271→                    </tbody>
+  1272→  1272→                  </table>
+  1273→  1273→                </div>
+  1274→  1274→              </div>
+  1275→  1275→            </>
+  1276→  1276→          )}
+  1277→  1277→
+  1278→  1278→          {/* Cliente Modal */}
+  1279→  1279→          {showClienteModal && (
+  1280→  1280→            <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setShowClienteModal(false)}>
+  1281→  1281→              <div className="bg-slate-800 border border-slate-600 rounded-2xl p-5 w-full max-w-md" onClick={e => e.stopPropagation()}>
+  1282→  1282→                <h3 className="text-lg font-bold text-white mb-4">{editClienteId ? "Editar Cliente" : "Nuevo Cliente"}</h3>
+  1283→  1283→                <div className="space-y-3">
+  1284→  1284→                  <div>
+  1285→  1285→                    <label className={labelCls}>Nombre *</label>
+  1286→  1286→                    <input value={clienteForm.nombre} onChange={e => setClienteForm(f => ({ ...f, nombre: e.target.value }))}
+  1287→  1287→                      className={inputCls} placeholder="Nombre del cliente" />
+  1288→  1288→                  </div>
+  1289→  1289→                  <div className="grid grid-cols-2 gap-3">
+  1290→  1290→                    <div>
+  1291→  1291→                      <label className={labelCls}>CIF</label>
+  1292→  1292→                      <input value={clienteForm.cif} onChange={e => setClienteForm(f => ({ ...f, cif: e.target.value }))}
+  1293→  1293→                        className={inputCls} placeholder="B12345678" />
+  1294→  1294→                    </div>
+  1295→  1295→                    <div>
+  1296→  1296→                      <label className={labelCls}>C.P.</label>
+  1297→  1297→                      <input value={clienteForm.cp} onChange={e => setClienteForm(f => ({ ...f, cp: e.target.value }))}
+  1298→  1298→                        className={inputCls} placeholder="28001" />
+  1299→  1299→                    </div>
+  1300→  1300→                  </div>
+  1301→  1301→                  <div>
+  1302→  1302→                    <label className={labelCls}>Dirección</label>
+  1303→  1303→                    <input value={clienteForm.dir} onChange={e => setClienteForm(f => ({ ...f, dir: e.target.value }))}
+  1304→  1304→                      className={inputCls} placeholder="Calle Mayor, 1" />
+  1305→  1305→                  </div>
+  1306→  1306→                  <div className="grid grid-cols-2 gap-3">
+  1307→  1307→                    <div>
+  1308→  1308→                      <label className={labelCls}>Ciudad</label>
+  1309→  1309→                      <input value={clienteForm.ciudad} onChange={e => setClienteForm(f => ({ ...f, ciudad: e.target.value }))}
+  1310→  1310→                        className={inputCls} />
+  1311→  1311→                    </div>
+  1312→  1312→                    <div>
+  1313→  1313→                      <label className={labelCls}>Provincia</label>
+  1314→  1314→                      <input value={clienteForm.prov} onChange={e => setClienteForm(f => ({ ...f, prov: e.target.value }))}
+  1315→  1315→                        className={inputCls} />
+  1316→  1316→                    </div>
+  1317→  1317→                  </div>
+  1318→  1318→                  <div className="grid grid-cols-2 gap-3">
+  1319→  1319→                    <div>
+  1320→  1320→                      <label className={labelCls}>Email</label>
+  1321→  1321→                      <input type="email" value={clienteForm.mail} onChange={e => setClienteForm(f => ({ ...f, mail: e.target.value }))}
+  1322→  1322→                        className={inputCls} placeholder="cliente@email.com" />
+  1323→  1323→                    </div>
+  1324→  1324→                    <div>
+  1325→  1325→                      <label className={labelCls}>Teléfono</label>
+  1326→  1326→                      <input value={clienteForm.tel} onChange={e => setClienteForm(f => ({ ...f, tel: e.target.value }))}
+  1327→  1327→                        className={inputCls} placeholder="+34 600 000 000" />
+  1328→  1328→                    </div>
+  1329→  1329→                  </div>
+  1330→  1330→                </div>
+  1331→  1331→                <div className="flex gap-3 mt-5">
+  1332→  1332→                  <button onClick={saveCliente} className="flex-1 bg-[#2E5D3A] hover:bg-[#3a7a4c] text-white font-bold py-2 rounded-lg text-sm transition">
+  1333→  1333→                    {editClienteId ? "GUARDAR" : "CREAR"}
+  1334→  1334→                  </button>
+  1335→  1335→                  <button onClick={() => setShowClienteModal(false)} className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-bold py-2 rounded-lg text-sm transition">
+  1336→  1336→                    CANCELAR
+  1337→  1337→                  </button>
+  1338→  1338→                </div>
+  1339→  1339→              </div>
+  1340→  1340→            </div>
+  1341→  1341→          )}
+  1342→  1342→        </div>
+  1343→  1343→      )}
+  1344→  1344→
+  1345→  1345→      {/* ═══════════════════════════════════════════
+  1346→  1346→          CATÁLOGO TAB
+  1347→  1347→          ═══════════════════════════════════════════ */}
+  1348→  1348→      {tab === "catalogo" && (
+  1349→  1349→        <div className="space-y-3">
+  1350→  1350→          <div className="flex justify-between items-center">
+  1351→  1351→            <h3 className="font-bold text-white text-sm">Catálogo de Precios ({catalogo.length})</h3>
+  1352→  1352→            <button onClick={openNewCatalogo} className={btnPrimary}>+ Nuevo Ítem</button>
+  1353→  1353→          </div>
+  1354→  1354→
+  1355→  1355→          {catalogo.length === 0 ? (
+  1356→  1356→            <div className={cardCls}>
+  1357→  1357→              <div className="text-center text-slate-500 py-8 text-sm">No hay ítems en el catálogo</div>
+  1358→  1358→            </div>
+  1359→  1359→          ) : (
+  1360→  1360→            <>
+  1361→  1361→              {/* Mobile cards */}
+  1362→  1362→              <div className="sm:hidden space-y-2 max-h-[600px] overflow-y-auto">
+  1363→  1363→                {catalogo.map(c => (
+  1364→  1364→                  <div key={c.id} className="bg-slate-800/50 border border-slate-700 rounded-xl p-3 space-y-2">
+  1365→  1365→                    <div className="flex justify-between items-start">
+  1366→  1366→                      <div>
+  1367→  1367→                        <div className="text-sm font-bold text-white">{c.c1}</div>
+  1368→  1368→                        <div className="text-xs text-slate-300">{c.c2}</div>
+  1369→  1369→                        {c.cliente && (
+  1370→  1370→                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-600/20 text-blue-400 mt-1 inline-block">
+  1371→  1371→                            {c.cliente.nombre}
+  1372→  1372→                          </span>
+  1373→  1373→                        )}
+  1374→  1374→                      </div>
+  1375→  1375→                      <div className="flex gap-1">
+  1376→  1376→                        <button onClick={() => openEditCatalogo(c)} className="px-2 py-1 rounded text-xs font-bold bg-blue-600/20 text-blue-400">✎</button>
+  1377→  1377→                        <button onClick={() => deleteCatalogoItem(c.id)} className={btnDanger}>✕</button>
+  1378→  1378→                      </div>
+  1379→  1379→                    </div>
+  1380→  1380→                    <div className="flex gap-4 text-xs">
+  1381→  1381→                      <span className="text-slate-400">Coste: <span className="text-white font-bold">{fmt(c.coste)}€</span></span>
+  1382→  1382→                      <span className="text-slate-400">Inc: <span className="text-amber-400 font-bold">{c.inc}%</span></span>
+  1383→  1383→                      <span className="text-slate-400">Final: <span className="text-amber-400 font-black">{fmt(c.final)}€</span></span>
+  1384→  1384→                    </div>
+  1385→  1385→                  </div>
+  1386→  1386→                ))}
+  1387→  1387→              </div>
+  1388→  1388→
+  1389→  1389→              {/* Desktop table */}
+  1390→  1390→              <div className="hidden sm:block bg-slate-800/50 border border-slate-700 rounded-xl overflow-hidden">
+  1391→  1391→                <div className="overflow-x-auto max-h-[600px]">
+  1392→  1392→                  <table className="w-full">
+  1393→  1393→                    <thead className="sticky top-0 bg-slate-900 z-10">
+  1394→  1394→                      <tr>
+  1395→  1395→                        <th className="text-left px-3 py-2 text-xs font-extrabold text-blue-400 uppercase">C1 (Grupo)</th>
+  1396→  1396→                        <th className="text-left px-3 py-2 text-xs font-extrabold text-blue-400 uppercase">C2 (Servicio)</th>
+  1397→  1397→                        <th className="text-right px-3 py-2 text-xs font-extrabold text-blue-400 uppercase">Coste</th>
+  1398→  1398→                        <th className="text-right px-3 py-2 text-xs font-extrabold text-blue-400 uppercase">Inc %</th>
+  1399→  1399→                        <th className="text-right px-3 py-2 text-xs font-extrabold text-blue-400 uppercase">Final</th>
+  1400→  1400→                        <th className="text-left px-3 py-2 text-xs font-extrabold text-blue-400 uppercase">Cliente</th>
+  1401→  1401→                        <th className="text-center px-3 py-2 text-xs font-extrabold text-blue-400 uppercase">Acc</th>
+  1402→  1402→                      </tr>
+  1403→  1403→                    </thead>
+  1404→  1404→                    <tbody>
+  1405→  1405→                      {catalogo.map(c => (
+  1406→  1406→                        <tr key={c.id} className="border-b border-slate-700/50 hover:bg-slate-700/20">
+  1407→  1407→                          <td className="px-3 py-2 text-sm font-bold text-white">{c.c1}</td>
+  1408→  1408→                          <td className="px-3 py-2 text-sm text-slate-300">{c.c2}</td>
+  1409→  1409→                          <td className="px-3 py-2 text-sm text-slate-300 text-right">{fmt(c.coste)}€</td>
+  1410→  1410→                          <td className="px-3 py-2 text-sm text-amber-400 text-right">{c.inc}%</td>
+  1411→  1411→                          <td className="px-3 py-2 text-sm text-amber-400 font-bold text-right">{fmt(c.final)}€</td>
+  1412→  1412→                          <td className="px-3 py-2">
+  1413→  1413→                            {c.cliente ? (
+  1414→  1414→                              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-600/20 text-blue-400">{c.cliente.nombre}</span>
+  1415→  1415→                            ) : (
+  1416→  1416→                              <span className="text-xs text-slate-500">General</span>
+  1417→  1417→                            )}
+  1418→  1418→                          </td>
+  1419→  1419→                          <td className="px-3 py-2 text-center">
+  1420→  1420→                            <div className="flex gap-1 justify-center">
+  1421→  1421→                              <button onClick={() => openEditCatalogo(c)} className="px-2 py-1 rounded text-xs font-bold bg-blue-600/20 text-blue-400">✎</button>
+  1422→  1422→                              <button onClick={() => deleteCatalogoItem(c.id)} className={btnDanger}>✕</button>
+  1423→  1423→                            </div>
+  1424→  1424→                          </td>
+  1425→  1425→                        </tr>
+  1426→  1426→                      ))}
+  1427→  1427→                    </tbody>
+  1428→  1428→                  </table>
+  1429→  1429→                </div>
+  1430→  1430→              </div>
+  1431→  1431→            </>
+  1432→  1432→          )}
+  1433→  1433→
+  1434→  1434→          {/* Catalogo Modal */}
+  1435→  1435→          {showCatalogoModal && (
+  1436→  1436→            <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setShowCatalogoModal(false)}>
+  1437→  1437→              <div className="bg-slate-800 border border-slate-600 rounded-2xl p-5 w-full max-w-md" onClick={e => e.stopPropagation()}>
+  1438→  1438→                <h3 className="text-lg font-bold text-white mb-4">{editCatalogoId ? "Editar Ítem" : "Nuevo Ítem"}</h3>
+  1439→  1439→                <div className="space-y-3">
+  1440→  1440→                  <div>
+  1441→  1441→                    <label className={labelCls}>Cliente (opcional, precio específico)</label>
+  1442→  1442→                    <select value={catalogoForm.clienteId}
+  1443→  1443→                      onChange={e => setCatalogoForm(f => ({ ...f, clienteId: e.target.value }))}
+  1444→  1444→                      className={inputCls}>
+  1445→  1445→                      <option value="">— General —</option>
+  1446→  1446→                      {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+  1447→  1447→                    </select>
+  1448→  1448→                  </div>
+  1449→  1449→                  <div className="grid grid-cols-2 gap-3">
+  1450→  1450→                    <div>
+  1451→  1451→                      <label className={labelCls}>C1 (Grupo) *</label>
+  1452→  1452→                      <input value={catalogoForm.c1} onChange={e => setCatalogoForm(f => ({ ...f, c1: e.target.value }))}
+  1453→  1453→                        className={inputCls} placeholder="Grupo concepto" />
+  1454→  1454→                    </div>
+  1455→  1455→                    <div>
+  1456→  1456→                      <label className={labelCls}>C2 (Servicio) *</label>
+  1457→  1457→                      <input value={catalogoForm.c2} onChange={e => setCatalogoForm(f => ({ ...f, c2: e.target.value }))}
+  1458→  1458→                        className={inputCls} placeholder="Servicio" />
+  1459→  1459→                    </div>
+  1460→  1460→                  </div>
+  1461→  1461→                  <div className="grid grid-cols-2 gap-3">
+  1462→  1462→                    <div>
+  1463→  1463→                      <label className={labelCls}>Coste (€)</label>
+  1464→  1464→                      <input type="number" step="0.01" value={catalogoForm.coste}
+  1465→  1465→                        onChange={e => setCatalogoForm(f => ({ ...f, coste: parseFloat(e.target.value) || 0 }))}
+  1466→  1466→                        className={inputCls} />
+  1467→  1467→                    </div>
+  1468→  1468→                    <div>
+  1469→  1469→                      <label className={labelCls}>Incremento (%)</label>
+  1470→  1470→                      <input type="number" step="0.1" value={catalogoForm.inc}
+  1471→  1471→                        onChange={e => setCatalogoForm(f => ({ ...f, inc: parseFloat(e.target.value) || 0 }))}
+  1472→  1472→                        className={inputCls} />
+  1473→  1473→                    </div>
+  1474→  1474→                  </div>
+  1475→  1475→                  <div className="bg-slate-900/50 rounded-lg px-3 py-2">
+  1476→  1476→                    <span className="text-xs text-slate-400">Precio Final: </span>
+  1477→  1477→                    <span className="text-amber-400 font-black">{fmt(catalogoForm.coste * (1 + catalogoForm.inc / 100))}€</span>
+  1478→  1478→                    <span className="text-[10px] text-slate-500 ml-2">= {fmt(catalogoForm.coste)}€ × (1 + {catalogoForm.inc}%/100)</span>
+  1479→  1479→                  </div>
+  1480→  1480→                </div>
+  1481→  1481→                <div className="flex gap-3 mt-5">
+  1482→  1482→                  <button onClick={saveCatalogo} className="flex-1 bg-[#2E5D3A] hover:bg-[#3a7a4c] text-white font-bold py-2 rounded-lg text-sm transition">
+  1483→  1483→                    {editCatalogoId ? "GUARDAR" : "CREAR"}
+  1484→  1484→                  </button>
+  1485→  1485→                  <button onClick={() => setShowCatalogoModal(false)} className="flex-1 bg-slate-700 hover:bg-slate-600 text-white font-bold py-2 rounded-lg text-sm transition">
+  1486→  1486→                    CANCELAR
+  1487→  1487→                  </button>
+  1488→  1488→                </div>
+  1489→  1489→              </div>
+  1490→  1490→            </div>
+  1491→  1491→          )}
+  1492→  1492→        </div>
+  1493→  1493→      )}
+  1494→  1494→
+  1495→  1495→      {/* ═══════════════════════════════════════════
+  1496→  1496→          FACTURAS TAB
+  1497→  1497→          ═══════════════════════════════════════════ */}
+  1498→  1498→      {tab === "facturas" && (
+  1499→  1499→        <div className="space-y-3">
+  1500→  1500→          {/* Controls */}
+  1501→  1501→          <div className={cardCls}>
+  1502→  1502→            <div className="flex flex-wrap gap-3 items-end">
+  1503→  1503→              <div>
+  1504→  1504→                <label className={labelCls}>Agrupar por</label>
+  1505→  1505→                <select value={facturaGroupBy}
+  1506→  1506→                  onChange={e => setFacturaGroupBy(e.target.value as "day" | "month")}
+  1507→  1507→                  className={inputCls}>
+  1508→  1508→                  <option value="day">Día</option>
+  1509→  1509→                  <option value="month">Mes</option>
+  1510→  1510→                </select>
+  1511→  1511→              </div>
+  1512→  1512→              <div>
+  1513→  1513→                <label className={labelCls}>Cliente</label>
+  1514→  1514→                <select value={facturaClienteFilter}
+  1515→  1515→                  onChange={e => setFacturaClienteFilter(e.target.value)}
+  1516→  1516→                  className={inputCls}>
+  1517→  1517→                  <option value="">Todos</option>
+  1518→  1518→                  {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+  1519→  1519→                </select>
+  1520→  1520→              </div>
+  1521→  1521→              <div className="flex gap-2">
+  1522→  1522→                <button onClick={selectAllFacturas} className={btnSecondary}>Seleccionar todos</button>
+  1523→  1523→                <button onClick={clearFacturaSelection} className={btnSecondary}>Limpiar</button>
+  1524→  1524→              </div>
+  1525→  1525→            </div>
+  1526→  1526→          </div>
+  1527→  1527→
+  1528→  1528→          {/* Selected summary */}
+  1529→  1529→          {selectedFacturaIds.size > 0 && (
+  1530→  1530→            <div className="bg-[#2E5D3A]/20 border border-[#2E5D3A]/30 rounded-xl p-3 sm:p-4">
+  1531→  1531→              <div className="flex flex-wrap justify-between items-center gap-3">
+  1532→  1532→                <div>
+  1533→  1533→                  <div className="text-sm text-white">
+  1534→  1534→                    <span className="font-bold">{selectedFacturaIds.size}</span> registros seleccionados
+  1535→  1535→                  </div>
+  1536→  1536→                  <div className="text-xs text-slate-400 mt-1">
+  1537→  1537→                    Próxima factura: <span className="text-amber-400 font-bold">{generateInvoiceNumber()}</span>
+  1538→  1538→                  </div>
+  1539→  1539→                </div>
+  1540→  1540→                <div className="text-right">
+  1541→  1541→                  <div className="text-xs text-slate-400">Base: <span className="text-white font-bold">{fmt(facturaBase)}€</span></div>
+  1542→  1542→                  <div className="text-xs text-slate-400">IVA ({facturaIvaRate}%): <span className="text-white font-bold">{fmt(facturaIva)}€</span></div>
+  1543→  1543→                  <div className="text-lg font-black text-amber-400">{fmt(facturaTotal)}€</div>
+  1544→  1544→                </div>
+  1545→  1545→                <button onClick={generateFactura}
+  1546→  1546→                  className="bg-[#2E5D3A] hover:bg-[#3a7a4c] text-white font-bold px-4 py-2 rounded-lg text-sm transition flex items-center gap-2">
+  1547→  1547→                  🖨 Generar Factura
+  1548→  1548→                </button>
+  1549→  1549→              </div>
+  1550→  1550→            </div>
+  1551→  1551→          )}
+  1552→  1552→
+  1553→  1553→          {/* Grouped facturable registros */}
+  1554→  1554→          {sortedGroupKeys.length === 0 ? (
+  1555→  1555→            <div className={cardCls}>
+  1556→  1556→              <div className="text-center text-slate-500 py-8 text-sm">No hay registros pendientes de facturación</div>
+  1557→  1557→            </div>
+  1558→  1558→          ) : (
+  1559→  1559→            <div className="space-y-3 max-h-[600px] overflow-y-auto">
+  1560→  1560→              {sortedGroupKeys.map(key => {
+  1561→  1561→                const groupItems = groupedFacturas[key];
+  1562→  1562→                const groupTotal = groupItems.reduce((sum, r) => sum + r.cant * r.precioUnitario, 0);
+  1563→  1563→                const allSelected = groupItems.every(r => selectedFacturaIds.has(r.id));
+  1564→  1564→
+  1565→  1565→                return (
+  1566→  1566→                  <div key={key} className={cardCls}>
+  1567→  1567→                    <div className="flex justify-between items-center mb-2">
+  1568→  1568→                      <div className="flex items-center gap-2">
+  1569→  1569→                        <input type="checkbox" checked={allSelected}
+  1570→  1570→                          onChange={() => toggleGroupSelect(key)}
+  1571→  1571→                          className="w-4 h-4 accent-[#2E5D3A]" />
+  1572→  1572→                        <span className="text-sm font-bold text-white">
+  1573→  1573→                          {facturaGroupBy === "day" ? fmtDate(key) : key}
+  1574→  1574→                        </span>
+  1575→  1575→                        <span className="text-xs text-slate-400">({groupItems.length})</span>
+  1576→  1576→                      </div>
+  1577→  1577→                      <span className="text-amber-400 font-bold text-sm">{fmt(groupTotal)}€</span>
+  1578→  1578→                    </div>
+  1579→  1579→
+  1580→  1580→                    {/* Mobile cards */}
+  1581→  1581→                    <div className="sm:hidden space-y-1.5">
+  1582→  1582→                      {groupItems.map(r => (
+  1583→  1583→                        <div key={r.id} className={`flex items-center gap-2 bg-slate-900/50 rounded-lg p-2 ${selectedFacturaIds.has(r.id) ? "border border-[#2E5D3A]/50" : "border border-transparent"}`}>
+  1584→  1584→                          <input type="checkbox" checked={selectedFacturaIds.has(r.id)}
+  1585→  1585→                            onChange={() => toggleFacturaSelect(r.id)}
+  1586→  1586→                            className="w-4 h-4 accent-[#2E5D3A] shrink-0" />
+  1587→  1587→                          <div className="flex-1 min-w-0">
+  1588→  1588→                            <div className="text-xs font-bold text-white">{r.c1}{r.c2 ? " — " + r.c2 : ""}</div>
+  1589→  1589→                            <div className="text-[10px] text-slate-400">{r.cliente || "Sin cliente"} · {r.cant} × {fmt(r.precioUnitario)}€</div>
+  1590→  1590→                          </div>
+  1591→  1591→                          <div className="text-amber-400 font-bold text-xs">{fmt(r.cant * r.precioUnitario)}€</div>
+  1592→  1592→                        </div>
+  1593→  1593→                      ))}
+  1594→  1594→                    </div>
+  1595→  1595→
+  1596→  1596→                    {/* Desktop table */}
+  1597→  1597→                    <div className="hidden sm:block overflow-x-auto">
+  1598→  1598→                      <table className="w-full">
+  1599→  1599→                        <thead>
+  1600→  1600→                          <tr>
+  1601→  1601→                            <th className="w-8 px-2 py-1"></th>
+  1602→  1602→                            <th className="text-left px-2 py-1 text-[10px] font-extrabold text-blue-400 uppercase">Cliente</th>
+  1603→  1603→                            <th className="text-left px-2 py-1 text-[10px] font-extrabold text-blue-400 uppercase">C1</th>
+  1604→  1604→                            <th className="text-left px-2 py-1 text-[10px] font-extrabold text-blue-400 uppercase">C2</th>
+  1605→  1605→                            <th className="text-right px-2 py-1 text-[10px] font-extrabold text-blue-400 uppercase">Cant</th>
+  1606→  1606→                            <th className="text-right px-2 py-1 text-[10px] font-extrabold text-blue-400 uppercase">Precio</th>
+  1607→  1607→                            <th className="text-right px-2 py-1 text-[10px] font-extrabold text-blue-400 uppercase">Total</th>
+  1608→  1608→                            <th className="text-left px-2 py-1 text-[10px] font-extrabold text-blue-400 uppercase">Obs</th>
+  1609→  1609→                          </tr>
+  1610→  1610→                        </thead>
+  1611→  1611→                        <tbody>
+  1612→  1612→                          {groupItems.map(r => (
+  1613→  1613→                            <tr key={r.id} className={`border-b border-slate-700/30 ${selectedFacturaIds.has(r.id) ? "bg-[#2E5D3A]/10" : ""}`}>
+  1614→  1614→                              <td className="px-2 py-1">
+  1615→  1615→                                <input type="checkbox" checked={selectedFacturaIds.has(r.id)}
+  1616→  1616→                                  onChange={() => toggleFacturaSelect(r.id)}
+  1617→  1617→                                  className="w-4 h-4 accent-[#2E5D3A]" />
+  1618→  1618→                              </td>
+  1619→  1619→                              <td className="px-2 py-1 text-xs text-white">{r.cliente || "—"}</td>
+  1620→  1620→                              <td className="px-2 py-1 text-xs text-white">{r.c1}</td>
+  1621→  1621→                              <td className="px-2 py-1 text-xs text-slate-300">{r.c2}</td>
+  1622→  1622→                              <td className="px-2 py-1 text-xs text-white text-right">{r.cant}</td>
+  1623→  1623→                              <td className="px-2 py-1 text-xs text-slate-300 text-right">{fmt(r.precioUnitario)}€</td>
+  1624→  1624→                              <td className="px-2 py-1 text-xs text-amber-400 font-bold text-right">{fmt(r.cant * r.precioUnitario)}€</td>
+  1625→  1625→                              <td className="px-2 py-1 text-[10px] text-slate-500 max-w-[100px] truncate">{r.obs}</td>
+  1626→  1626→                            </tr>
+  1627→  1627→                          ))}
+  1628→  1628→                        </tbody>
+  1629→  1629→                      </table>
+  1630→  1630→                    </div>
+  1631→  1631→                  </div>
+  1632→  1632→                );
+  1633→  1633→              })}
+  1634→  1634→            </div>
+  1635→  1635→          )}
+  1636→  1636→        </div>
+  1637→  1637→      )}
+  1638→  1638→
+  1639→  1639→      {/* ═══════════════════════════════════════════
+  1640→  1640→          CONFIGURACIÓN TAB
+  1641→  1641→          ═══════════════════════════════════════════ */}
+  1642→  1642→      {tab === "config" && (
+  1643→  1643→        <div className="space-y-3">
+  1644→  1644→          {/* Company info for invoicing */}
+  1645→  1645→          <div className={cardCls}>
+  1646→  1646→            <h3 className="font-bold text-white mb-3 text-sm">Datos de Facturación</h3>
+  1647→  1647→            <p className="text-xs text-slate-400 mb-3">Estos datos aparecerán en las facturas generadas.</p>
+  1648→  1648→            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+  1649→  1649→              <div>
+  1650→  1650→                <label className={labelCls}>Nombre de la Empresa</label>
+  1651→  1651→                <input value={configForm.companyFullName}
+  1652→  1652→                  onChange={e => setConfigForm(f => ({ ...f, companyFullName: e.target.value }))}
+  1653→  1653→                  className={inputCls} placeholder="Mi Empresa S.L." />
+  1654→  1654→              </div>
+  1655→  1655→              <div>
+  1656→  1656→                <label className={labelCls}>CIF</label>
+  1657→  1657→                <input value={configForm.companyCif}
+  1658→  1658→                  onChange={e => setConfigForm(f => ({ ...f, companyCif: e.target.value }))}
+  1659→  1659→                  className={inputCls} placeholder="B12345678" />
+  1660→  1660→              </div>
+  1661→  1661→              <div>
+  1662→  1662→                <label className={labelCls}>Dirección</label>
+  1663→  1663→                <input value={configForm.companyAddress}
+  1664→  1664→                  onChange={e => setConfigForm(f => ({ ...f, companyAddress: e.target.value }))}
+  1665→  1665→                  className={inputCls} placeholder="Calle Mayor, 1" />
+  1666→  1666→              </div>
+  1667→  1667→              <div>
+  1668→  1668→                <label className={labelCls}>Ciudad</label>
+  1669→  1669→                <input value={configForm.companyCity}
+  1670→  1670→                  onChange={e => setConfigForm(f => ({ ...f, companyCity: e.target.value }))}
+  1671→  1671→                  className={inputCls} />
+  1672→  1672→              </div>
+  1673→  1673→              <div>
+  1674→  1674→                <label className={labelCls}>Provincia</label>
+  1675→  1675→                <input value={configForm.companyProvince}
+  1676→  1676→                  onChange={e => setConfigForm(f => ({ ...f, companyProvince: e.target.value }))}
+  1677→  1677→                  className={inputCls} />
+  1678→  1678→              </div>
+  1679→  1679→              <div>
+  1680→  1680→                <label className={labelCls}>Logo (URL o Base64)</label>
+  1681→  1681→                <input value={configForm.logo}
+  1682→  1682→                  onChange={e => setConfigForm(f => ({ ...f, logo: e.target.value }))}
+  1683→  1683→                  className={inputCls} placeholder="https://..." />
+  1684→  1684→              </div>
+  1685→  1685→            </div>
+  1686→  1686→          </div>
+  1687→  1687→
+  1688→  1688→          {/* Invoice settings */}
+  1689→  1689→          <div className={cardCls}>
+  1690→  1690→            <h3 className="font-bold text-white mb-3 text-sm">Ajustes de Facturación</h3>
+  1691→  1691→            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+  1692→  1692→              <div>
+  1693→  1693→                <label className={labelCls}>IVA por defecto (%)</label>
+  1694→  1694→                <input type="number" step="0.1" value={configForm.defaultIva}
+  1695→  1695→                  onChange={e => setConfigForm(f => ({ ...f, defaultIva: parseFloat(e.target.value) || 21 }))}
+  1696→  1696→                  className={inputCls} />
+  1697→  1697→              </div>
+  1698→  1698→              <div>
+  1699→  1699→                <label className={labelCls}>Próximo Nº Factura</label>
+  1700→  1700→                <div className="flex items-center gap-2">
+  1701→  1701→                  <input type="number" value={facturaSeq?.seq || 1}
+  1702→  1702→                    onChange={e => setFacturaSeq(prev => prev ? { ...prev, seq: parseInt(e.target.value) || 1 } : null)}
+  1703→  1703→                    className={`${inputCls} flex-1`} />
+  1704→  1704→                  <span className="text-slate-400 text-sm">/{new Date().getFullYear()}</span>
+  1705→  1705→                </div>
+  1706→  1706→              </div>
+  1707→  1707→            </div>
+  1708→  1708→          </div>
+  1709→  1709→
+  1710→  1710→          {/* Preview */}
+  1711→  1711→          <div className={cardCls}>
+  1712→  1712→            <h3 className="font-bold text-white mb-3 text-sm">Vista Previa Cabecera</h3>
+  1713→  1713→            <div className="bg-white rounded-xl p-4">
+  1714→  1714→              <div className="flex items-start gap-4">
+  1715→  1715→                {configForm.logo && (
+  1716→  1716→                  <img src={configForm.logo} alt="Logo" className="h-12 w-12 object-contain"
+  1717→  1717→                    onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+  1718→  1718→                )}
+  1719→  1719→                <div>
+  1720→  1720→                  <div className="text-lg font-bold text-gray-900">{configForm.companyFullName || "Nombre Empresa"}</div>
+  1721→  1721→                  <div className="text-xs text-gray-500">
+  1722→  1722→                    {[configForm.companyAddress, configForm.companyCity, configForm.companyProvince].filter(Boolean).join(", ")}
+  1723→  1723→                  </div>
+  1724→  1724→                  {configForm.companyCif && (
+  1725→  1725→                    <div className="text-xs text-gray-500">CIF: {configForm.companyCif}</div>
+  1726→  1726→                  )}
+  1727→  1727→                </div>
+  1728→  1728→              </div>
+  1729→  1729→            </div>
+  1730→  1730→          </div>
+  1731→  1731→
+  1732→  1732→          <div className="flex justify-end">
+  1733→  1733→            <button onClick={saveConfig} disabled={savingConfig}
+  1734→  1734→              className="bg-[#2E5D3A] hover:bg-[#3a7a4c] disabled:opacity-50 text-white font-bold px-5 py-2 rounded-lg text-sm transition">
+  1735→  1735→              {savingConfig ? "Guardando..." : "GUARDAR CONFIGURACIÓN"}
+  1736→  1736→            </button>
+  1737→  1737→          </div>
+  1738→  1738→        </div>
+  1739→  1739→      )}
+  1740→  1740→    </div>
+  1741→  1741→  );
+  1742→  1742→}
+  1743→  1743→
