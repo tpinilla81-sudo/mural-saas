@@ -70,3 +70,54 @@ Stage Summary:
 - Bulk operations in Registros (mark facturado, delete)
 - Dark navigation bar matching Bill by Método style
 - All API routes working and tested
+
+---
+Task ID: 3
+Agent: main
+Task: Create Diario → Facturación bridge (salida cumplida → paso a facturar)
+
+Work Log:
+- Added new Prisma model BillDiarioItem storing "salida cumplida" entries
+  * Fields: fecha, sedeId/sedeName, professionalId/professionalName, turn,
+    clienteId/cliente, c1/c2, cant, precioUnitario, obs, status (CUMPLIDA|FACTURADA),
+    sourceType (plan|manual), sourceId (Plan.id), registroId (BillRegistro.id),
+    facturadoAt
+  * @@unique([sourceType, sourceId]) for sync dedup
+- Pushed schema to Neon DB with prisma db push
+- Created 3 new API routes:
+  * GET /api/company/bill/diario (list with filters: status/from/to/sedeId/clienteId)
+  * POST /api/company/bill/diario (two modes: syncFrom="plans" OR manual create)
+    - Sync mode: pulls Plan entries, dedupes by sourceId, auto-maps Sede→BillCliente
+      by name (case-insensitive), auto-resolves precioUnitario from BillCatalogo
+      using c1="Servicios" c2=turn, resolves professional alias→id+name
+    - Manual mode: creates a single BillDiarioItem with form fields
+  * PUT /api/company/bill/diario/[id] (edit fecha/cliente/c1/c2/cant/precio/obs)
+  * DELETE /api/company/bill/diario/[id]
+  * POST /api/company/bill/diario/transfer (converts selected items → BillRegistros
+    with pasadoRegistro=true, marks items as FACTURADA, sets registroId+facturadoAt)
+- Created /src/components/bill/diario-view.tsx with:
+  * Filters (date range, sede, cliente, status, free text)
+  * "Sincronizar desde Diario" button → opens modal with date range + sync result
+  * "Nuevo item" button → manual add modal (fecha/sede/profesional/turno/cliente/c1/c2/cant/precio/obs)
+  * Edit modal for cumplida items
+  * Bulk selection + "Pasar a facturar" action → transfers to REGISTROS
+  * Excel export
+  * Stats bar (total/cumplidas/facturadas/importe)
+  * Emerald color theme to distinguish from Entrada (green) and Registros (blue)
+- Updated BillTab.tsx:
+  * Added DIARIO tab between ENTRADA and REGISTROS (CalendarClock icon, emerald color)
+  * Default tab is now "diario" to highlight the new bridge
+- Reset admin@mural.es password (was stale after env var changes)
+- Build successful, pushed to GitHub/Vercel
+- End-to-end test on production:
+  * Synced 122 plan entries from 2026 → 122 CUMPLIDA items created
+  * Transferred 3 items → 3 BillRegistros created with pasadoRegistro=true
+  * 3 items now show as FACTURADA in Diario and appear in REGISTROS view
+
+Stage Summary:
+- Diario → Facturación bridge fully operational on production
+- Flow: Diario plans → [Sincronizar] → BillDiarioItem (CUMPLIDA) → [Pasar a facturar] → BillRegistro (REGISTROS) → [Marcar facturado] → Factura
+- Auto-maps Sede name → BillCliente name (case-insensitive)
+- Auto-resolves precio from catalog (c1=Servicios, c2=Mañana/Tarde)
+- Manual add/edit also available for items not in Diario
+- All deduped so re-syncing doesn't create duplicates
