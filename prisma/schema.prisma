@@ -34,6 +34,11 @@ model Company {
   subscription  Subscription?
   payments      Payment[]
   avisos        Aviso[]
+  billClientes  BillCliente[]
+  billCatalogo  BillCatalogo[]
+  billRegistros BillRegistro[]
+  billConfig    BillConfig?
+  billFacturaSeq BillFacturaSeq?
 }
 
 model User {
@@ -196,4 +201,113 @@ model Aviso {
   @@index([companyId, date])
   @@index([professionalId])
   @@index([sedeId])
+}
+
+// ═══════════════════════════════════════════
+// BILL by Método — Facturación independiente
+// ═══════════════════════════════════════════
+
+model BillCliente {
+  id          String   @id @default(cuid())
+  companyId   String
+  nombre      String
+  cif         String   @default("")
+  dir         String   @default("")
+  cp          String   @default("")
+  ciudad      String   @default("")
+  prov        String   @default("")
+  mail        String   @default("")
+  tel         String   @default("")
+  customData  String   @default("") // JSON: custom field values
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company   Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  registros BillRegistro[]
+  catalogo   BillCatalogo[]
+
+  @@index([companyId])
+}
+
+model BillCatalogo {
+  id          String   @id @default(cuid())
+  companyId   String
+  clienteId   String?  // optional: client-specific pricing
+  c1          String   // concept group
+  c2          String   // concept service
+  coste       Float    @default(0)
+  inc         Float    @default(0) // increment %
+  final       Float    @default(0) // final price
+  customData  String   @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  company Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  cliente BillCliente?  @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([clienteId])
+}
+
+model BillRegistro {
+  id                String   @id @default(cuid())
+  companyId         String
+  fecha             String   // YYYY-MM-DD
+  clienteId         String?  // FK
+  cliente           String   @default("") // denormalized name
+  c1                String   @default("") // concept group
+  c2                String   @default("") // concept service
+  cant              Int      @default(1)
+  precioUnitario    Float    @default(0)
+  obs               String   @default("")
+  pasadoRegistro    Boolean  @default(false) // transferred from entrada
+  facturado         Boolean  @default(false) // invoiced
+  customData        String   @default("")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  clienteRel  BillCliente? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([clienteId])
+  @@index([fecha])
+  @@index([pasadoRegistro])
+  @@index([facturado])
+}
+
+model BillConfig {
+  id                String   @id @default(cuid())
+  companyId         String   @unique
+  companyFullName   String   @default("")
+  companyAddress    String   @default("")
+  companyCity       String   @default("")
+  companyProvince   String   @default("")
+  companyCif        String   @default("")
+  logo              String   @default("") // base64
+  currency          String   @default("€")
+  defaultIva        Float    @default(21)
+  appName           String   @default("BILL by Método")
+  sectionEntrada    String   @default("ENTRADA")
+  sectionRegistros  String   @default("REGISTROS")
+  sectionClientes   String   @default("CLIENTES")
+  sectionCatalogo   String   @default("CATÁLOGO")
+  sectionFacturas   String   @default("FACTURAS")
+  fieldsEntrada     String   @default("") // JSON: FieldDef[]
+  fieldsClientes    String   @default("")
+  fieldsCatalogo    String   @default("")
+  fieldsRegistros   String   @default("")
+  fieldsFacturas    String   @default("")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+}
+
+model BillFacturaSeq {
+  id        String   @id @default(cuid())
+  companyId String   @unique
+  seq       Int      @default(1)
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 }
