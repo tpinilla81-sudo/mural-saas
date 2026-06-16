@@ -167,6 +167,12 @@ export default function DiarioTab() {
   }, [filterPro, plans]);
 
   const scrollToToday = () => {
+    const now = new Date();
+    if (year !== now.getFullYear()) {
+      setYear(now.getFullYear());
+      // scroll will happen via useEffect after data loads for the new year
+      return;
+    }
     if (todayRef.current && scrollRef.current) {
       const container = scrollRef.current;
       const cell = todayRef.current;
