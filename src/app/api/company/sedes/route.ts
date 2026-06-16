@@ -12,13 +12,13 @@ export async function GET() {
 
   if (!companyId) {
     // Super admin: return all or filtered
-    const sedes = await db.sede.findMany({ orderBy: { name: "asc" } });
+    const sedes = await db.sede.findMany({ orderBy: { order: "asc" } });
     return NextResponse.json(sedes);
   }
 
   const sedes = await db.sede.findMany({
     where: { companyId },
-    orderBy: { name: "asc" },
+    orderBy: { order: "asc" },
   });
   return NextResponse.json(sedes);
 }
@@ -30,6 +30,7 @@ export async function POST(req: Request) {
   const companyId = user!.companyId!;
   const body = await req.json();
 
+  const maxOrder = await db.sede.findFirst({ where: { companyId }, orderBy: { order: "desc" }, select: { order: true } });
   const sede = await db.sede.create({
     data: {
       companyId,
@@ -42,6 +43,7 @@ export async function POST(req: Request) {
       morningEnabled: body.morningEnabled ?? true,
       afternoonEnabled: body.afternoonEnabled ?? true,
       color: body.color || "#3b82f6",
+      order: body.order ?? (maxOrder?.order ?? -1) + 1,
     },
   });
 

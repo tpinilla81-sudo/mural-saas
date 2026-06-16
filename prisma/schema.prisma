@@ -24,6 +24,7 @@ model Company {
   holidays      Holiday[]
   subscription  Subscription?
   payments      Payment[]
+  avisos        Aviso[]
 }
 
 model User {
@@ -102,11 +103,13 @@ model Sede {
   morningEnabled   Boolean  @default(true)
   afternoonEnabled Boolean  @default(true)
   color            String   @default("#3b82f6")
+  order            Int      @default(0)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
   plans   Plan[]
+  avisos  Aviso[]
 
   @@index([companyId])
 }
@@ -122,14 +125,15 @@ model Professional {
   username      String   @default("")
   email         String   @default("")
   phone         String   @default("")
-  permissions   String   @default("") // comma-separated tasks
+  permissions   String   @default("") // comma-separated tasks (per in Firebase)
   assignedSedes String   @default("") // comma-separated sede names
-  startDate     DateTime?
+  startDate     String   @default("") // ini date string (fini in Firebase)
   endDate       String   @default("INDEFINIDO")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  avisos  Aviso[]
 
   @@unique([companyId, alias])
   @@index([companyId])
@@ -164,4 +168,22 @@ model Holiday {
 
   @@unique([companyId, province, date])
   @@index([companyId])
+}
+
+model Aviso {
+  id              String   @id @default(cuid())
+  companyId       String
+  date            String   // YYYY-MM-DD
+  professionalId  String
+  sedeId          String
+  turn            String   // M | T
+  createdAt       DateTime @default(now())
+
+  company      Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  professional Professional @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  sede         Sede         @relation(fields: [sedeId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, date])
+  @@index([professionalId])
+  @@index([sedeId])
 }

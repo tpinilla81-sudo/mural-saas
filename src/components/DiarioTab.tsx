@@ -8,21 +8,24 @@ export default function DiarioTab() {
   const [professionals, setProfessionals] = useState<any[]>([]);
   const [plans, setPlans] = useState<any[]>([]);
   const [holidays, setHolidays] = useState<any[]>([]);
+  const [avisos, setAvisos] = useState<any[]>([]);
   const [selectedPro, setSelectedPro] = useState("");
   const [filters, setFilters] = useState<string[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   async function load() {
-    const [sRes, pRes, plRes, hRes] = await Promise.all([
+    const [sRes, pRes, plRes, hRes, aRes] = await Promise.all([
       fetch("/api/company/sedes"),
       fetch("/api/company/professionals"),
       fetch(`/api/company/plan?year=${year}`),
       fetch("/api/company/holidays"),
+      fetch("/api/company/avisos"),
     ]);
     if (sRes.ok) setSedes(await sRes.json());
     if (pRes.ok) setProfessionals(await pRes.json());
     if (plRes.ok) setPlans(await plRes.json());
     if (hRes.ok) setHolidays(await hRes.json());
+    if (aRes.ok) setAvisos(await aRes.json());
   }
 
   useEffect(() => { load(); }, [year]);
@@ -37,6 +40,10 @@ export default function DiarioTab() {
   const isWE = (d: Date) => d.getDay() === 0 || d.getDay() === 6;
   const isFestivo = (f: string, prov: string) => holidays.some(h => h.date === f && h.province === prov);
   const getPlan = (sedeId: string, date: string, turn: string) => plans.find(p => p.sedeId === sedeId && p.date === date && p.turn === turn);
+  const getAviso = (sedeId: string, date: string, turn: string) => {
+    const t = turn === "MANANA" ? "M" : "T";
+    return avisos.find(a => a.sedeId === sedeId && a.date === date && a.turn === t);
+  };
 
   const filteredSedes = filters.length > 0 ? sedes.filter(s => filters.includes(s.color)) : sedes;
 
@@ -58,6 +65,30 @@ export default function DiarioTab() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sedeId, date, turn, professionalAlias: selectedPro }),
+    });
+    load();
+  };
+
+  const handleAvisoClick = async (sedeId: string, date: string, turn: string) => {
+    const existing = getAviso(sedeId, date, turn);
+    if (existing) {
+      if (confirm("¿Eliminar aviso?")) {
+        await fetch(`/api/company/avisos/${existing.id}`, { method: "DELETE" });
+        load();
+      }
+      return;
+    }
+    if (!selectedPro) {
+      alert("Selecciona un profesional primero");
+      return;
+    }
+    const pro = professionals.find(p => p.alias === selectedPro);
+    if (!pro) return;
+    const t = turn === "MANANA" ? "M" : "T";
+    await fetch("/api/company/avisos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date, professionalId: pro.id, sedeId, turn: t }),
     });
     load();
   };
@@ -85,6 +116,11 @@ export default function DiarioTab() {
             <div key={c} onClick={() => setFilters(f => f.includes(c) ? f.filter(x => x !== c) : [...f, c])}
               className="w-5 h-5 rounded-full cursor-pointer" style={{ background: c, border: filters.includes(c) ? "2px solid white" : "1px solid #555" }} />
           ))}
+        </div>
+        <div className="text-[10px] text-slate-400 flex items-center gap-3">
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-500/50 border border-red-400 inline-block" /> Aviso</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-purple-500/15 border border-purple-400 inline-block" /> Finde</span>
+          <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-500/20 border border-red-400 inline-block" /> Festivo</span>
         </div>
       </div>
 
@@ -117,21 +153,27 @@ export default function DiarioTab() {
                   const fest = isFestivo(f, sede.province);
                   const planM = getPlan(sede.id, f, "MANANA");
                   const planT = getPlan(sede.id, f, "TARDE");
+                  const avisoM = getAviso(sede.id, f, "MANANA");
+                  const avisoT = getAviso(sede.id, f, "TARDE");
                   return (
                     <td key={i} className={`border-b-2 border-white/90 h-[60px] min-w-[70px] p-1 ${we ? "bg-purple-500/15" : ""} ${fest ? "bg-red-500/20" : ""}`}>
                       <div className="flex flex-col gap-1 items-center justify-center">
                         {sede.morningEnabled && (
-                          <div onClick={() => handleSlotClick(sede.id, f, "MANANA")}
-                            className={`h-6 w-[85%] rounded flex items-center justify-center text-[9px] font-bold cursor-pointer transition ${planM ? "text-black border border-white" : "text-white/20 border border-white/5"}`}
-                            style={{ background: planM ? sede.color : "transparent", borderLeft: planM ? undefined : "3px solid #3b82f6" }}>
-                            {planM?.professionalAlias || "M"}
+                          <div onClick={() => avisoM ? handleAvisoClick(sede.id, f, "MANANA") : handleSlotClick(sede.id, f, "MANANA")}
+                            className={`h-6 w-[85%] rounded flex items-center justify-center text-[9px] font-bold cursor-pointer transition ${
+                              avisoM ? "bg-red-500/50 text-red-200 border border-red-400" :
+                              planM ? "text-black border border-white" : "text-white/20 border border-white/5"}`}
+                            style={{ background: avisoM ? undefined : (planM ? sede.color : "transparent"), borderLeft: (avisoM || planM) ? undefined : "3px solid #3b82f6" }}>
+                            {avisoM ? `⚠ ${(avisoM.professional?.alias || selectedPro || "—")}` : (planM?.professionalAlias || "M")}
                           </div>
                         )}
                         {sede.afternoonEnabled && (
-                          <div onClick={() => handleSlotClick(sede.id, f, "TARDE")}
-                            className={`h-6 w-[85%] rounded flex items-center justify-center text-[9px] font-bold cursor-pointer transition ${planT ? "text-black border border-white" : "text-white/20 border border-white/5"}`}
-                            style={{ background: planT ? sede.color : "transparent", borderLeft: planT ? undefined : "3px solid #f59e0b" }}>
-                            {planT?.professionalAlias || "T"}
+                          <div onClick={() => avisoT ? handleAvisoClick(sede.id, f, "TARDE") : handleSlotClick(sede.id, f, "TARDE")}
+                            className={`h-6 w-[85%] rounded flex items-center justify-center text-[9px] font-bold cursor-pointer transition ${
+                              avisoT ? "bg-red-500/50 text-red-200 border border-red-400" :
+                              planT ? "text-black border border-white" : "text-white/20 border border-white/5"}`}
+                            style={{ background: avisoT ? undefined : (planT ? sede.color : "transparent"), borderLeft: (avisoT || planT) ? undefined : "3px solid #f59e0b" }}>
+                            {avisoT ? `⚠ ${(avisoT.professional?.alias || selectedPro || "—")}` : (planT?.professionalAlias || "T")}
                           </div>
                         )}
                       </div>
