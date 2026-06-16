@@ -70,12 +70,8 @@ export default function DiarioTab() {
   const [showProDD, setShowProDD] = useState(false);
   const prosLoadedRef = useRef(false);
 
-  // Filters
+  // Filters — only sede color circles
   const [filterColors, setFilterColors] = useState<string[]>([]);
-  const [filterPro, setFilterPro] = useState("");
-  const [filterCity, setFilterCity] = useState("");
-  const [filterProvince, setFilterProvince] = useState("");
-  const [filterAvisoReason, setFilterAvisoReason] = useState("");
 
   // Aviso creation modal
   const [avisoModal, setAvisoModal] = useState<{ sedeId: string; date: string; turn: string } | null>(null);
@@ -83,7 +79,6 @@ export default function DiarioTab() {
 
   // View mode
   const [viewMode, setViewMode] = useState<"full" | "compact">("full");
-  const [showFilters, setShowFilters] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const todayRef = useRef<HTMLTableCellElement>(null);
@@ -143,41 +138,12 @@ export default function DiarioTab() {
 
   // Compute unique filter values
   const uniqueColors = [...new Set(sedes.map(s => s.color))];
-  const uniqueCities = [...new Set(sedes.map(s => s.city).filter(Boolean))].sort();
-  const uniqueProvinces = [...new Set(sedes.map(s => s.province).filter(Boolean))].sort();
 
-  // Apply all filters to sedes
+  // Apply color filter to sedes
   const filteredSedes = sedes.filter(s => {
     if (filterColors.length > 0 && !filterColors.includes(s.color)) return false;
-    if (filterCity && s.city !== filterCity) return false;
-    if (filterProvince && s.province !== filterProvince) return false;
-    // If filtering by professional, show only sedes where that professional is assigned today or has plans
-    if (filterPro) {
-      const pro = professionals.find(p => p.alias === filterPro);
-      if (pro) {
-        const proSedes = pro.assignedSedes.split(",").map(s => s.trim().toUpperCase());
-        if (!proSedes.includes(s.name.toUpperCase())) return false;
-      }
-    }
     return true;
   }).sort((a, b) => a.order - b.order);
-
-  // Check if any aviso in visible data matches the reason filter
-  const hasAvisoReasonMatch = useCallback((sedeId: string, date: string) => {
-    if (!filterAvisoReason) return true;
-    const avisoM = getAviso(sedeId, date, "MANANA");
-    const avisoT = getAviso(sedeId, date, "TARDE");
-    if (avisoM && avisoM.reason === filterAvisoReason) return true;
-    if (avisoT && avisoT.reason === filterAvisoReason) return true;
-    return false;
-  }, [filterAvisoReason, getAviso]);
-
-  // Check if professional filter matches any cell in this row
-  const hasProInRow = useCallback((sedeId: string) => {
-    if (!filterPro) return true;
-    // Show the row if the selected pro has any plan in this sede
-    return plans.some(p => p.sedeId === sedeId && p.professionalAlias === filterPro);
-  }, [filterPro, plans]);
 
   const scrollToToday = () => {
     const now = new Date();
@@ -287,16 +253,6 @@ export default function DiarioTab() {
     });
   });
 
-  const clearAllFilters = () => {
-    setFilterColors([]);
-    setFilterPro("");
-    setFilterCity("");
-    setFilterProvince("");
-    setFilterAvisoReason("");
-  };
-
-  const hasAnyFilter = filterColors.length > 0 || filterPro || filterCity || filterProvince || filterAvisoReason;
-
   const cellW = viewMode === "compact" ? "min-w-[28px] sm:min-w-[44px]" : "min-w-[36px] sm:min-w-[60px]";
   const cellH = viewMode === "compact" ? "h-[32px] sm:h-[44px]" : "h-[44px] sm:h-[60px]";
   const textSize = viewMode === "compact" ? "text-[6px] sm:text-[8px]" : "text-[7px] sm:text-[9px]";
@@ -390,81 +346,7 @@ export default function DiarioTab() {
             className="bg-slate-700 hover:bg-slate-600 text-white font-bold px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg text-[10px] sm:text-xs transition shrink-0">
             {viewMode === "full" ? "▦" : "▤"} <span className="hidden sm:inline">{viewMode === "full" ? "Compacto" : "Normal"}</span>
           </button>
-
-          {/* Filters toggle */}
-          <button onClick={() => setShowFilters(f => !f)}
-            className={`font-bold px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg text-[10px] sm:text-xs transition shrink-0 ${showFilters ? "bg-blue-600 text-white" : "bg-slate-700 hover:bg-slate-600 text-white"}`}>
-            🔍 <span className="hidden sm:inline">Filtros</span> {hasAnyFilter ? "●" : ""}
-          </button>
         </div>
-
-        {/* ═══ Filter Bar ═══ */}
-        {showFilters && (
-          <div className="mt-2 p-2 bg-slate-800/80 rounded-lg border border-slate-600 space-y-2">
-            {/* Color filter (sede groups) */}
-            <div className="flex gap-2 items-center flex-wrap">
-              <span className="text-[10px] text-slate-500 font-bold uppercase w-14 shrink-0">Sede:</span>
-              {uniqueColors.map(c => (
-                <div key={c} onClick={() => setFilterColors(f => f.includes(c) ? f.filter(x => x !== c) : [...f, c])}
-                  className="w-5 h-5 rounded-full cursor-pointer transition-transform hover:scale-125"
-                  style={{ background: c, border: filterColors.includes(c) ? "2px solid white" : "1px solid #555" }} />
-              ))}
-            </div>
-
-            {/* Professional filter */}
-            <div className="flex gap-2 items-center flex-wrap">
-              <span className="text-[10px] text-slate-500 font-bold uppercase w-14 shrink-0">Pro:</span>
-              <select value={filterPro} onChange={e => setFilterPro(e.target.value)}
-                className="px-2 py-1 bg-slate-900 border border-slate-600 rounded text-white text-[10px] sm:text-xs flex-1 sm:flex-none sm:w-40">
-                <option value="">Todos</option>
-                {professionals.sort((a, b) => a.alias.localeCompare(b.alias)).map(p => (
-                  <option key={p.id} value={p.alias}>{p.alias} - {p.firstName}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* City filter */}
-            {uniqueCities.length > 0 && (
-              <div className="flex gap-2 items-center flex-wrap">
-                <span className="text-[10px] text-slate-500 font-bold uppercase w-14 shrink-0">Ciudad:</span>
-                <select value={filterCity} onChange={e => setFilterCity(e.target.value)}
-                  className="px-2 py-1 bg-slate-900 border border-slate-600 rounded text-white text-[10px] sm:text-xs flex-1 sm:flex-none sm:w-40">
-                  <option value="">Todas</option>
-                  {uniqueCities.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
-            )}
-
-            {/* Province filter */}
-            {uniqueProvinces.length > 0 && (
-              <div className="flex gap-2 items-center flex-wrap">
-                <span className="text-[10px] text-slate-500 font-bold uppercase w-14 shrink-0">Prov.:</span>
-                <select value={filterProvince} onChange={e => setFilterProvince(e.target.value)}
-                  className="px-2 py-1 bg-slate-900 border border-slate-600 rounded text-white text-[10px] sm:text-xs flex-1 sm:flex-none sm:w-40">
-                  <option value="">Todas</option>
-                  {uniqueProvinces.map(p => <option key={p} value={p}>{p}</option>)}
-                </select>
-              </div>
-            )}
-
-            {/* Aviso reason filter */}
-            <div className="flex gap-2 items-center flex-wrap">
-              <span className="text-[10px] text-slate-500 font-bold uppercase w-14 shrink-0">Aviso:</span>
-              <select value={filterAvisoReason} onChange={e => setFilterAvisoReason(e.target.value)}
-                className="px-2 py-1 bg-slate-900 border border-slate-600 rounded text-white text-[10px] sm:text-xs flex-1 sm:flex-none sm:w-40">
-                <option value="">Todos</option>
-                {AVISO_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
-              </select>
-            </div>
-
-            {/* Clear filters */}
-            {hasAnyFilter && (
-              <button onClick={clearAllFilters} className="text-[10px] text-red-400 hover:text-red-300 font-bold">
-                ✕ Limpiar todos los filtros
-              </button>
-            )}
-          </div>
-        )}
 
         {/* Color filter quick access (always visible) + Legend */}
         <div className="flex gap-2 mt-2 items-center flex-wrap">
@@ -519,11 +401,6 @@ export default function DiarioTab() {
           </thead>
           <tbody>
             {filteredSedes.map(sede => {
-              // If filtering by professional, only show rows where that pro has assignments
-              if (filterPro && !hasProInRow(sede.id)) return null;
-              // If filtering by aviso reason, check if any cell matches
-              // (we still show the row but highlight matching cells)
-
               return (
                 <tr key={sede.id}>
                   {/* Sede label - very compact on mobile */}
@@ -550,26 +427,18 @@ export default function DiarioTab() {
                     const avisoT = getAviso(sede.id, f, "TARDE");
                     const isToday = f === todayStr;
 
-                    // If filtering by professional, dim cells that don't match
-                    const proMatchM = !filterPro || (planM && planM.professionalAlias === filterPro) || (avisoM && avisoM.professionalId && professionals.find(p => p.id === avisoM.professionalId)?.alias === filterPro);
-                    const proMatchT = !filterPro || (planT && planT.professionalAlias === filterPro) || (avisoT && avisoT.professionalId && professionals.find(p => p.id === avisoT.professionalId)?.alias === filterPro);
-
                     // Multi-select visibility filter: dim cells where assigned pro is not in visiblePros
                     const visMatchM = !planM || visiblePros.size === 0 || visiblePros.has(planM.professionalAlias);
                     const visMatchT = !planT || visiblePros.size === 0 || visiblePros.has(planT.professionalAlias);
 
-                    // If filtering by aviso reason, dim cells that don't match
-                    const reasonMatch = !filterAvisoReason || hasAvisoReasonMatch(sede.id, f);
-
-                    const dimCell = (filterPro && !proMatchM && !proMatchT) || (!visMatchM && !visMatchT);
-                    const dimReason = filterAvisoReason && !reasonMatch;
+                    const dimCell = !visMatchM && !visMatchT;
 
                     // Resolve pro names for tooltips
                     const proNameM = planM ? (professionals.find(p => p.alias === planM.professionalAlias)?.firstName || '') + ' ' + (professionals.find(p => p.alias === planM.professionalAlias)?.lastName || '') : '';
                     const proNameT = planT ? (professionals.find(p => p.alias === planT.professionalAlias)?.firstName || '') + ' ' + (professionals.find(p => p.alias === planT.professionalAlias)?.lastName || '') : '';
 
                     return (
-                      <td key={i} className={`border-b-2 border-white/90 ${cellH} ${cellW} p-0.5 sm:p-1 ${we ? "bg-purple-500/15" : ""} ${fest ? "bg-red-500/20" : ""} ${isToday && !we && !fest ? "ring-1 ring-amber-500/50" : ""} ${(dimCell || dimReason) ? "opacity-20" : ""}`}>
+                      <td key={i} className={`border-b-2 border-white/90 ${cellH} ${cellW} p-0.5 sm:p-1 ${we ? "bg-purple-500/15" : ""} ${fest ? "bg-red-500/20" : ""} ${isToday && !we && !fest ? "ring-1 ring-amber-500/50" : ""} ${dimCell ? "opacity-20" : ""}`}>
                         <div className="flex flex-col gap-0.5 items-center justify-center">
                           {sede.morningEnabled && (
                             <div
@@ -577,7 +446,7 @@ export default function DiarioTab() {
                               className={`${viewMode === "compact" ? "h-4 sm:h-5" : "h-5 sm:h-6"} w-[85%] rounded flex items-center justify-center ${textSize} font-bold cursor-pointer transition ${
                                 avisoM ? getAvisoColor(avisoM.reason) :
                                 planM ? "text-black border border-white" : "text-white/20 border border-white/5"
-                              } ${!proMatchM && filterPro ? "opacity-30" : ""} ${!visMatchM ? "opacity-30" : ""}`}
+                              } ${!visMatchM ? "opacity-30" : ""}`}
                               style={{
                                 background: avisoM ? undefined : (planM ? sede.color : "transparent"),
                                 borderLeft: (avisoM || planM) ? undefined : "2px solid #3b82f6"
@@ -593,7 +462,7 @@ export default function DiarioTab() {
                               className={`${viewMode === "compact" ? "h-4 sm:h-5" : "h-5 sm:h-6"} w-[85%] rounded flex items-center justify-center ${textSize} font-bold cursor-pointer transition ${
                                 avisoT ? getAvisoColor(avisoT.reason) :
                                 planT ? "text-black border border-white" : "text-white/20 border border-white/5"
-                              } ${!proMatchT && filterPro ? "opacity-30" : ""} ${!visMatchT ? "opacity-30" : ""}`}
+                              } ${!visMatchT ? "opacity-30" : ""}`}
                               style={{
                                 background: avisoT ? undefined : (planT ? sede.color : "transparent"),
                                 borderLeft: (avisoT || planT) ? undefined : "2px solid #f59e0b"
