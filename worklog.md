@@ -121,3 +121,58 @@ Stage Summary:
 - Auto-resolves precio from catalog (c1=Servicios, c2=Mañana/Tarde)
 - Manual add/edit also available for items not in Diario
 - All deduped so re-syncing doesn't create duplicates
+
+---
+Task ID: 4
+Agent: main
+Task: Each Diario salida carries N líneas from catálogo — those líneas are what gets invoiced
+
+Work Log:
+- Added new Prisma model BillDiarioLine (one-to-many from BillDiarioItem)
+  * Fields: diarioItemId (FK), companyId, catalogoId (optional FK to BillCatalogo),
+    c1/c2 (denormalized from catalog or manual), cant, precioUnitario, obs, orden
+  * Cascade delete on parent BillDiarioItem
+- Pushed schema to Neon DB
+- Created 4 new API routes for líneas management:
+  * GET /api/company/bill/diario/[id]/lineas — list all líneas of an item
+  * POST /api/company/bill/diario/[id]/lineas — add single línea
+    - If catalogoId provided, auto-fills c1/c2/precioUnitario from catalog
+    - If c1+c2 without catalogoId, looks up price (client-specific first, then generic)
+  * PUT /api/company/bill/diario/[id]/lineas — batch replace all líneas
+    - For inline editing in the UI: incoming array determines create/update/delete
+    - Same catalogoId/c1+c2 auto-resolution as POST
+  * DELETE /api/company/bill/diario/[id]/lineas/[lineaId] — delete single línea
+- Updated GET /api/company/bill/diario to include lineas in the response
+- Updated transfer route POST /api/company/bill/diario/transfer:
+  * If item has líneas: creates one BillRegistro PER línea (N registros per item)
+  * If item has no líneas: fallback to single BillRegistro (backward compat)
+  * Response now includes registrosCreated count
+- Rewrote DiarioView component:
+  * Expandable rows (chevron icon) — click to show inline LíneasEditor panel
+  * Table now shows línea count + importe (sum of líneas when present)
+  * Simplified "Nuevo item" modal: just header (sede/profesional/turno/cliente);
+    user adds líneas via inline editor after creation
+  * Inline LíneasEditor panel per expanded item:
+    - Catalog dropdown (client-specific items first, then generic, separated by headers)
+    - "— Manual —" option to enter c1/c2/cant/precio/obs by hand
+    - When catalog item selected, c1/c2/precio auto-fill and become read-only
+    - Edit cantidad, obs inline; delete each line
+    - "Guardar" button persists the full batch (PUT batch endpoint)
+    - Live total at the top
+  * Edit modal simplified (only fecha/cliente/obs; lineas edited inline)
+  * Excel export now expands to one row per línea
+  * Stats bar importe sums líneas when present
+  * Transfer confirm message updated: "Se creará un registro por cada línea"
+- Build successful, pushed to GitHub/Vercel
+- End-to-end test on production:
+  * Added 5 catalog items (Servicios/Mañana, Servicios/Tarde, Consultas/Primera visita, Consultas/Sucesiva, Procedimientos/Curas)
+  * Added 3 lineas to a test Diario item (1×Mañana=80 + 2×Sucesiva=70 + 1×Curas=25 = 175 total)
+  * Transferred the item: created 3 BillRegistros with correct c1/c2/cant/precio
+  * Item marked as FACTURADA, all 3 registros appear in REGISTROS view
+
+Stage Summary:
+- Each Diario salida now carries N líneas from catálogo — those líneas are what gets invoiced
+- Flow: Diario plans → [Sync] → BillDiarioItem (CUMPLIDA, no líneas) → [Expand + add líneas from catálogo] → [Pasar a facturar] → N BillRegistros (one per línea) → Facturas
+- Catálogo dropdown shows client-specific items first (with header), then generic items
+- Full inline editing (add/edit/delete/save batch) without leaving the Diario tab
+- Backward compatible: items without líneas still transfer as a single registro
