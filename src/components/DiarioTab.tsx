@@ -62,8 +62,13 @@ export default function DiarioTab() {
   const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [avisos, setAvisos] = useState<AvisoEntry[]>([]);
 
-  // Selected professional for assignment
+  // Selected professional for assignment (single-select)
   const [selectedPro, setSelectedPro] = useState("");
+
+  // Multi-select pro visibility filter (like Mensual)
+  const [visiblePros, setVisiblePros] = useState<Set<string>>(new Set());
+  const [showProDD, setShowProDD] = useState(false);
+  const prosLoadedRef = useRef(false);
 
   // Filters
   const [filterColors, setFilterColors] = useState<string[]>([]);
@@ -92,7 +97,15 @@ export default function DiarioTab() {
       fetch("/api/company/avisos"),
     ]);
     if (sRes.ok) setSedes(await sRes.json());
-    if (pRes.ok) setProfessionals(await pRes.json());
+    if (pRes.ok) {
+      const p = await pRes.json();
+      setProfessionals(p);
+      // Initialize visiblePros = all (once)
+      if (!prosLoadedRef.current && Array.isArray(p) && p.length > 0) {
+        setVisiblePros(new Set(p.map((x: Professional) => x.alias)));
+        prosLoadedRef.current = true;
+      }
+    }
     if (plRes.ok) setPlans(await plRes.json());
     if (hRes.ok) setHolidays(await hRes.json());
     if (aRes.ok) setAvisos(await aRes.json());
@@ -309,15 +322,69 @@ export default function DiarioTab() {
             </select>
           </div>
 
-          {/* Professional selector */}
+          {/* Professional selector (for assignment) */}
           <div className="flex-1 min-w-[120px] sm:min-w-0 sm:flex-none">
-            <label className="block text-[10px] sm:text-xs font-extrabold text-blue-400 uppercase mb-1">PROFESIONAL</label>
+            <label className="block text-[10px] sm:text-xs font-extrabold text-blue-400 uppercase mb-1">ASIGNAR PRO</label>
             <select value={selectedPro} onChange={e => setSelectedPro(e.target.value)} className="w-full sm:w-52 px-1.5 sm:px-2 py-1.5 sm:py-2 bg-slate-800 border-2 border-amber-500 rounded text-white text-xs font-bold">
               <option value="">-- SELEC --</option>
               {professionals.sort((a, b) => a.alias.localeCompare(b.alias)).map(p => (
                 <option key={p.id} value={p.alias}>{p.alias} - {p.firstName}</option>
               ))}
             </select>
+          </div>
+
+          {/* Multi-select pro visibility filter (like Mensual) */}
+          <div className="relative flex-1 min-w-[140px] sm:flex-none">
+            <label className="block text-[10px] sm:text-xs font-extrabold text-blue-400 uppercase mb-1">VER PROFESIONALES</label>
+            <button
+              onClick={() => setShowProDD(v => !v)}
+              className="w-full sm:min-w-[220px] px-2 py-1.5 sm:py-2 bg-slate-800 border border-slate-600 rounded text-white text-xs font-bold flex justify-between items-center"
+            >
+              <span>{visiblePros.size === professionals.length ? `Todos (${professionals.length})` : `${visiblePros.size}/${professionals.length} pros`}</span>
+              <span className="text-amber-500">▼</span>
+            </button>
+            {showProDD && (
+              <div className="absolute top-full mt-1 left-0 right-0 sm:min-w-[280px] sm:right-auto max-h-[300px] overflow-y-auto bg-slate-900 border border-amber-500 rounded-lg z-50 shadow-2xl p-2">
+                <div className="flex gap-1 pb-2 mb-2 border-b border-slate-700">
+                  <button
+                    onClick={() => setVisiblePros(new Set(professionals.map(p => p.alias)))}
+                    className="flex-1 bg-slate-800 hover:bg-amber-500 hover:text-black text-xs px-2 py-1 rounded font-bold"
+                  >TODOS</button>
+                  <button
+                    onClick={() => setVisiblePros(new Set())}
+                    className="flex-1 bg-slate-800 hover:bg-amber-500 hover:text-black text-xs px-2 py-1 rounded font-bold"
+                  >NINGUNO</button>
+                  <button
+                    onClick={() => {
+                      // Only pros with at least one plan this year
+                      const withPlans = new Set(plans.map(p => p.professionalAlias).filter(Boolean));
+                      setVisiblePros(withPlans);
+                    }}
+                    className="flex-1 bg-slate-800 hover:bg-amber-500 hover:text-black text-xs px-2 py-1 rounded font-bold"
+                  >CON TURNOS</button>
+                </div>
+                {professionals.sort((a, b) => a.alias.localeCompare(b.alias)).map(p => {
+                  const count = proCounts[p.alias] ? (proCounts[p.alias].morning + proCounts[p.alias].afternoon) : 0;
+                  return (
+                    <label key={p.id} className="flex items-center gap-2 px-2 py-1.5 cursor-pointer hover:bg-slate-800 rounded">
+                      <input
+                        type="checkbox"
+                        checked={visiblePros.has(p.alias)}
+                        onChange={() => {
+                          const n = new Set(visiblePros);
+                          n.has(p.alias) ? n.delete(p.alias) : n.add(p.alias);
+                          setVisiblePros(n);
+                        }}
+                        className="accent-amber-500 w-3.5 h-3.5"
+                      />
+                      <span className="text-xs font-bold w-8 shrink-0">{p.alias}</span>
+                      <span className="text-[10px] text-slate-400 flex-1 truncate">{p.firstName} {p.lastName}</span>
+                      <span className={`text-[10px] font-bold ${count > 0 ? 'text-green-400' : 'text-slate-600'}`}>{count}</span>
+                    </label>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* Today button */}
@@ -445,16 +512,33 @@ export default function DiarioTab() {
         </div>
       </div>
 
-      {/* ═══ Professional Summary Bar ═══ */}
-      {selectedPro && proCounts[selectedPro] && (
-        <div className="bg-slate-800 border-b border-slate-700 px-3 py-1.5 flex gap-4 items-center text-xs shrink-0 overflow-x-auto">
-          <span className="font-bold text-amber-400">{selectedPro}</span>
-          <span className="text-green-400">M: {proCounts[selectedPro].morning}</span>
-          <span className="text-amber-300">T: {proCounts[selectedPro].afternoon}</span>
-          <span className="text-red-400">Avisos: {proCounts[selectedPro].avisos}</span>
-          <span className="text-slate-400">Total: {proCounts[selectedPro].morning + proCounts[selectedPro].afternoon}</span>
-        </div>
-      )}
+      {/* ═══ Professional Summary Bar ═══ (shows ALL visible pros with counts) */}
+      <div className="bg-slate-800 border-b border-slate-700 px-2 sm:px-3 py-1.5 flex gap-2 sm:gap-3 items-center text-[10px] sm:text-xs shrink-0 overflow-x-auto no-print">
+        <span className="font-bold text-slate-500 uppercase shrink-0">Resumen {year}:</span>
+        {professionals
+          .filter(p => visiblePros.has(p.alias) && proCounts[p.alias] && (proCounts[p.alias].morning + proCounts[p.alias].afternoon + proCounts[p.alias].avisos) > 0)
+          .sort((a, b) => (proCounts[b.alias].morning + proCounts[b.alias].afternoon) - (proCounts[a.alias].morning + proCounts[a.alias].afternoon))
+          .map(p => {
+            const c = proCounts[p.alias];
+            const total = c.morning + c.afternoon;
+            return (
+              <div key={p.alias} className={`flex gap-1 sm:gap-2 items-center px-1.5 sm:px-2 py-0.5 rounded border shrink-0 ${selectedPro === p.alias ? 'border-amber-500 bg-amber-500/10' : 'border-slate-700'}`}>
+                <span className="font-black text-amber-400">{p.alias}</span>
+                <span className="text-slate-500 hidden md:inline">{p.firstName}</span>
+                <span className="text-green-400">M:{c.morning}</span>
+                <span className="text-amber-300">T:{c.afternoon}</span>
+                <span className="text-slate-400 font-bold">Σ{total}</span>
+                {c.avisos > 0 && <span className="text-red-400">!{c.avisos}</span>}
+              </div>
+            );
+          })}
+        {selectedPro && (
+          <button
+            onClick={() => setSelectedPro("")}
+            className="ml-auto bg-amber-500/20 hover:bg-amber-500 hover:text-black text-amber-400 px-2 py-0.5 rounded font-bold text-[10px] shrink-0"
+          >Asignando: {selectedPro} ✕</button>
+        )}
+      </div>
 
       {/* ═══ Calendar grid ═══ */}
       <div className="flex-1 overflow-auto relative" ref={scrollRef}>
@@ -514,11 +598,19 @@ export default function DiarioTab() {
                     const proMatchM = !filterPro || (planM && planM.professionalAlias === filterPro) || (avisoM && avisoM.professionalId && professionals.find(p => p.id === avisoM.professionalId)?.alias === filterPro);
                     const proMatchT = !filterPro || (planT && planT.professionalAlias === filterPro) || (avisoT && avisoT.professionalId && professionals.find(p => p.id === avisoT.professionalId)?.alias === filterPro);
 
+                    // Multi-select visibility filter: dim cells where assigned pro is not in visiblePros
+                    const visMatchM = !planM || visiblePros.size === 0 || visiblePros.has(planM.professionalAlias);
+                    const visMatchT = !planT || visiblePros.size === 0 || visiblePros.has(planT.professionalAlias);
+
                     // If filtering by aviso reason, dim cells that don't match
                     const reasonMatch = !filterAvisoReason || hasAvisoReasonMatch(sede.id, f);
 
-                    const dimCell = filterPro && !proMatchM && !proMatchT;
+                    const dimCell = (filterPro && !proMatchM && !proMatchT) || (!visMatchM && !visMatchT);
                     const dimReason = filterAvisoReason && !reasonMatch;
+
+                    // Resolve pro names for tooltips
+                    const proNameM = planM ? (professionals.find(p => p.alias === planM.professionalAlias)?.firstName || '') + ' ' + (professionals.find(p => p.alias === planM.professionalAlias)?.lastName || '') : '';
+                    const proNameT = planT ? (professionals.find(p => p.alias === planT.professionalAlias)?.firstName || '') + ' ' + (professionals.find(p => p.alias === planT.professionalAlias)?.lastName || '') : '';
 
                     return (
                       <td key={i} className={`border-b-2 border-white/90 ${cellH} ${cellW} p-0.5 sm:p-1 ${we ? "bg-purple-500/15" : ""} ${fest ? "bg-red-500/20" : ""} ${isToday && !we && !fest ? "ring-1 ring-amber-500/50" : ""} ${(dimCell || dimReason) ? "opacity-20" : ""}`}>
@@ -529,12 +621,12 @@ export default function DiarioTab() {
                               className={`${viewMode === "compact" ? "h-4 sm:h-5" : "h-5 sm:h-6"} w-[85%] rounded flex items-center justify-center ${textSize} font-bold cursor-pointer transition ${
                                 avisoM ? getAvisoColor(avisoM.reason) :
                                 planM ? "text-black border border-white" : "text-white/20 border border-white/5"
-                              } ${!proMatchM && filterPro ? "opacity-30" : ""}`}
+                              } ${!proMatchM && filterPro ? "opacity-30" : ""} ${!visMatchM ? "opacity-30" : ""}`}
                               style={{
                                 background: avisoM ? undefined : (planM ? sede.color : "transparent"),
                                 borderLeft: (avisoM || planM) ? undefined : "2px solid #3b82f6"
                               }}
-                              title={avisoM ? `${avisoM.reason || "Aviso"}${avisoM.professionalId ? " - " + (professionals.find(p => p.id === avisoM.professionalId)?.alias || "") : " (sede)"}` : planM ? planM.professionalAlias : "Mañana"}
+                              title={avisoM ? `${avisoM.reason || "Aviso"}${avisoM.professionalId ? " - " + (professionals.find(p => p.id === avisoM.professionalId)?.alias || "") : " (sede)"}` : planM ? `${planM.professionalAlias} - ${proNameM}` : "Mañana (sin asignar)"}
                             >
                               {avisoM ? getAvisoLabel(avisoM.reason) : (planM?.professionalAlias || "M")}
                             </div>
@@ -545,12 +637,12 @@ export default function DiarioTab() {
                               className={`${viewMode === "compact" ? "h-4 sm:h-5" : "h-5 sm:h-6"} w-[85%] rounded flex items-center justify-center ${textSize} font-bold cursor-pointer transition ${
                                 avisoT ? getAvisoColor(avisoT.reason) :
                                 planT ? "text-black border border-white" : "text-white/20 border border-white/5"
-                              } ${!proMatchT && filterPro ? "opacity-30" : ""}`}
+                              } ${!proMatchT && filterPro ? "opacity-30" : ""} ${!visMatchT ? "opacity-30" : ""}`}
                               style={{
                                 background: avisoT ? undefined : (planT ? sede.color : "transparent"),
                                 borderLeft: (avisoT || planT) ? undefined : "2px solid #f59e0b"
                               }}
-                              title={avisoT ? `${avisoT.reason || "Aviso"}${avisoT.professionalId ? " - " + (professionals.find(p => p.id === avisoT.professionalId)?.alias || "") : " (sede)"}` : planT ? planT.professionalAlias : "Tarde"}
+                              title={avisoT ? `${avisoT.reason || "Aviso"}${avisoT.professionalId ? " - " + (professionals.find(p => p.id === avisoT.professionalId)?.alias || "") : " (sede)"}` : planT ? `${planT.professionalAlias} - ${proNameT}` : "Tarde (sin asignar)"}
                             >
                               {avisoT ? getAvisoLabel(avisoT.reason) : (planT?.professionalAlias || "T")}
                             </div>
