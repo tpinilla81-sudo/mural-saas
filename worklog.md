@@ -47,3 +47,26 @@ Stage Summary:
 - Click any user → "Entrar" → logged in
 - Creating new users from CompanyProfileTab no longer requires a password
 - Backward compat: existing password hashes in DB are simply ignored (kept as a safety net)
+
+---
+Task ID: 9
+Agent: main
+Task: Diario — quitar colores por motivo de aviso (BAJA/FORMACION/PERMISO/VACACIONES) y eliminar el resumen superior
+
+Work Log:
+- User: "los colres de baja, vacaciones...et no tienen sentido, quitalos. los rresumenes tampoco en diario"
+- Editado src/components/DiarioTab.tsx:
+  * getAvisoColor(): antes devolvía 4 colores distintos según el motivo (BAJA=red, FORMACION=blue, PERMISO=yellow, VACACIONES=orange); ahora devuelve siempre el mismo rojo uniforme (bg-red-700/70). Parámetro renombrado a _reason para indicar que no se usa.
+  * Leyenda desktop: eliminadas las 4 entradas Baja/Formación/Permiso/Vacaciones. Solo se conservan Finde y Festivo (que sí son informativas: identificación visual de celdas de fin de semana y festivos).
+  * Leyenda móvil: eliminadas las 4 entradas B/F/P/V. Solo WE/Fest.
+  * Eliminada por completo la barra "Resumen {year}:" con conteos por profesional (M/T/Σ/!) que aparecía entre la toolbar y la tabla.
+- Se conservan las etiquetas cortas BAJ/FOR/PER/VAC dentro de las celdas (getAvisoLabel), para que el motivo siga siendo identificable sin usar color.
+- Se conserva proCounts en JS porque sigue usándose para mostrar el contador junto a cada profesional en el dropdown "VER PROFESIONALES".
+- Confirmado: ningún otro componente usa avisos con colores (verificado con rg en src/components).
+- Build: los únicos errores son pre-existentes (módulo 'xlsx' no instalado en bill-views); DiarioTab compila limpio.
+- Commit b4a5f0e, pushed a origin/main.
+
+Stage Summary:
+- En la vista Diaria, todos los avisos ahora se ven del mismo color (rojo oscuro), sin distinción por motivo.
+- La leyenda solo muestra Finde y Festivo (que son marcas del calendario, no de aviso).
+- La barra de resumen superior ha desaparecido — la tabla ahora ocupa ese espacio.

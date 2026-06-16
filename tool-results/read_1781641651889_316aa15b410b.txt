@@ -1,0 +1,710 @@
+     1→     1→"use client";
+     2→     2→
+     3→     3→import { useState, useEffect, useRef, useCallback } from "react";
+     4→     4→
+     5→     5→const AVISO_REASONS = ["BAJA", "FORMACION", "PERMISO", "VACACIONES"] as const;
+     6→     6→type AvisoReason = (typeof AVISO_REASONS)[number];
+     7→     7→
+     8→     8→interface Sede {
+     9→     9→  id: string;
+    10→    10→  name: string;
+    11→    11→  city: string;
+    12→    12→  province: string;
+    13→    13→  task: string;
+    14→    14→  color: string;
+    15→    15→  morningEnabled: boolean;
+    16→    16→  afternoonEnabled: boolean;
+    17→    17→  order: number;
+    18→    18→  email: string;
+    19→    19→  phone: string;
+    20→    20→}
+    21→    21→
+    22→    22→interface Professional {
+    23→    23→  id: string;
+    24→    24→  firstName: string;
+    25→    25→  lastName: string;
+    26→    26→  alias: string;
+    27→    27→  type: string;
+    28→    28→  category: string;
+    29→    29→  permissions: string;
+    30→    30→  assignedSedes: string;
+    31→    31→}
+    32→    32→
+    33→    33→interface PlanEntry {
+    34→    34→  id: string;
+    35→    35→  sedeId: string;
+    36→    36→  date: string;
+    37→    37→  turn: string;
+    38→    38→  professionalAlias: string;
+    39→    39→}
+    40→    40→
+    41→    41→interface AvisoEntry {
+    42→    42→  id: string;
+    43→    43→  date: string;
+    44→    44→  professionalId: string | null; // nullable: sede-level absences don't have a professional
+    45→    45→  sedeId: string;
+    46→    46→  turn: string;
+    47→    47→  reason: string;
+    48→    48→  professional?: Professional | null;
+    49→    49→}
+    50→    50→
+    51→    51→interface Holiday {
+    52→    52→  id: string;
+    53→    53→  province: string;
+    54→    54→  date: string;
+    55→    55→}
+    56→    56→
+    57→    57→export default function DiarioTab() {
+    58→    58→  const [year, setYear] = useState(new Date().getFullYear());
+    59→    59→  const [sedes, setSedes] = useState<Sede[]>([]);
+    60→    60→  const [professionals, setProfessionals] = useState<Professional[]>([]);
+    61→    61→  const [plans, setPlans] = useState<PlanEntry[]>([]);
+    62→    62→  const [holidays, setHolidays] = useState<Holiday[]>([]);
+    63→    63→  const [avisos, setAvisos] = useState<AvisoEntry[]>([]);
+    64→    64→
+    65→    65→  // Selected professional for assignment (single-select)
+    66→    66→  const [selectedPro, setSelectedPro] = useState("");
+    67→    67→
+    68→    68→  // Multi-select pro visibility filter (like Mensual)
+    69→    69→  const [visiblePros, setVisiblePros] = useState<Set<string>>(new Set());
+    70→    70→  const [showProDD, setShowProDD] = useState(false);
+    71→    71→  const prosLoadedRef = useRef(false);
+    72→    72→
+    73→    73→  // Filters
+    74→    74→  const [filterColors, setFilterColors] = useState<string[]>([]);
+    75→    75→  const [filterPro, setFilterPro] = useState("");
+    76→    76→  const [filterCity, setFilterCity] = useState("");
+    77→    77→  const [filterProvince, setFilterProvince] = useState("");
+    78→    78→  const [filterAvisoReason, setFilterAvisoReason] = useState("");
+    79→    79→
+    80→    80→  // Aviso creation modal
+    81→    81→  const [avisoModal, setAvisoModal] = useState<{ sedeId: string; date: string; turn: string } | null>(null);
+    82→    82→  const [avisoReason, setAvisoReason] = useState<AvisoReason>("VACACIONES");
+    83→    83→
+    84→    84→  // View mode
+    85→    85→  const [viewMode, setViewMode] = useState<"full" | "compact">("full");
+    86→    86→  const [showFilters, setShowFilters] = useState(false);
+    87→    87→
+    88→    88→  const scrollRef = useRef<HTMLDivElement>(null);
+    89→    89→  const todayRef = useRef<HTMLTableCellElement>(null);
+    90→    90→
+    91→    91→  async function load() {
+    92→    92→    const [sRes, pRes, plRes, hRes, aRes] = await Promise.all([
+    93→    93→      fetch("/api/company/sedes"),
+    94→    94→      fetch("/api/company/professionals"),
+    95→    95→      fetch(`/api/company/plan?year=${year}`),
+    96→    96→      fetch("/api/company/holidays"),
+    97→    97→      fetch("/api/company/avisos"),
+    98→    98→    ]);
+    99→    99→    if (sRes.ok) setSedes(await sRes.json());
+   100→   100→    if (pRes.ok) {
+   101→   101→      const p = await pRes.json();
+   102→   102→      setProfessionals(p);
+   103→   103→      // Initialize visiblePros = all (once)
+   104→   104→      if (!prosLoadedRef.current && Array.isArray(p) && p.length > 0) {
+   105→   105→        setVisiblePros(new Set(p.map((x: Professional) => x.alias)));
+   106→   106→        prosLoadedRef.current = true;
+   107→   107→      }
+   108→   108→    }
+   109→   109→    if (plRes.ok) setPlans(await plRes.json());
+   110→   110→    if (hRes.ok) setHolidays(await hRes.json());
+   111→   111→    if (aRes.ok) setAvisos(await aRes.json());
+   112→   112→  }
+   113→   113→
+   114→   114→  useEffect(() => { load(); }, [year]);
+   115→   115→
+   116→   116→  // Auto-scroll to today after load
+   117→   117→  useEffect(() => {
+   118→   118→    setTimeout(() => {
+   119→   119→      if (todayRef.current && scrollRef.current) {
+   120→   120→        const container = scrollRef.current;
+   121→   121→        const cell = todayRef.current;
+   122→   122→        const left = cell.offsetLeft - container.clientWidth / 3;
+   123→   123→        container.scrollTo({ left: Math.max(0, left), behavior: "smooth" });
+   124→   124→      }
+   125→   125→    }, 300);
+   126→   126→  }, [plans, sedes]);
+   127→   127→
+   128→   128→  const DOW = ["D", "L", "M", "X", "J", "V", "S"];
+   129→   129→  const daysArr: Date[] = [];
+   130→   130→  const curr = new Date(year, 0, 1);
+   131→   131→  while (curr.getFullYear() === year) { daysArr.push(new Date(curr)); curr.setDate(curr.getDate() + 1); }
+   132→   132→
+   133→   133→  const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+   134→   134→  const todayStr = fmt(new Date());
+   135→   135→  const isWE = (d: Date) => d.getDay() === 0 || d.getDay() === 6;
+   136→   136→  const isFestivo = (f: string, prov: string) => holidays.some(h => h.date === f && h.province === prov);
+   137→   137→  const getPlan = useCallback((sedeId: string, date: string, turn: string) =>
+   138→   138→    plans.find(p => p.sedeId === sedeId && p.date === date && p.turn === turn), [plans]);
+   139→   139→  const getAviso = useCallback((sedeId: string, date: string, turn: string) => {
+   140→   140→    const t = turn === "MANANA" ? "M" : "T";
+   141→   141→    return avisos.find(a => a.sedeId === sedeId && a.date === date && a.turn === t);
+   142→   142→  }, [avisos]);
+   143→   143→
+   144→   144→  // Compute unique filter values
+   145→   145→  const uniqueColors = [...new Set(sedes.map(s => s.color))];
+   146→   146→  const uniqueCities = [...new Set(sedes.map(s => s.city).filter(Boolean))].sort();
+   147→   147→  const uniqueProvinces = [...new Set(sedes.map(s => s.province).filter(Boolean))].sort();
+   148→   148→
+   149→   149→  // Apply all filters to sedes
+   150→   150→  const filteredSedes = sedes.filter(s => {
+   151→   151→    if (filterColors.length > 0 && !filterColors.includes(s.color)) return false;
+   152→   152→    if (filterCity && s.city !== filterCity) return false;
+   153→   153→    if (filterProvince && s.province !== filterProvince) return false;
+   154→   154→    // If filtering by professional, show only sedes where that professional is assigned today or has plans
+   155→   155→    if (filterPro) {
+   156→   156→      const pro = professionals.find(p => p.alias === filterPro);
+   157→   157→      if (pro) {
+   158→   158→        const proSedes = pro.assignedSedes.split(",").map(s => s.trim().toUpperCase());
+   159→   159→        if (!proSedes.includes(s.name.toUpperCase())) return false;
+   160→   160→      }
+   161→   161→    }
+   162→   162→    return true;
+   163→   163→  }).sort((a, b) => a.order - b.order);
+   164→   164→
+   165→   165→  // Check if any aviso in visible data matches the reason filter
+   166→   166→  const hasAvisoReasonMatch = useCallback((sedeId: string, date: string) => {
+   167→   167→    if (!filterAvisoReason) return true;
+   168→   168→    const avisoM = getAviso(sedeId, date, "MANANA");
+   169→   169→    const avisoT = getAviso(sedeId, date, "TARDE");
+   170→   170→    if (avisoM && avisoM.reason === filterAvisoReason) return true;
+   171→   171→    if (avisoT && avisoT.reason === filterAvisoReason) return true;
+   172→   172→    return false;
+   173→   173→  }, [filterAvisoReason, getAviso]);
+   174→   174→
+   175→   175→  // Check if professional filter matches any cell in this row
+   176→   176→  const hasProInRow = useCallback((sedeId: string) => {
+   177→   177→    if (!filterPro) return true;
+   178→   178→    // Show the row if the selected pro has any plan in this sede
+   179→   179→    return plans.some(p => p.sedeId === sedeId && p.professionalAlias === filterPro);
+   180→   180→  }, [filterPro, plans]);
+   181→   181→
+   182→   182→  const scrollToToday = () => {
+   183→   183→    const now = new Date();
+   184→   184→    if (year !== now.getFullYear()) {
+   185→   185→      setYear(now.getFullYear());
+   186→   186→      // scroll will happen via useEffect after data loads for the new year
+   187→   187→      return;
+   188→   188→    }
+   189→   189→    if (todayRef.current && scrollRef.current) {
+   190→   190→      const container = scrollRef.current;
+   191→   191→      const cell = todayRef.current;
+   192→   192→      const left = cell.offsetLeft - container.clientWidth / 3;
+   193→   193→      container.scrollTo({ left: Math.max(0, left), behavior: "smooth" });
+   194→   194→    }
+   195→   195→  };
+   196→   196→
+   197→   197→  // Click on a plan slot (assign professional)
+   198→   198→  const handleSlotClick = async (sedeId: string, date: string, turn: string) => {
+   199→   199→    const existing = getPlan(sedeId, date, turn);
+   200→   200→    if (existing) {
+   201→   201→      if (confirm("¿Eliminar asignación?")) {
+   202→   202→        await fetch(`/api/company/plan/${existing.id}`, { method: "DELETE" });
+   203→   203→        load();
+   204→   204→      }
+   205→   205→      return;
+   206→   206→    }
+   207→   207→    if (!selectedPro) return;
+   208→   208→    const sede = sedes.find(s => s.id === sedeId);
+   209→   209→    if (isWE(new Date(date)) || (sede && isFestivo(date, sede.province))) {
+   210→   210→      if (!confirm("Es festivo/fin de semana. ¿Continuar?")) return;
+   211→   211→    }
+   212→   212→    await fetch("/api/company/plan", {
+   213→   213→      method: "POST",
+   214→   214→      headers: { "Content-Type": "application/json" },
+   215→   215→      body: JSON.stringify({ sedeId, date, turn, professionalAlias: selectedPro }),
+   216→   216→    });
+   217→   217→    load();
+   218→   218→  };
+   219→   219→
+   220→   220→  // Open aviso modal
+   221→   221→  const openAvisoModal = (sedeId: string, date: string, turn: string) => {
+   222→   222→    const existing = getAviso(sedeId, date, turn);
+   223→   223→    if (existing) {
+   224→   224→      if (confirm(`¿Eliminar aviso${existing.reason ? ` (${existing.reason})` : ""}?`)) {
+   225→   225→        fetch(`/api/company/avisos/${existing.id}`, { method: "DELETE" }).then(load);
+   226→   226→      }
+   227→   227→      return;
+   228→   228→    }
+   229→   229→    setAvisoModal({ sedeId, date, turn });
+   230→   230→    setAvisoReason("VACACIONES");
+   231→   231→  };
+   232→   232→
+   233→   233→  // Confirm aviso creation
+   234→   234→  const confirmAviso = async () => {
+   235→   235→    if (!avisoModal) return;
+   236→   236→    const t = avisoModal.turn === "MANANA" ? "M" : "T";
+   237→   237→    const pro = selectedPro ? professionals.find(p => p.alias === selectedPro) : null;
+   238→   238→    await fetch("/api/company/avisos", {
+   239→   239→      method: "POST",
+   240→   240→      headers: { "Content-Type": "application/json" },
+   241→   241→      body: JSON.stringify({
+   242→   242→        date: avisoModal.date,
+   243→   243→        professionalId: pro?.id || null,
+   244→   244→        sedeId: avisoModal.sedeId,
+   245→   245→        turn: t,
+   246→   246→        reason: avisoReason,
+   247→   247→      }),
+   248→   248→    });
+   249→   249→    setAvisoModal(null);
+   250→   250→    load();
+   251→   251→  };
+   252→   252→
+   253→   253→  // Get aviso reason color
+   254→   254→  const getAvisoColor = (reason: string) => {
+   255→   255→    switch (reason) {
+   256→   256→      case "BAJA": return "bg-red-600/70 text-red-100 border-red-400";
+   257→   257→      case "FORMACION": return "bg-blue-600/70 text-blue-100 border-blue-400";
+   258→   258→      case "PERMISO": return "bg-yellow-600/70 text-yellow-100 border-yellow-400";
+   259→   259→      case "VACACIONES": return "bg-orange-600/70 text-orange-100 border-orange-400";
+   260→   260→      default: return "bg-red-500/50 text-red-200 border-red-400";
+   261→   261→    }
+   262→   262→  };
+   263→   263→
+   264→   264→  // Get aviso reason short label
+   265→   265→  const getAvisoLabel = (reason: string) => {
+   266→   266→    switch (reason) {
+   267→   267→      case "BAJA": return "BAJ";
+   268→   268→      case "FORMACION": return "FOR";
+   269→   269→      case "PERMISO": return "PER";
+   270→   270→      case "VACACIONES": return "VAC";
+   271→   271→      default: return reason.substring(0, 3).toUpperCase();
+   272→   272→    }
+   273→   273→  };
+   274→   274→
+   275→   275→  // Count assignments per professional for current view
+   276→   276→  const proCounts: Record<string, { morning: number; afternoon: number; avisos: number }> = {};
+   277→   277→  professionals.forEach(p => { proCounts[p.alias] = { morning: 0, afternoon: 0, avisos: 0 }; });
+   278→   278→  filteredSedes.forEach(sede => {
+   279→   279→    daysArr.forEach(d => {
+   280→   280→      const f = fmt(d);
+   281→   281→      const planM = getPlan(sede.id, f, "MANANA");
+   282→   282→      const planT = getPlan(sede.id, f, "TARDE");
+   283→   283→      if (planM && proCounts[planM.professionalAlias]) proCounts[planM.professionalAlias].morning++;
+   284→   284→      if (planT && proCounts[planT.professionalAlias]) proCounts[planT.professionalAlias].afternoon++;
+   285→   285→      const avisoM = getAviso(sede.id, f, "MANANA");
+   286→   286→      const avisoT = getAviso(sede.id, f, "TARDE");
+   287→   287→      if (avisoM) {
+   288→   288→        const pro = professionals.find(p => p.id === avisoM.professionalId);
+   289→   289→        if (pro && proCounts[pro.alias]) proCounts[pro.alias].avisos++;
+   290→   290→      }
+   291→   291→      if (avisoT) {
+   292→   292→        const pro = professionals.find(p => p.id === avisoT.professionalId);
+   293→   293→        if (pro && proCounts[pro.alias]) proCounts[pro.alias].avisos++;
+   294→   294→      }
+   295→   295→    });
+   296→   296→  });
+   297→   297→
+   298→   298→  const clearAllFilters = () => {
+   299→   299→    setFilterColors([]);
+   300→   300→    setFilterPro("");
+   301→   301→    setFilterCity("");
+   302→   302→    setFilterProvince("");
+   303→   303→    setFilterAvisoReason("");
+   304→   304→  };
+   305→   305→
+   306→   306→  const hasAnyFilter = filterColors.length > 0 || filterPro || filterCity || filterProvince || filterAvisoReason;
+   307→   307→
+   308→   308→  const cellW = viewMode === "compact" ? "min-w-[28px] sm:min-w-[44px]" : "min-w-[36px] sm:min-w-[60px]";
+   309→   309→  const cellH = viewMode === "compact" ? "h-[32px] sm:h-[44px]" : "h-[44px] sm:h-[60px]";
+   310→   310→  const textSize = viewMode === "compact" ? "text-[6px] sm:text-[8px]" : "text-[7px] sm:text-[9px]";
+   311→   311→
+   312→   312→  return (
+   313→   313→    <div className="flex flex-col h-full overflow-hidden border border-slate-700 rounded-xl bg-slate-800/50">
+   314→   314→      {/* ═══ Toolbar ═══ */}
+   315→   315→      <div className="bg-slate-900 p-2 sm:p-3 border-b border-slate-700 shrink-0">
+   316→   316→        <div className="flex gap-2 sm:gap-3 items-end flex-wrap">
+   317→   317→          {/* Year */}
+   318→   318→          <div>
+   319→   319→            <label className="block text-[10px] sm:text-xs font-extrabold text-blue-400 uppercase mb-1">AÑO</label>
+   320→   320→            <select value={year} onChange={e => setYear(parseInt(e.target.value))} className="w-16 sm:w-20 px-1.5 sm:px-2 py-1.5 sm:py-2 bg-slate-800 border border-slate-600 rounded text-white text-xs">
+   321→   321→              {Array.from({ length: 15 }, (_, i) => 2026 + i).map(y => <option key={y} value={y}>{y}</option>)}
+   322→   322→            </select>
+   323→   323→          </div>
+   324→   324→
+   325→   325→          {/* Professional selector (for assignment) */}
+   326→   326→          <div className="flex-1 min-w-[120px] sm:min-w-0 sm:flex-none">
+   327→   327→            <label className="block text-[10px] sm:text-xs font-extrabold text-blue-400 uppercase mb-1">ASIGNAR PRO</label>
+   328→   328→            <select value={selectedPro} onChange={e => setSelectedPro(e.target.value)} className="w-full sm:w-52 px-1.5 sm:px-2 py-1.5 sm:py-2 bg-slate-800 border-2 border-amber-500 rounded text-white text-xs font-bold">
+   329→   329→              <option value="">-- SELEC --</option>
+   330→   330→              {professionals.sort((a, b) => a.alias.localeCompare(b.alias)).map(p => (
+   331→   331→                <option key={p.id} value={p.alias}>{p.alias} - {p.firstName}</option>
+   332→   332→              ))}
+   333→   333→            </select>
+   334→   334→          </div>
+   335→   335→
+   336→   336→          {/* Multi-select pro visibility filter (like Mensual) */}
+   337→   337→          <div className="relative flex-1 min-w-[140px] sm:flex-none">
+   338→   338→            <label className="block text-[10px] sm:text-xs font-extrabold text-blue-400 uppercase mb-1">VER PROFESIONALES</label>
+   339→   339→            <button
+   340→   340→              onClick={() => setShowProDD(v => !v)}
+   341→   341→              className="w-full sm:min-w-[220px] px-2 py-1.5 sm:py-2 bg-slate-800 border border-slate-600 rounded text-white text-xs font-bold flex justify-between items-center"
+   342→   342→            >
+   343→   343→              <span>{visiblePros.size === professionals.length ? `Todos (${professionals.length})` : `${visiblePros.size}/${professionals.length} pros`}</span>
+   344→   344→              <span className="text-amber-500">▼</span>
+   345→   345→            </button>
+   346→   346→            {showProDD && (
+   347→   347→              <div className="absolute top-full mt-1 left-0 right-0 sm:min-w-[280px] sm:right-auto max-h-[300px] overflow-y-auto bg-slate-900 border border-amber-500 rounded-lg z-50 shadow-2xl p-2">
+   348→   348→                <div className="flex gap-1 pb-2 mb-2 border-b border-slate-700">
+   349→   349→                  <button
+   350→   350→                    onClick={() => setVisiblePros(new Set(professionals.map(p => p.alias)))}
+   351→   351→                    className="flex-1 bg-slate-800 hover:bg-amber-500 hover:text-black text-xs px-2 py-1 rounded font-bold"
+   352→   352→                  >TODOS</button>
+   353→   353→                  <button
+   354→   354→                    onClick={() => setVisiblePros(new Set())}
+   355→   355→                    className="flex-1 bg-slate-800 hover:bg-amber-500 hover:text-black text-xs px-2 py-1 rounded font-bold"
+   356→   356→                  >NINGUNO</button>
+   357→   357→                  <button
+   358→   358→                    onClick={() => {
+   359→   359→                      // Only pros with at least one plan this year
+   360→   360→                      const withPlans = new Set(plans.map(p => p.professionalAlias).filter(Boolean));
+   361→   361→                      setVisiblePros(withPlans);
+   362→   362→                    }}
+   363→   363→                    className="flex-1 bg-slate-800 hover:bg-amber-500 hover:text-black text-xs px-2 py-1 rounded font-bold"
+   364→   364→                  >CON TURNOS</button>
+   365→   365→                </div>
+   366→   366→                {professionals.sort((a, b) => a.alias.localeCompare(b.alias)).map(p => {
+   367→   367→                  const count = proCounts[p.alias] ? (proCounts[p.alias].morning + proCounts[p.alias].afternoon) : 0;
+   368→   368→                  return (
+   369→   369→                    <label key={p.id} className="flex items-center gap-2 px-2 py-1.5 cursor-pointer hover:bg-slate-800 rounded">
+   370→   370→                      <input
+   371→   371→                        type="checkbox"
+   372→   372→                        checked={visiblePros.has(p.alias)}
+   373→   373→                        onChange={() => {
+   374→   374→                          const n = new Set(visiblePros);
+   375→   375→                          n.has(p.alias) ? n.delete(p.alias) : n.add(p.alias);
+   376→   376→                          setVisiblePros(n);
+   377→   377→                        }}
+   378→   378→                        className="accent-amber-500 w-3.5 h-3.5"
+   379→   379→                      />
+   380→   380→                      <span className="text-xs font-bold w-8 shrink-0">{p.alias}</span>
+   381→   381→                      <span className="text-[10px] text-slate-400 flex-1 truncate">{p.firstName} {p.lastName}</span>
+   382→   382→                      <span className={`text-[10px] font-bold ${count > 0 ? 'text-green-400' : 'text-slate-600'}`}>{count}</span>
+   383→   383→                    </label>
+   384→   384→                  );
+   385→   385→                })}
+   386→   386→              </div>
+   387→   387→            )}
+   388→   388→          </div>
+   389→   389→
+   390→   390→          {/* Today button */}
+   391→   391→          <button onClick={scrollToToday}
+   392→   392→            className="bg-amber-500 hover:bg-amber-400 text-black font-black px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm transition shrink-0">
+   393→   393→            HOY
+   394→   394→          </button>
+   395→   395→
+   396→   396→          {/* View mode toggle */}
+   397→   397→          <button onClick={() => setViewMode(v => v === "full" ? "compact" : "full")}
+   398→   398→            className="bg-slate-700 hover:bg-slate-600 text-white font-bold px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg text-[10px] sm:text-xs transition shrink-0">
+   399→   399→            {viewMode === "full" ? "▦" : "▤"} <span className="hidden sm:inline">{viewMode === "full" ? "Compacto" : "Normal"}</span>
+   400→   400→          </button>
+   401→   401→
+   402→   402→          {/* Filters toggle */}
+   403→   403→          <button onClick={() => setShowFilters(f => !f)}
+   404→   404→            className={`font-bold px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg text-[10px] sm:text-xs transition shrink-0 ${showFilters ? "bg-blue-600 text-white" : "bg-slate-700 hover:bg-slate-600 text-white"}`}>
+   405→   405→            🔍 <span className="hidden sm:inline">Filtros</span> {hasAnyFilter ? "●" : ""}
+   406→   406→          </button>
+   407→   407→        </div>
+   408→   408→
+   409→   409→        {/* ═══ Filter Bar ═══ */}
+   410→   410→        {showFilters && (
+   411→   411→          <div className="mt-2 p-2 bg-slate-800/80 rounded-lg border border-slate-600 space-y-2">
+   412→   412→            {/* Color filter (sede groups) */}
+   413→   413→            <div className="flex gap-2 items-center flex-wrap">
+   414→   414→              <span className="text-[10px] text-slate-500 font-bold uppercase w-14 shrink-0">Sede:</span>
+   415→   415→              {uniqueColors.map(c => (
+   416→   416→                <div key={c} onClick={() => setFilterColors(f => f.includes(c) ? f.filter(x => x !== c) : [...f, c])}
+   417→   417→                  className="w-5 h-5 rounded-full cursor-pointer transition-transform hover:scale-125"
+   418→   418→                  style={{ background: c, border: filterColors.includes(c) ? "2px solid white" : "1px solid #555" }} />
+   419→   419→              ))}
+   420→   420→            </div>
+   421→   421→
+   422→   422→            {/* Professional filter */}
+   423→   423→            <div className="flex gap-2 items-center flex-wrap">
+   424→   424→              <span className="text-[10px] text-slate-500 font-bold uppercase w-14 shrink-0">Pro:</span>
+   425→   425→              <select value={filterPro} onChange={e => setFilterPro(e.target.value)}
+   426→   426→                className="px-2 py-1 bg-slate-900 border border-slate-600 rounded text-white text-[10px] sm:text-xs flex-1 sm:flex-none sm:w-40">
+   427→   427→                <option value="">Todos</option>
+   428→   428→                {professionals.sort((a, b) => a.alias.localeCompare(b.alias)).map(p => (
+   429→   429→                  <option key={p.id} value={p.alias}>{p.alias} - {p.firstName}</option>
+   430→   430→                ))}
+   431→   431→              </select>
+   432→   432→            </div>
+   433→   433→
+   434→   434→            {/* City filter */}
+   435→   435→            {uniqueCities.length > 0 && (
+   436→   436→              <div className="flex gap-2 items-center flex-wrap">
+   437→   437→                <span className="text-[10px] text-slate-500 font-bold uppercase w-14 shrink-0">Ciudad:</span>
+   438→   438→                <select value={filterCity} onChange={e => setFilterCity(e.target.value)}
+   439→   439→                  className="px-2 py-1 bg-slate-900 border border-slate-600 rounded text-white text-[10px] sm:text-xs flex-1 sm:flex-none sm:w-40">
+   440→   440→                  <option value="">Todas</option>
+   441→   441→                  {uniqueCities.map(c => <option key={c} value={c}>{c}</option>)}
+   442→   442→                </select>
+   443→   443→              </div>
+   444→   444→            )}
+   445→   445→
+   446→   446→            {/* Province filter */}
+   447→   447→            {uniqueProvinces.length > 0 && (
+   448→   448→              <div className="flex gap-2 items-center flex-wrap">
+   449→   449→                <span className="text-[10px] text-slate-500 font-bold uppercase w-14 shrink-0">Prov.:</span>
+   450→   450→                <select value={filterProvince} onChange={e => setFilterProvince(e.target.value)}
+   451→   451→                  className="px-2 py-1 bg-slate-900 border border-slate-600 rounded text-white text-[10px] sm:text-xs flex-1 sm:flex-none sm:w-40">
+   452→   452→                  <option value="">Todas</option>
+   453→   453→                  {uniqueProvinces.map(p => <option key={p} value={p}>{p}</option>)}
+   454→   454→                </select>
+   455→   455→              </div>
+   456→   456→            )}
+   457→   457→
+   458→   458→            {/* Aviso reason filter */}
+   459→   459→            <div className="flex gap-2 items-center flex-wrap">
+   460→   460→              <span className="text-[10px] text-slate-500 font-bold uppercase w-14 shrink-0">Aviso:</span>
+   461→   461→              <select value={filterAvisoReason} onChange={e => setFilterAvisoReason(e.target.value)}
+   462→   462→                className="px-2 py-1 bg-slate-900 border border-slate-600 rounded text-white text-[10px] sm:text-xs flex-1 sm:flex-none sm:w-40">
+   463→   463→                <option value="">Todos</option>
+   464→   464→                {AVISO_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
+   465→   465→              </select>
+   466→   466→            </div>
+   467→   467→
+   468→   468→            {/* Clear filters */}
+   469→   469→            {hasAnyFilter && (
+   470→   470→              <button onClick={clearAllFilters} className="text-[10px] text-red-400 hover:text-red-300 font-bold">
+   471→   471→                ✕ Limpiar todos los filtros
+   472→   472→              </button>
+   473→   473→            )}
+   474→   474→          </div>
+   475→   475→        )}
+   476→   476→
+   477→   477→        {/* Color filter quick access (always visible) + Legend */}
+   478→   478→        <div className="flex gap-2 mt-2 items-center flex-wrap">
+   479→   479→          <span className="text-[10px] text-slate-500 font-bold uppercase">Filtrar:</span>
+   480→   480→          {uniqueColors.map(c => {
+   481→   481→            const sedeNames = sedes.filter(s => s.color === c).map(s => s.name);
+   482→   482→            return (
+   483→   483→              <div key={c} onClick={() => setFilterColors(f => f.includes(c) ? f.filter(x => x !== c) : [...f, c])}
+   484→   484→                className="w-5 h-5 rounded-full cursor-pointer transition-transform hover:scale-125"
+   485→   485→                title={sedeNames.join(", ")}
+   486→   486→                style={{ background: c, border: filterColors.includes(c) ? "2px solid white" : "1px solid #555" }} />
+   487→   487→            );
+   488→   488→          })}
+   489→   489→          {filterColors.length > 0 && (
+   490→   490→            <button onClick={() => setFilterColors([])} className="text-[10px] text-slate-400 hover:text-white font-bold">✕ Limpiar</button>
+   491→   491→          )}
+   492→   492→
+   493→   493→          {/* Legend */}
+   494→   494→          <div className="hidden sm:flex text-[10px] text-slate-400 items-center gap-3 ml-auto">
+   495→   495→            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-600/70 border border-red-400 inline-block" /> Baja</span>
+   496→   496→            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-blue-600/70 border border-blue-400 inline-block" /> Formación</span>
+   497→   497→            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-yellow-600/70 border border-yellow-400 inline-block" /> Permiso</span>
+   498→   498→            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-orange-600/70 border border-orange-400 inline-block" /> Vacaciones</span>
+   499→   499→            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-purple-500/15 border border-purple-400 inline-block" /> Finde</span>
+   500→   500→            <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-500/20 border border-red-400 inline-block" /> Festivo</span>
+   501→   501→          </div>
+   502→   502→        </div>
+   503→   503→
+   504→   504→        {/* Mobile legend (compact) */}
+   505→   505→        <div className="sm:hidden flex gap-2 mt-1 overflow-x-auto text-[8px] text-slate-400 pb-1">
+   506→   506→          <span className="flex items-center gap-0.5 shrink-0"><span className="w-2 h-2 rounded bg-red-600/70 inline-block" />B</span>
+   507→   507→          <span className="flex items-center gap-0.5 shrink-0"><span className="w-2 h-2 rounded bg-blue-600/70 inline-block" />F</span>
+   508→   508→          <span className="flex items-center gap-0.5 shrink-0"><span className="w-2 h-2 rounded bg-yellow-600/70 inline-block" />P</span>
+   509→   509→          <span className="flex items-center gap-0.5 shrink-0"><span className="w-2 h-2 rounded bg-orange-600/70 inline-block" />V</span>
+   510→   510→          <span className="flex items-center gap-0.5 shrink-0"><span className="w-2 h-2 rounded bg-purple-500/15 inline-block" />WE</span>
+   511→   511→          <span className="flex items-center gap-0.5 shrink-0"><span className="w-2 h-2 rounded bg-red-500/20 inline-block" />Fest</span>
+   512→   512→        </div>
+   513→   513→      </div>
+   514→   514→
+   515→   515→      {/* ═══ Professional Summary Bar ═══ (shows ALL visible pros with counts) */}
+   516→   516→      <div className="bg-slate-800 border-b border-slate-700 px-2 sm:px-3 py-1.5 flex gap-2 sm:gap-3 items-center text-[10px] sm:text-xs shrink-0 overflow-x-auto no-print">
+   517→   517→        <span className="font-bold text-slate-500 uppercase shrink-0">Resumen {year}:</span>
+   518→   518→        {professionals
+   519→   519→          .filter(p => visiblePros.has(p.alias) && proCounts[p.alias] && (proCounts[p.alias].morning + proCounts[p.alias].afternoon + proCounts[p.alias].avisos) > 0)
+   520→   520→          .sort((a, b) => (proCounts[b.alias].morning + proCounts[b.alias].afternoon) - (proCounts[a.alias].morning + proCounts[a.alias].afternoon))
+   521→   521→          .map(p => {
+   522→   522→            const c = proCounts[p.alias];
+   523→   523→            const total = c.morning + c.afternoon;
+   524→   524→            return (
+   525→   525→              <div key={p.alias} className={`flex gap-1 sm:gap-2 items-center px-1.5 sm:px-2 py-0.5 rounded border shrink-0 ${selectedPro === p.alias ? 'border-amber-500 bg-amber-500/10' : 'border-slate-700'}`}>
+   526→   526→                <span className="font-black text-amber-400">{p.alias}</span>
+   527→   527→                <span className="text-slate-500 hidden md:inline">{p.firstName}</span>
+   528→   528→                <span className="text-green-400">M:{c.morning}</span>
+   529→   529→                <span className="text-amber-300">T:{c.afternoon}</span>
+   530→   530→                <span className="text-slate-400 font-bold">Σ{total}</span>
+   531→   531→                {c.avisos > 0 && <span className="text-red-400">!{c.avisos}</span>}
+   532→   532→              </div>
+   533→   533→            );
+   534→   534→          })}
+   535→   535→        {selectedPro && (
+   536→   536→          <button
+   537→   537→            onClick={() => setSelectedPro("")}
+   538→   538→            className="ml-auto bg-amber-500/20 hover:bg-amber-500 hover:text-black text-amber-400 px-2 py-0.5 rounded font-bold text-[10px] shrink-0"
+   539→   539→          >Asignando: {selectedPro} ✕</button>
+   540→   540→        )}
+   541→   541→      </div>
+   542→   542→
+   543→   543→      {/* ═══ Calendar grid ═══ */}
+   544→   544→      <div className="flex-1 overflow-auto relative" ref={scrollRef}>
+   545→   545→        <table className="border-collapse">
+   546→   546→          <thead className="sticky top-0 z-10">
+   547→   547→            <tr>
+   548→   548→              {/* Sede label column - compact on mobile */}
+   549→   549→              <th className="sticky left-0 z-20 bg-black border-r-[3px] border-amber-500 px-0.5 sm:px-3 py-1 sm:py-2 text-[9px] sm:text-xs text-blue-400 font-bold text-left w-[50px] sm:w-[200px] min-w-[50px] sm:min-w-[200px]">
+   550→   550→                SEDES
+   551→   551→              </th>
+   552→   552→              {daysArr.map((d, i) => {
+   553→   553→                const f = fmt(d);
+   554→   554→                const isToday = f === todayStr;
+   555→   555→                return (
+   556→   556→                  <th key={i} ref={isToday ? todayRef : undefined}
+   557→   557→                    className={`${isToday ? "bg-amber-500 !text-black" : "bg-slate-900"} ${cellW} px-0 py-1 sm:py-2 ${viewMode === "compact" ? "text-[6px] sm:text-[8px]" : "text-[7px] sm:text-[9px]"} font-bold text-center border-b-2 border-slate-700`}>
+   558→   558→                    {DOW[d.getDay()]}<br />{d.getDate()}/{d.getMonth() + 1}
+   559→   559→                  </th>
+   560→   560→                );
+   561→   561→              })}
+   562→   562→            </tr>
+   563→   563→          </thead>
+   564→   564→          <tbody>
+   565→   565→            {filteredSedes.map(sede => {
+   566→   566→              // If filtering by professional, only show rows where that pro has assignments
+   567→   567→              if (filterPro && !hasProInRow(sede.id)) return null;
+   568→   568→              // If filtering by aviso reason, check if any cell matches
+   569→   569→              // (we still show the row but highlight matching cells)
+   570→   570→
+   571→   571→              return (
+   572→   572→                <tr key={sede.id}>
+   573→   573→                  {/* Sede label - very compact on mobile */}
+   574→   574→                  <td className="sticky left-0 z-10 bg-black border-r-[3px] border-amber-500 px-0.5 sm:px-3 py-0.5 sm:py-2 border-b-2 border-white/90">
+   575→   575→                    {/* Mobile: ultra-compact view */}
+   576→   576→                    <div className="sm:hidden">
+   577→   577→                      <div className="font-bold text-[8px] leading-tight truncate max-w-[42px]" style={{ borderLeft: `3px solid ${sede.color}`, paddingLeft: 3 }}>
+   578→   578→                        {sede.name}
+   579→   579→                      </div>
+   580→   580→                    </div>
+   581→   581→                    {/* Desktop: full view */}
+   582→   582→                    <div className="hidden sm:block">
+   583→   583→                      <div className="font-bold text-sm" style={{ borderLeft: `8px solid ${sede.color}`, paddingLeft: 8 }}>{sede.name}</div>
+   584→   584→                      <div className="text-[10px] text-slate-400">{sede.task}</div>
+   585→   585→                    </div>
+   586→   586→                  </td>
+   587→   587→                  {daysArr.map((d, i) => {
+   588→   588→                    const f = fmt(d);
+   589→   589→                    const we = isWE(d);
+   590→   590→                    const fest = isFestivo(f, sede.province);
+   591→   591→                    const planM = getPlan(sede.id, f, "MANANA");
+   592→   592→                    const planT = getPlan(sede.id, f, "TARDE");
+   593→   593→                    const avisoM = getAviso(sede.id, f, "MANANA");
+   594→   594→                    const avisoT = getAviso(sede.id, f, "TARDE");
+   595→   595→                    const isToday = f === todayStr;
+   596→   596→
+   597→   597→                    // If filtering by professional, dim cells that don't match
+   598→   598→                    const proMatchM = !filterPro || (planM && planM.professionalAlias === filterPro) || (avisoM && avisoM.professionalId && professionals.find(p => p.id === avisoM.professionalId)?.alias === filterPro);
+   599→   599→                    const proMatchT = !filterPro || (planT && planT.professionalAlias === filterPro) || (avisoT && avisoT.professionalId && professionals.find(p => p.id === avisoT.professionalId)?.alias === filterPro);
+   600→   600→
+   601→   601→                    // Multi-select visibility filter: dim cells where assigned pro is not in visiblePros
+   602→   602→                    const visMatchM = !planM || visiblePros.size === 0 || visiblePros.has(planM.professionalAlias);
+   603→   603→                    const visMatchT = !planT || visiblePros.size === 0 || visiblePros.has(planT.professionalAlias);
+   604→   604→
+   605→   605→                    // If filtering by aviso reason, dim cells that don't match
+   606→   606→                    const reasonMatch = !filterAvisoReason || hasAvisoReasonMatch(sede.id, f);
+   607→   607→
+   608→   608→                    const dimCell = (filterPro && !proMatchM && !proMatchT) || (!visMatchM && !visMatchT);
+   609→   609→                    const dimReason = filterAvisoReason && !reasonMatch;
+   610→   610→
+   611→   611→                    // Resolve pro names for tooltips
+   612→   612→                    const proNameM = planM ? (professionals.find(p => p.alias === planM.professionalAlias)?.firstName || '') + ' ' + (professionals.find(p => p.alias === planM.professionalAlias)?.lastName || '') : '';
+   613→   613→                    const proNameT = planT ? (professionals.find(p => p.alias === planT.professionalAlias)?.firstName || '') + ' ' + (professionals.find(p => p.alias === planT.professionalAlias)?.lastName || '') : '';
+   614→   614→
+   615→   615→                    return (
+   616→   616→                      <td key={i} className={`border-b-2 border-white/90 ${cellH} ${cellW} p-0.5 sm:p-1 ${we ? "bg-purple-500/15" : ""} ${fest ? "bg-red-500/20" : ""} ${isToday && !we && !fest ? "ring-1 ring-amber-500/50" : ""} ${(dimCell || dimReason) ? "opacity-20" : ""}`}>
+   617→   617→                        <div className="flex flex-col gap-0.5 items-center justify-center">
+   618→   618→                          {sede.morningEnabled && (
+   619→   619→                            <div
+   620→   620→                              onClick={() => avisoM ? openAvisoModal(sede.id, f, "MANANA") : handleSlotClick(sede.id, f, "MANANA")}
+   621→   621→                              className={`${viewMode === "compact" ? "h-4 sm:h-5" : "h-5 sm:h-6"} w-[85%] rounded flex items-center justify-center ${textSize} font-bold cursor-pointer transition ${
+   622→   622→                                avisoM ? getAvisoColor(avisoM.reason) :
+   623→   623→                                planM ? "text-black border border-white" : "text-white/20 border border-white/5"
+   624→   624→                              } ${!proMatchM && filterPro ? "opacity-30" : ""} ${!visMatchM ? "opacity-30" : ""}`}
+   625→   625→                              style={{
+   626→   626→                                background: avisoM ? undefined : (planM ? sede.color : "transparent"),
+   627→   627→                                borderLeft: (avisoM || planM) ? undefined : "2px solid #3b82f6"
+   628→   628→                              }}
+   629→   629→                              title={avisoM ? `${avisoM.reason || "Aviso"}${avisoM.professionalId ? " - " + (professionals.find(p => p.id === avisoM.professionalId)?.alias || "") : " (sede)"}` : planM ? `${planM.professionalAlias} - ${proNameM}` : "Mañana (sin asignar)"}
+   630→   630→                            >
+   631→   631→                              {avisoM ? getAvisoLabel(avisoM.reason) : (planM?.professionalAlias || "M")}
+   632→   632→                            </div>
+   633→   633→                          )}
+   634→   634→                          {sede.afternoonEnabled && (
+   635→   635→                            <div
+   636→   636→                              onClick={() => avisoT ? openAvisoModal(sede.id, f, "TARDE") : handleSlotClick(sede.id, f, "TARDE")}
+   637→   637→                              className={`${viewMode === "compact" ? "h-4 sm:h-5" : "h-5 sm:h-6"} w-[85%] rounded flex items-center justify-center ${textSize} font-bold cursor-pointer transition ${
+   638→   638→                                avisoT ? getAvisoColor(avisoT.reason) :
+   639→   639→                                planT ? "text-black border border-white" : "text-white/20 border border-white/5"
+   640→   640→                              } ${!proMatchT && filterPro ? "opacity-30" : ""} ${!visMatchT ? "opacity-30" : ""}`}
+   641→   641→                              style={{
+   642→   642→                                background: avisoT ? undefined : (planT ? sede.color : "transparent"),
+   643→   643→                                borderLeft: (avisoT || planT) ? undefined : "2px solid #f59e0b"
+   644→   644→                              }}
+   645→   645→                              title={avisoT ? `${avisoT.reason || "Aviso"}${avisoT.professionalId ? " - " + (professionals.find(p => p.id === avisoT.professionalId)?.alias || "") : " (sede)"}` : planT ? `${planT.professionalAlias} - ${proNameT}` : "Tarde (sin asignar)"}
+   646→   646→                            >
+   647→   647→                              {avisoT ? getAvisoLabel(avisoT.reason) : (planT?.professionalAlias || "T")}
+   648→   648→                            </div>
+   649→   649→                          )}
+   650→   650→                        </div>
+   651→   651→                      </td>
+   652→   652→                    );
+   653→   653→                  })}
+   654→   654→                </tr>
+   655→   655→              );
+   656→   656→            })}
+   657→   657→          </tbody>
+   658→   658→        </table>
+   659→   659→      </div>
+   660→   660→
+   661→   661→      {/* ═══ Aviso Modal ═══ */}
+   662→   662→      {avisoModal && (
+   663→   663→        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setAvisoModal(null)}>
+   664→   664→          <div className="bg-slate-800 border border-slate-600 rounded-xl p-4 sm:p-6 w-[90vw] max-w-sm space-y-4" onClick={e => e.stopPropagation()}>
+   665→   665→            <h3 className="text-white font-bold text-lg">Crear Aviso</h3>
+   666→   666→            <div className="space-y-3">
+   667→   667→              <div>
+   668→   668→                <label className="block text-xs text-slate-400 font-bold mb-1">PROFESIONAL</label>
+   669→   669→                <div className="text-white font-bold">{selectedPro || <span className="text-slate-400 italic">Sin profesional (cierre de sede)</span>}</div>
+   670→   670→              </div>
+   671→   671→              <div>
+   672→   672→                <label className="block text-xs text-slate-400 font-bold mb-1">FECHA</label>
+   673→   673→                <div className="text-white font-bold">{avisoModal.date}</div>
+   674→   674→              </div>
+   675→   675→              <div>
+   676→   676→                <label className="block text-xs text-slate-400 font-bold mb-1">TURNO</label>
+   677→   677→                <div className="text-white font-bold">{avisoModal.turn === "MANANA" ? "Mañana" : "Tarde"}</div>
+   678→   678→              </div>
+   679→   679→              <div>
+   680→   680→                <label className="block text-xs text-slate-400 font-bold mb-1">MOTIVO</label>
+   681→   681→                <div className="grid grid-cols-2 gap-2">
+   682→   682→                  {AVISO_REASONS.map(r => (
+   683→   683→                    <button
+   684→   684→                      key={r}
+   685→   685→                      onClick={() => setAvisoReason(r)}
+   686→   686→                      className={`py-2 px-3 rounded-lg font-bold text-xs transition border ${
+   687→   687→                        avisoReason === r ? getAvisoColor(r) + " scale-105" : "bg-slate-700 text-slate-300 border-slate-600 hover:bg-slate-600"
+   688→   688→                      }`}
+   689→   689→                    >
+   690→   690→                      {r}
+   691→   691→                    </button>
+   692→   692→                  ))}
+   693→   693→                </div>
+   694→   694→              </div>
+   695→   695→            </div>
+   696→   696→            <div className="flex gap-3 pt-2">
+   697→   697→              <button onClick={() => setAvisoModal(null)} className="flex-1 py-2 px-4 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-bold text-sm transition">
+   698→   698→                Cancelar
+   699→   699→              </button>
+   700→   700→              <button onClick={confirmAviso} className="flex-1 py-2 px-4 bg-red-600 hover:bg-red-500 text-white rounded-lg font-bold text-sm transition">
+   701→   701→                Confirmar
+   702→   702→              </button>
+   703→   703→            </div>
+   704→   704→          </div>
+   705→   705→        </div>
+   706→   706→      )}
+   707→   707→    </div>
+   708→   708→  );
+   709→   709→}
+   710→   710→
