@@ -14,25 +14,30 @@ export const authOptions: NextAuthOptions = {
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
 
-        const user = await db.user.findUnique({
-          where: { email: credentials.email },
-          include: { company: true },
-        });
+        try {
+          const user = await db.user.findUnique({
+            where: { email: credentials.email },
+            include: { company: true },
+          });
 
-        if (!user || !user.isActive) return null;
+          if (!user || !user.isActive) return null;
 
-        const isValid = await bcrypt.compare(credentials.password, user.password);
-        if (!isValid) return null;
+          const isValid = await bcrypt.compare(credentials.password, user.password);
+          if (!isValid) return null;
 
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role,
-          companyId: user.companyId || undefined,
-          companyName: user.company?.name || undefined,
-          companySlug: user.company?.slug || undefined,
-        };
+          return {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+            role: user.role,
+            companyId: user.companyId || undefined,
+            companyName: user.company?.name || undefined,
+            companySlug: user.company?.slug || undefined,
+          };
+        } catch (error) {
+          console.error("[AUTH] authorize error:", error);
+          return null;
+        }
       },
     }),
   ],
@@ -60,4 +65,5 @@ export const authOptions: NextAuthOptions = {
   session: { strategy: "jwt" },
   pages: { signIn: "/" },
   secret: process.env.NEXTAUTH_SECRET || "mural-saas-secret-key-2024",
+  debug: process.env.NODE_ENV === "development",
 };
