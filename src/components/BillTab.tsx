@@ -8,6 +8,7 @@ import { ClientesView } from "@/components/bill/clientes-view";
 import { CatalogoView } from "@/components/bill/catalogo-view";
 import { FacturasView } from "@/components/bill/facturas-view";
 import { ConfiguracionView } from "@/components/bill/configuracion-view";
+import { DiarioView } from "@/components/bill/diario-view";
 import {
   FileInput,
   Table2,
@@ -15,10 +16,12 @@ import {
   BookOpen,
   Receipt,
   Settings,
+  CalendarClock,
 } from "lucide-react";
 
 type BillTabKey =
   | "entrada"
+  | "diario"
   | "registros"
   | "clientes"
   | "catalogo"
@@ -38,6 +41,12 @@ const NAV_ITEMS: {
     icon: <FileInput className="h-4 w-4" />,
     color: "text-green-600",
     configKey: "sectionEntrada",
+  },
+  {
+    key: "diario",
+    label: "DIARIO",
+    icon: <CalendarClock className="h-4 w-4" />,
+    color: "text-emerald-400",
   },
   {
     key: "registros",
@@ -76,7 +85,7 @@ const NAV_ITEMS: {
 ];
 
 function BillTabContent() {
-  const [activeTab, setActiveTab] = useState<BillTabKey>("entrada");
+  const [activeTab, setActiveTab] = useState<BillTabKey>("diario");
   const { config } = useBillConfig();
 
   function getLabel(item: (typeof NAV_ITEMS)[number]): string {
@@ -110,6 +119,7 @@ function BillTabContent() {
       {/* Content area */}
       <div className="flex-1 min-h-0 p-4 overflow-auto">
         {activeTab === "entrada" && <EntradaView />}
+        {activeTab === "diario" && <DiarioView />}
         {activeTab === "registros" && <RegistrosView />}
         {activeTab === "clientes" && <ClientesView />}
         {activeTab === "catalogo" && <CatalogoView />}

@@ -37,6 +37,7 @@ model Company {
   billClientes  BillCliente[]
   billCatalogo  BillCatalogo[]
   billRegistros BillRegistro[]
+  billDiarioItems BillDiarioItem[]
   billConfig    BillConfig?
   billFacturaSeq BillFacturaSeq?
 }
@@ -225,6 +226,7 @@ model BillCliente {
   company   Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
   registros BillRegistro[]
   catalogo   BillCatalogo[]
+  diarioItems BillDiarioItem[]
 
   @@index([companyId])
 }
@@ -323,4 +325,45 @@ model BillFacturaSeq {
   seq       Int      @default(1)
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+}
+
+// ═══════════════════════════════════════════
+// BILL — Diario → Facturación bridge
+// Salida cumplida: completed Diario outputs ready for invoicing
+// ═══════════════════════════════════════════
+model BillDiarioItem {
+  id              String   @id @default(cuid())
+  companyId       String
+  fecha           String   // YYYY-MM-DD
+  sedeId          String?  // nullable: manual items may not have a sede
+  sedeName        String   @default("") // denormalized for display
+  professionalId  String?  // nullable
+  professionalName String  @default("") // denormalized (alias or firstName+lastName)
+  turn            String   @default("") // M | T | ""
+  // Billing fields (filled when transferring to Registro)
+  clienteId       String?  // FK to BillCliente
+  cliente         String   @default("") // denormalized
+  c1              String   @default("") // concept group
+  c2              String   @default("") // concept service
+  cant            Int      @default(1)
+  precioUnitario  Float    @default(0)
+  obs             String   @default("")
+  // Lifecycle
+  status          String   @default("CUMPLIDA") // CUMPLIDA | FACTURADA
+  sourceType      String   @default("plan") // plan | manual
+  sourceId        String?  // Plan.id when sourceType=plan
+  registroId      String?  // BillRegistro.id when transferred
+  facturadoAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  company     Company      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  clienteRel  BillCliente? @relation(fields: [clienteId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([fecha])
+  @@index([sedeId])
+  @@index([status])
+  @@index([clienteId])
+  @@unique([sourceType, sourceId])
 }
