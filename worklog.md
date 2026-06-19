@@ -283,3 +283,65 @@ Stage Summary:
 - User.password en DB sigue siendo NOT NULL por schema; se guarda un placeholder random que nunca se valida
 - Si el admin marca "Puede iniciar sesión" en un profesional → aparece en el selector del login → entra directamente
 - Si lo desmarca → desaparece del selector y no puede entrar
+
+---
+Task ID: 15
+Agent: main
+Task: Eliminar toda la información que identifica la app (branding, metadatos, leaks)
+
+Work Log:
+- User: "quitar de la aplicacion todos los detales qeu pueden dar informacion de la app poara qeu klos usuarios no la puedan copiar ni acceder"
+- Auditoría completa con rg en src/ buscando: Mural, MURAL, Método, mural-saas, logo, favicon, Powered by, ©, github, vercel, prisma, next-auth
+- src/app/layout.tsx:
+  * metadata.title: "Mural by Método" → "Acceso"
+  * metadata.description: "Plataforma de gestión de turnos profesional" → "Plataforma de gestión"
+  * Eliminado icons: { icon: "/logo.jpeg" }
+  * Eliminado themeColor (color verde corporativo #2E5D3A)
+  * Eliminado import Geist + Geist_Mono de next/font/google (eliminaba pista de stack + Google Fonts tracking)
+  * Body className ahora sólo "antialiased"
+- src/components/LoginForm.tsx:
+  * Eliminado <img src="/logo.jpeg" alt="Mural by Método"> 
+  * Eliminado <h1>MURAL</h1> y <p>by MÉTODO</p>
+  * Reemplazado por icono SVG genérico de usuarios en círculo gris
+- src/components/AppShell.tsx:
+  * Pantalla de carga: eliminado <img logo> + texto "Mural by Método". Ahora spinner CSS + "Cargando…"
+  * Navbar: eliminado <img logo> y bloque "Mural / by Método". Reemplazado por avatar con la inicial del nombre de usuario en cuadrado verde
+- src/components/MensualTab.tsx:
+  * Eliminado <div>MURAL PLASTIC SURGERY</div> del encabezado del calendario mensual (visible en pantalla y al imprimir)
+- src/lib/auth.ts:
+  * Eliminado fallback `process.env.NEXTAUTH_SECRET || "mural-saas-secret-key-2024-stable"` — ahora `secret: process.env.NEXTAUTH_SECRET` sin fallback. Si no está definido, NextAuth lanzará error al arranque (mejor que usar un secreto conocido)
+- next.config.ts:
+  * Añadido `poweredByHeader: false` (quita cabecera X-Powered-By: Next.js)
+  * Añadido bloque headers() global que fuerza:
+    - X-Powered-By: "" (doble seguridad)
+    - X-Content-Type-Options: nosniff
+    - X-Frame-Options: DENY (evita clickjacking, no se puede embeber en iframe)
+    - Referrer-Policy: no-referrer (no filtra URL origen al navegar externo)
+    - Permissions-Policy: camera=(), microphone=(), geolocation=() (bloquea APIs sensibles)
+- src/app/api/route.ts: cambiado `{ message: "Hello, world!" }` por `{ ok: true }`
+- ELIMINADOS endpoints /api/debug/* completos:
+  * /api/debug/bcrypt: filtraba hash bcrypt de prueba, hashPrefix del usuario mural@mural.app, userRole, userActive
+  * /api/debug/db: filtraba prefijo de DATABASE_URL, conteo de users y sedes
+  * /api/debug/login: filtraba internals del login
+- ELIMINADOS assets públicos identificativos:
+  * public/logo.jpeg (logo principal)
+  * public/logo.png
+  * public/logo.svg
+  * public/favicon.ico
+- public/robots.txt: cambiado de "Allow: /" para todos los bots → "Disallow: /" para todos (app privada, no indexable)
+- Verificado: ningún archivo en src/ contiene "Mural", "MURAL", "método", "mural-saas", "MURAL PLASTIC"
+- Conservados:
+  * logoUrl en SuperAdminDashboard y CompanyProfileTab: es el logo de CADA empresa cliente (no de Mural), configurable por ellos. No filtra la identidad de la app.
+  * next-auth y prisma como imports de código (necesarios, no visibles para el usuario final)
+- tsc --noEmit: limpio en todos los archivos tocados
+- next build: ✓ Compiled successfully in 3.4s
+- Commit b8722da, pushed a origin/main
+
+Stage Summary:
+- La app ya no muestra su nombre ni marca en ningún sitio visible: login, navbar, pantalla de carga, calendarios impresos, pestaña del navegador, metadatos HTML
+- Sin logo, sin favicon, sin fuentes de Google (Geist eliminado)
+- robots.txt bloquea todos los crawlers
+- Headers HTTP endurecidos: no X-Powered-By, no framing, no referrer, no sniff, permissions policy restrictiva
+- NEXTAUTH_SECRET sin fallback hardcodeado
+- Endpoints de depuración que filtraban internals eliminados
+- Asset raíz API devuelve sólo { ok: true }
