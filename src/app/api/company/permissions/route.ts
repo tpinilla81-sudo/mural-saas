@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import bcrypt from "bcryptjs";
 
 // ───────────────────────────────────────────────────────────
 // Permission catalog (kept in sync with ConfigTab.tsx + UserView.tsx)
@@ -84,6 +85,7 @@ export async function GET() {
         email: u.email,
         name: u.name,
         isActive: u.isActive,
+        hasPin: !!u.pin,
         permissions: parsePerms(u.permissions),
       } : null,
       canLogin: !!u && u.isActive,
@@ -98,6 +100,7 @@ export async function GET() {
 //   professionalId,
 //   canLogin: boolean,
 //   email?: string,         // overrides pro.email if provided (used as login identifier)
+//   pin?: string | null,   // 4-digit PIN to set; null/"" to clear; undefined to leave unchanged
 //   view_diario, edit_diario,
 //   view_mensual, edit_mensual,
 //   view_sedes, edit_sedes,
@@ -106,6 +109,7 @@ export async function GET() {
 // }
 // Note: login is passwordless. The User.password column is required NOT NULL by
 // the schema, so we store a random placeholder hash that is never checked.
+// The PIN is optional and stored as a bcrypt hash.
 export async function PUT(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
@@ -116,8 +120,22 @@ export async function PUT(req: Request) {
   }
 
   const body = await req.json();
-  const { professionalId, canLogin, email } = body;
+  const { professionalId, canLogin, email, pin } = body;
   if (!professionalId) return NextResponse.json({ error: "Falta professionalId" }, { status: 400 });
+
+  // Validate PIN if explicitly provided (string or null). `undefined` means "leave unchanged".
+  let pinHash: string | null | undefined = undefined;
+  if (pin !== undefined) {
+    if (pin === null || pin === "") {
+      pinHash = null; // clear
+    } else {
+      const pinStr = String(pin).trim();
+      if (!/^\d{4}$/.test(pinStr)) {
+        return NextResponse.json({ error: "El PIN debe ser 4 dígitos" }, { status: 400 });
+      }
+      pinHash = await bcrypt.hash(pinStr, 10);
+    }
+  }
 
   const pro = await db.professional.findFirst({
     where: { id: professionalId, companyId: user.companyId },
@@ -178,6 +196,7 @@ export async function PUT(req: Request) {
           professionalId: pro.id,
           name: `${pro.firstName} ${pro.lastName}`.trim(),
           permissions: permsCsv,
+          ...(pinHash !== undefined ? { pin: pinHash } : {}),
         },
       });
     } else {
@@ -192,6 +211,7 @@ export async function PUT(req: Request) {
           professionalId: pro.id,
           isActive: true,
           permissions: permsCsv,
+          ...(pinHash !== undefined && pinHash !== null ? { pin: pinHash } : {}),
         },
       });
     }
@@ -205,7 +225,11 @@ export async function PUT(req: Request) {
     if (linked) {
       linked = await db.user.update({
         where: { id: linked.id },
-        data: { isActive: false, permissions: permsCsv },
+        data: {
+          isActive: false,
+          permissions: permsCsv,
+          ...(pinHash !== undefined ? { pin: pinHash } : {}),
+        },
       });
     }
   }
@@ -219,6 +243,7 @@ export async function PUT(req: Request) {
       email: linked.email,
       name: linked.name,
       isActive: linked.isActive,
+      hasPin: !!linked.pin,
       permissions: parsePerms(linked.permissions),
     } : null,
   });

@@ -1,16 +1,22 @@
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
+import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 
-// Passwordless auth: the user picks an identity from the login dropdown.
-// The COMPANY_ADMIN controls WHO can log in by enabling/disabling access
-// in the Configuración tab; no password is required.
+// Login flow:
+//   1. User picks an identity from the login dropdown (passwordless by default).
+//   2. If the user has a PIN configured, the login form also sends `pin` and we
+//      verify it with bcrypt.compare. If it's missing or wrong, login fails.
+//   3. If no PIN is configured, login is open (only requires `email`).
+// The COMPANY_ADMIN controls WHO can log in (isActive) and whether a PIN is
+// required, from the Configuración tab.
 export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
       name: "Selector",
       credentials: {
         email: { label: "Email", type: "email" },
+        pin: { label: "PIN", type: "text" },
       },
       async authorize(credentials) {
         if (!credentials?.email) return null;
@@ -23,7 +29,14 @@ export const authOptions: NextAuthOptions = {
 
           if (!user || !user.isActive) return null;
 
-          // Passwordless: just return the user. The login picker lists all active users.
+          // If a PIN is configured for this user, verify it
+          if (user.pin) {
+            const providedPin = (credentials.pin || "").trim();
+            if (!providedPin) return null;
+            const ok = await bcrypt.compare(providedPin, user.pin);
+            if (!ok) return null;
+          }
+
           return {
             id: user.id,
             email: user.email,

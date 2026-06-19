@@ -9,6 +9,7 @@ interface LoginUser {
   name: string;
   role: string;
   companyName: string | null;
+  hasPin: boolean;
 }
 
 const ROLE_LABEL: Record<string, string> = {
@@ -20,6 +21,7 @@ const ROLE_LABEL: Record<string, string> = {
 export default function LoginForm() {
   const [users, setUsers] = useState<LoginUser[]>([]);
   const [selected, setSelected] = useState<string>("");
+  const [pin, setPin] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [loadingList, setLoadingList] = useState(true);
@@ -37,17 +39,31 @@ export default function LoginForm() {
       .finally(() => setLoadingList(false));
   }, []);
 
+  // Reset PIN field whenever the selected user changes
+  useEffect(() => { setPin(""); setError(""); }, [selected]);
+
+  const selectedUser = users.find(u => u.email === selected);
+  const needsPin = !!selectedUser?.hasPin;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selected) {
       setError("Selecciona un usuario");
       return;
     }
+    if (needsPin && pin.length !== 4) {
+      setError("Introduce el PIN de 4 dígitos");
+      return;
+    }
     setError("");
     setLoading(true);
-    const res = await signIn("credentials", { email: selected, redirect: false });
+    const res = await signIn("credentials", {
+      email: selected,
+      ...(needsPin ? { pin } : {}),
+      redirect: false,
+    });
     setLoading(false);
-    if (res?.error) setError("No se pudo iniciar sesión");
+    if (res?.error) setError(needsPin ? "PIN incorrecto" : "No se pudo iniciar sesión");
   };
 
   // Group users: SUPER_ADMIN first, then by company
@@ -102,7 +118,7 @@ export default function LoginForm() {
                     <optgroup label="Super Admin">
                       {superAdmins.map(u => (
                         <option key={u.id} value={u.email}>
-                          {u.name} ({u.email})
+                          {u.name} ({u.email}){u.hasPin ? " 🔒" : ""}
                         </option>
                       ))}
                     </optgroup>
@@ -113,6 +129,7 @@ export default function LoginForm() {
                         <option key={u.id} value={u.email}>
                           {u.name} — {ROLE_LABEL[u.role] || u.role}
                           {u.companyName ? ` · ${u.companyName}` : ""}
+                          {u.hasPin ? " 🔒" : ""}
                         </option>
                       ))}
                     </optgroup>
@@ -126,9 +143,32 @@ export default function LoginForm() {
               </p>
             </div>
 
+            {/* PIN field — only shown when the selected user has a PIN configured */}
+            {needsPin && (
+              <div>
+                <label className="block text-xs font-bold text-gray-400 uppercase mb-1.5 tracking-wider">
+                  PIN:
+                </label>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  pattern="\d{4}"
+                  maxLength={4}
+                  value={pin}
+                  onChange={e => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                  autoFocus
+                  className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-gray-900 text-2xl tracking-[0.5em] font-mono text-center focus:border-[#2E5D3A] focus:outline-none focus:ring-1 focus:ring-[#2E5D3A]/30"
+                  placeholder="••••"
+                />
+                <p className="text-[11px] text-gray-400 mt-1.5">
+                  Este usuario tiene un PIN configurado. Introduce los 4 dígitos para continuar.
+                </p>
+              </div>
+            )}
+
             <button
               type="submit"
-              disabled={loading || !selected}
+              disabled={loading || !selected || (needsPin && pin.length !== 4)}
               className="w-full bg-[#3b6fb5] hover:bg-[#2d5a9e] disabled:opacity-50 text-white font-bold py-3 rounded-xl text-sm transition shadow-md"
             >
               {loading ? "Accediendo..." : "Entrar"}

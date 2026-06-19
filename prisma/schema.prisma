@@ -60,6 +60,8 @@ model User {
   //   view_own_only, view_assigned_sedes
   //   can_print, can_send
   permissions   String   @default("")
+  // Optional 4-digit PIN (bcrypt-hashed). If set, login requires it; if null, login is open.
+  pin           String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

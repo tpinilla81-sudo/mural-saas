@@ -71,7 +71,7 @@ type Row = {
   };
   user: {
     id: string; email: string; name: string;
-    isActive: boolean;
+    isActive: boolean; hasPin: boolean;
     permissions: Perms;
   } | null;
   canLogin: boolean;
@@ -82,9 +82,11 @@ export default function ConfigTab() {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  // Local draft state: keyed by professionalId → { email, canLogin, perms }
+  // Local draft state: keyed by professionalId → { email, canLogin, pin, pinCleared, perms }
   const [drafts, setDrafts] = useState<Record<string, {
-    email: string; canLogin: boolean; perms: Perms; dirty: boolean;
+    email: string; canLogin: boolean;
+    pin: string; pinCleared: boolean;
+    perms: Perms; dirty: boolean;
   }>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
@@ -101,11 +103,13 @@ export default function ConfigTab() {
       if (!r.ok) { showToast("Error al cargar permisos", "error"); return; }
       const data: Row[] = await r.json();
       setRows(data);
-      const next: Record<string, { email: string; canLogin: boolean; perms: Perms; dirty: boolean }> = {};
+      const next: Record<string, { email: string; canLogin: boolean; pin: string; pinCleared: boolean; perms: Perms; dirty: boolean }> = {};
       for (const row of data) {
         next[row.professional.id] = {
           email: row.user?.email || row.professional.email || "",
           canLogin: !!row.canLogin,
+          pin: "",
+          pinCleared: false,
           perms: row.user?.permissions || emptyPerms(),
           dirty: false,
         };
@@ -120,7 +124,7 @@ export default function ConfigTab() {
 
   useEffect(() => { load(); }, []);
 
-  const updateDraft = (proId: string, patch: Partial<{ email: string; canLogin: boolean }>) => {
+  const updateDraft = (proId: string, patch: Partial<{ email: string; canLogin: boolean; pin: string; pinCleared: boolean }>) => {
     setDrafts(prev => ({
       ...prev,
       [proId]: { ...prev[proId], ...patch, dirty: true },
@@ -154,6 +158,11 @@ export default function ConfigTab() {
       showToast("Email inválido", "error");
       return;
     }
+    // PIN validation: if a new PIN was typed it must be 4 digits
+    if (draft.pin && !/^\d{4}$/.test(draft.pin)) {
+      showToast("El PIN debe ser 4 dígitos", "error");
+      return;
+    }
     setSavingId(proId);
     try {
       const body: Record<string, unknown> = {
@@ -171,6 +180,12 @@ export default function ConfigTab() {
         can_print: draft.perms.can_print,
         can_send: draft.perms.can_send,
       };
+      // Send PIN: a new pin if typed, null if explicitly cleared, undefined otherwise (leave unchanged)
+      if (draft.pin) {
+        body.pin = draft.pin;
+      } else if (draft.pinCleared) {
+        body.pin = null;
+      }
 
       const r = await fetch("/api/company/permissions", {
         method: "PUT",
@@ -183,10 +198,10 @@ export default function ConfigTab() {
         return;
       }
       showToast("Permisos guardados correctamente");
-      // Clear dirty flag and reload server state
+      // Clear dirty flag + reset PIN draft fields and reload server state
       setDrafts(prev => ({
         ...prev,
-        [proId]: { ...prev[proId], dirty: false },
+        [proId]: { ...prev[proId], pin: "", pinCleared: false, dirty: false },
       }));
       load();
     } catch {
@@ -278,6 +293,7 @@ export default function ConfigTab() {
                     </div>
                     <div className="text-xs text-slate-400 mt-0.5 truncate">
                       {draft.email || <span className="italic text-amber-400">Sin email</span>}
+                      {row.user?.hasPin && <span className="text-blue-400 ml-2">· PIN activo</span>}
                       {activePerms > 0 && <span className="ml-2">· {activePerms} permiso(s)</span>}
                     </div>
                   </div>
@@ -317,6 +333,49 @@ export default function ConfigTab() {
                           placeholder="profesional@clinica.com"
                           className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white text-xs focus:outline-none focus:border-amber-500 transition disabled:opacity-40 disabled:cursor-not-allowed"
                         />
+                      </div>
+                    </div>
+
+                    {/* PIN (optional 4-digit) */}
+                    <div className="grid sm:grid-cols-12 gap-3">
+                      <div className="sm:col-span-4">
+                        <label className="block text-xs font-extrabold text-blue-400 uppercase mb-1">PIN de acceso (opcional)</label>
+                        <p className="text-[10px] text-slate-500 mt-1 leading-tight">
+                          Si lo configuras, se pedirá este PIN de 4 dígitos al iniciar sesión. Si lo dejas vacío, el acceso es libre.
+                        </p>
+                      </div>
+                      <div className="sm:col-span-5">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          pattern="\d{4}"
+                          maxLength={4}
+                          value={draft.pin}
+                          onChange={e => updateDraft(pro.id, { pin: e.target.value.replace(/\D/g, "").slice(0, 4), pinCleared: false })}
+                          disabled={!draft.canLogin}
+                          placeholder={row.user?.hasPin ? "•••• (escribir nuevo para cambiar)" : "4 dígitos numéricos"}
+                          className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white text-sm tracking-[0.5em] font-mono focus:outline-none focus:border-amber-500 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                        />
+                        {row.user?.hasPin && !draft.pin && !draft.pinCleared && (
+                          <div className="text-[10px] text-blue-400 mt-1 font-bold">PIN activo configurado</div>
+                        )}
+                        {draft.pin && (
+                          <div className="text-[10px] text-amber-400 mt-1 font-bold">Se establecerá este PIN al guardar</div>
+                        )}
+                      </div>
+                      <div className="sm:col-span-3 flex items-end">
+                        {row.user?.hasPin && (
+                          <button
+                            type="button"
+                            onClick={() => updateDraft(pro.id, { pin: "", pinCleared: true })}
+                            disabled={!draft.canLogin}
+                            className={`w-full px-3 py-2 rounded text-xs font-bold transition disabled:opacity-40 disabled:cursor-not-allowed ${
+                              draft.pinCleared ? "bg-red-600 text-white" : "bg-red-600/20 text-red-400 hover:bg-red-600/30 border border-red-600/30"
+                            }`}
+                          >
+                            {draft.pinCleared ? "Se quitará al guardar" : "Quitar PIN"}
+                          </button>
+                        )}
                       </div>
                     </div>
 
