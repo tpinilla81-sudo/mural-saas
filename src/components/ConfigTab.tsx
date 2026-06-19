@@ -71,7 +71,7 @@ type Row = {
   };
   user: {
     id: string; email: string; name: string;
-    isActive: boolean; hasPassword: boolean;
+    isActive: boolean;
     permissions: Perms;
   } | null;
   canLogin: boolean;
@@ -82,9 +82,9 @@ export default function ConfigTab() {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  // Local draft state: keyed by professionalId → { email, password, canLogin, perms }
+  // Local draft state: keyed by professionalId → { email, canLogin, perms }
   const [drafts, setDrafts] = useState<Record<string, {
-    email: string; password: string; canLogin: boolean; perms: Perms; dirty: boolean;
+    email: string; canLogin: boolean; perms: Perms; dirty: boolean;
   }>>({});
   const [savingId, setSavingId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
@@ -101,11 +101,10 @@ export default function ConfigTab() {
       if (!r.ok) { showToast("Error al cargar permisos", "error"); return; }
       const data: Row[] = await r.json();
       setRows(data);
-      const next: Record<string, { email: string; password: string; canLogin: boolean; perms: Perms; dirty: boolean }> = {};
+      const next: Record<string, { email: string; canLogin: boolean; perms: Perms; dirty: boolean }> = {};
       for (const row of data) {
         next[row.professional.id] = {
           email: row.user?.email || row.professional.email || "",
-          password: "",
           canLogin: !!row.canLogin,
           perms: row.user?.permissions || emptyPerms(),
           dirty: false,
@@ -121,7 +120,7 @@ export default function ConfigTab() {
 
   useEffect(() => { load(); }, []);
 
-  const updateDraft = (proId: string, patch: Partial<{ email: string; password: string; canLogin: boolean }>) => {
+  const updateDraft = (proId: string, patch: Partial<{ email: string; canLogin: boolean }>) => {
     setDrafts(prev => ({
       ...prev,
       [proId]: { ...prev[proId], ...patch, dirty: true },
@@ -155,10 +154,6 @@ export default function ConfigTab() {
       showToast("Email inválido", "error");
       return;
     }
-    if (draft.password && draft.password.length < 4) {
-      showToast("La contraseña debe tener al menos 4 caracteres", "error");
-      return;
-    }
     setSavingId(proId);
     try {
       const body: Record<string, unknown> = {
@@ -176,7 +171,6 @@ export default function ConfigTab() {
         can_print: draft.perms.can_print,
         can_send: draft.perms.can_send,
       };
-      if (draft.password) body.password = draft.password;
 
       const r = await fetch("/api/company/permissions", {
         method: "PUT",
@@ -189,12 +183,11 @@ export default function ConfigTab() {
         return;
       }
       showToast("Permisos guardados correctamente");
-      // Reset password field on the draft (it's been consumed) and clear dirty flag
+      // Clear dirty flag and reload server state
       setDrafts(prev => ({
         ...prev,
-        [proId]: { ...prev[proId], password: "", dirty: false },
+        [proId]: { ...prev[proId], dirty: false },
       }));
-      // Reload server state to refresh hasPassword etc.
       load();
     } catch {
       showToast("Error de conexión al guardar", "error");
@@ -221,7 +214,7 @@ export default function ConfigTab() {
           <div className="flex-1 min-w-0">
             <h1 className="text-lg font-black text-white">Configuración de Accesos</h1>
             <p className="text-xs text-slate-400 mt-0.5">
-              Gestiona qué profesionales pueden iniciar sesión, su contraseña y los permisos granulares de cada uno.
+              Gestiona qué profesionales pueden iniciar sesión (selector libre, sin contraseña) y los permisos granulares de cada uno.
             </p>
           </div>
         </div>
@@ -285,7 +278,6 @@ export default function ConfigTab() {
                     </div>
                     <div className="text-xs text-slate-400 mt-0.5 truncate">
                       {draft.email || <span className="italic text-amber-400">Sin email</span>}
-                      {row.user?.hasPassword && <span className="text-emerald-500 ml-2">· con contraseña</span>}
                       {activePerms > 0 && <span className="ml-2">· {activePerms} permiso(s)</span>}
                     </div>
                   </div>
@@ -298,9 +290,9 @@ export default function ConfigTab() {
                 {/* Expanded panel */}
                 {expanded && (
                   <div className="border-t border-slate-700 p-3 sm:p-5 space-y-4 bg-slate-900/40">
-                    {/* Login enable + credentials */}
+                    {/* Login enable + email */}
                     <div className="grid sm:grid-cols-12 gap-3">
-                      <div className="sm:col-span-3">
+                      <div className="sm:col-span-4">
                         <label className="flex items-center gap-2 cursor-pointer select-none">
                           <input
                             type="checkbox"
@@ -311,32 +303,18 @@ export default function ConfigTab() {
                           <span className="text-xs font-extrabold text-emerald-400 uppercase">Puede iniciar sesión</span>
                         </label>
                         <p className="text-[10px] text-slate-500 mt-1 leading-tight">
-                          Si está activado, este profesional aparece en el selector del login y puede entrar con su email + contraseña.
+                          Si está activado, este profesional aparece en el selector del login (sin contraseña) y puede entrar directamente con sus permisos.
                         </p>
                       </div>
 
-                      <div className="sm:col-span-5">
-                        <label className="block text-xs font-extrabold text-blue-400 uppercase mb-1">Email (usuario)</label>
+                      <div className="sm:col-span-8">
+                        <label className="block text-xs font-extrabold text-blue-400 uppercase mb-1">Email (identificador de login)</label>
                         <input
                           type="email"
                           value={draft.email}
                           onChange={e => updateDraft(pro.id, { email: e.target.value })}
                           disabled={!draft.canLogin}
                           placeholder="profesional@clinica.com"
-                          className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white text-xs focus:outline-none focus:border-amber-500 transition disabled:opacity-40 disabled:cursor-not-allowed"
-                        />
-                      </div>
-
-                      <div className="sm:col-span-4">
-                        <label className="block text-xs font-extrabold text-blue-400 uppercase mb-1">
-                          {row.user?.hasPassword ? "Nueva contraseña" : "Contraseña inicial"}
-                        </label>
-                        <input
-                          type="text"
-                          value={draft.password}
-                          onChange={e => updateDraft(pro.id, { password: e.target.value })}
-                          disabled={!draft.canLogin}
-                          placeholder={row.user?.hasPassword ? "Dejar vacío para mantener" : "Mínimo 4 caracteres"}
                           className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white text-xs focus:outline-none focus:border-amber-500 transition disabled:opacity-40 disabled:cursor-not-allowed"
                         />
                       </div>

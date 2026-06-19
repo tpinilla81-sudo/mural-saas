@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import bcrypt from "bcryptjs";
 
 // ───────────────────────────────────────────────────────────
 // Permission catalog (kept in sync with ConfigTab.tsx + UserView.tsx)
@@ -85,7 +84,6 @@ export async function GET() {
         email: u.email,
         name: u.name,
         isActive: u.isActive,
-        hasPassword: !!u.password && u.password.length > 20, // bcrypt hashes are ~60 chars
         permissions: parsePerms(u.permissions),
       } : null,
       canLogin: !!u && u.isActive,
@@ -99,14 +97,15 @@ export async function GET() {
 // Body: {
 //   professionalId,
 //   canLogin: boolean,
-//   email?: string,         // overrides pro.email if provided (used as username)
-//   password?: string,      // if provided (non-empty), sets a new password
+//   email?: string,         // overrides pro.email if provided (used as login identifier)
 //   view_diario, edit_diario,
 //   view_mensual, edit_mensual,
 //   view_sedes, edit_sedes,
 //   view_own_only, view_assigned_sedes,
 //   can_print, can_send
 // }
+// Note: login is passwordless. The User.password column is required NOT NULL by
+// the schema, so we store a random placeholder hash that is never checked.
 export async function PUT(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
@@ -117,13 +116,7 @@ export async function PUT(req: Request) {
   }
 
   const body = await req.json();
-  const {
-    professionalId,
-    canLogin,
-    email,
-    password,
-  } = body;
-
+  const { professionalId, canLogin, email } = body;
   if (!professionalId) return NextResponse.json({ error: "Falta professionalId" }, { status: 400 });
 
   const pro = await db.professional.findFirst({
@@ -164,15 +157,6 @@ export async function PUT(req: Request) {
   };
   const permsCsv = permsToCsv(perms);
 
-  // Hash the new password if one was provided
-  let newPasswordHash: string | null = null;
-  if (typeof password === "string" && password.trim().length > 0) {
-    if (password.length < 4) {
-      return NextResponse.json({ error: "La contraseña debe tener al menos 4 caracteres" }, { status: 400 });
-    }
-    newPasswordHash = await bcrypt.hash(password.trim(), 10);
-  }
-
   if (canLogin) {
     // Email collision check across the whole users table
     const collision = await db.user.findUnique({ where: { email: finalEmail } });
@@ -194,7 +178,6 @@ export async function PUT(req: Request) {
           professionalId: pro.id,
           name: `${pro.firstName} ${pro.lastName}`.trim(),
           permissions: permsCsv,
-          ...(newPasswordHash ? { password: newPasswordHash } : {}),
         },
       });
     } else {
@@ -202,8 +185,8 @@ export async function PUT(req: Request) {
         data: {
           email: finalEmail,
           name: `${pro.firstName} ${pro.lastName}`.trim(),
-          password: newPasswordHash
-            ?? await bcrypt.hash(Math.random().toString(36).slice(2) + Date.now().toString(36), 10),
+          // Schema requires NOT NULL; password is never checked (passwordless login)
+          password: Math.random().toString(36).slice(2) + Date.now().toString(36),
           role: "USER",
           companyId: user.companyId,
           professionalId: pro.id,
@@ -213,7 +196,7 @@ export async function PUT(req: Request) {
       });
     }
 
-    // Also sync the professional's email + username (alias) so the pro record stays consistent
+    // Also sync the professional's email so the pro record stays consistent
     await db.professional.update({
       where: { id: pro.id },
       data: { email: finalEmail },
@@ -222,11 +205,7 @@ export async function PUT(req: Request) {
     if (linked) {
       linked = await db.user.update({
         where: { id: linked.id },
-        data: {
-          isActive: false,
-          permissions: permsCsv,
-          ...(newPasswordHash ? { password: newPasswordHash } : {}),
-        },
+        data: { isActive: false, permissions: permsCsv },
       });
     }
   }
@@ -240,7 +219,6 @@ export async function PUT(req: Request) {
       email: linked.email,
       name: linked.name,
       isActive: linked.isActive,
-      hasPassword: !!linked.password && linked.password.length > 20,
       permissions: parsePerms(linked.permissions),
     } : null,
   });
