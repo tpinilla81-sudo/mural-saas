@@ -345,3 +345,73 @@ Stage Summary:
 - NEXTAUTH_SECRET sin fallback hardcodeado
 - Endpoints de depuración que filtraban internals eliminados
 - Asset raíz API devuelve sólo { ok: true }
+
+---
+Task ID: 16
+Agent: main
+Task: Añadir PIN de 4 dígitos opcional por usuario (capa mínima de seguridad sobre el login libre)
+
+Work Log:
+- User: "1" (elegida de las opciones propuestas: PIN de 4 dígitos por usuario, gestionado en Configuración, pedido al entrar)
+- Schema: añadida columna User.pin String? (nullable). `npx prisma db push --skip-generate` OK (8.17s). `npx prisma generate` OK.
+- /api/auth/login-users/route.ts:
+  * select ahora incluye `pin: true`
+  * cada usuario del listado lleva `hasPin: !!u.pin`
+  * El hash NUNCA se expone — sólo el booleano
+- /api/company/permissions/route.ts:
+  * Import bcrypt
+  * GET: devuelve `hasPin: !!u.pin` dentro de user
+  * PUT: acepta `pin` en body:
+    - pin === undefined → no se toca (leave unchanged)
+    - pin === null || "" → pinHash = null (clear)
+    - pin === "1234" → valida ^\d{4}$, hashea con bcrypt cost 10
+    - Cualquier otro formato → 400 "El PIN debe ser 4 dígitos"
+  * Si canLogin=true y existe linked user → update con pin (si pinHash !== undefined)
+  * Si canLogin=true y no existe → create con pin (si pinHash !== undefined && !== null)
+  * Si canLogin=false → update desactiva + aplica pin si vino
+  * Respuesta incluye hasPin actualizado
+- src/lib/auth.ts:
+  * Import bcrypt
+  * CredentialsProvider declara credential `pin: { label: "PIN", type: "text" }`
+  * authorize(): si user.pin existe, exige credentials.pin y hace bcrypt.compare. Sin PIN → flujo libre como antes
+- src/components/ConfigTab.tsx:
+  * Tipo Row.user ahora incluye hasPin: boolean
+  * Draft type ampliado: { email, canLogin, pin, pinCleared, perms, dirty }
+  * Fila resumida: si row.user?.hasPin → muestra "· PIN activo" en azul
+  * Panel expandible: nueva sección "PIN de acceso (opcional)" entre email y permisos
+    - Input numeric, maxLength 4, font-mono, tracking-[0.5em]
+    - Placeholder dinámico: "•••• (escribir nuevo para cambiar)" si hasPin / "4 dígitos numéricos" si no
+    - Hint contextual: "PIN activo configurado" / "Se establecerá este PIN al guardar"
+    - Botón "Quitar PIN" → marca pinCleared=true, cambia a rojo sólido "Se quitará al guardar"
+  * save():
+    - Valida draft.pin (si no vacío) sea ^\d{4}$
+    - body.pin = draft.pin (si hay nuevo) | null (si pinCleared) | se omite (si undefined)
+    - Reset pin/pinCleared/dirty tras guardar OK
+- src/components/LoginForm.tsx:
+  * Interface LoginUser + hasPin: boolean
+  * State pin + useEffect que resetea pin y error al cambiar selected
+  * selectedUser = users.find(email===selected); needsPin = selectedUser?.hasPin
+  * handleSubmit:
+    - Si needsPin y pin.length !== 4 → error "Introduce el PIN de 4 dígitos"
+    - signIn("credentials", { email, ...(needsPin ? { pin } : {}), redirect: false })
+    - Si error → "PIN incorrecto" si needsPin, "No se pudo iniciar sesión" si no
+  * Selector: cada option lleva emoji 🔒 al final si u.hasPin
+  * Condicional {needsPin && (...) } muestra input PIN:
+    - type=password, inputMode=numeric, maxLength=4, autoFocus
+    - text-2xl tracking-[0.5em] font-mono text-center
+    - placeholder "••••"
+    - Hint: "Este usuario tiene un PIN configurado. Introduce los 4 dígitos para continuar."
+  * Botón Entrar deshabilitado si loading || !selected || (needsPin && pin.length !== 4)
+- tsc --noEmit: limpio en todos los archivos tocados
+- next build: ✓ Compiled successfully in 3.3s
+- Commit e06c50f, pushed a origin/main
+
+Stage Summary:
+- El login sigue siendo libre por defecto (selector sin contraseña).
+- El admin puede, desde Configuración, asignar un PIN de 4 dígitos a cualquier usuario que tenga acceso activo.
+- En el login, los usuarios con PIN aparecen marcados con 🔒 en el selector.
+- Al seleccionar uno de ellos, aparece un input grande de 4 dígitos (autofocus, password).
+- El botón Entrar no se habilita hasta que el PIN tenga 4 dígitos.
+- Si el PIN está vacío al guardar, el acceso queda libre (sin PIN) — utilidad para "Quitar PIN".
+- El PIN se almacena como hash bcrypt, nunca se expone en la API (sólo el booleano hasPin).
+- Si el admin no configura PIN para nadie, el comportamiento es idéntico al anterior (login libre total).
