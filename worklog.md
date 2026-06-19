@@ -244,3 +244,42 @@ Stage Summary:
 - Por cada profesional puede: activar/desactivar acceso, asignar email + contraseña, y marcar granularmente qué puede ver/editar (diario, mensual, sedes) + si puede imprimir/enviar.
 - El login ahora pide contraseña real (bcrypt hasheado en DB). Los usuarios existentes que no tengan hash real (placeholders legacy) son rechazados hasta que el admin les asigne una desde Configuración.
 - El profesional logueado ve botones Imprimir (window.print) y Enviar (mailto pre-rellenado) según sus permisos, y un banner indicando que tiene permiso de edición en la vista actual (edición inline pendiente de implementar).
+
+---
+Task ID: 14
+Agent: main
+Task: Revertir a login passwordless — los accesos siguen siendo libres
+
+Work Log:
+- User: "recuerda qeu ahora los login estan libres"
+- Revertido src/lib/auth.ts a passwordless (estado Task 8):
+  * Eliminado import bcrypt
+  * Eliminada credential password
+  * authorize() vuelve a aceptar sólo email y devuelve el user si isActive
+- Revertido src/components/LoginForm.tsx:
+  * Eliminado campo contraseña + botón VER/OCULTAR + state showPassword/password
+  * Vuelve a ser selector puro "Entrar como:" + botón Entrar
+- Editado src/components/ConfigTab.tsx:
+  * Eliminado `password` del draft type y de updateDraft
+  * Eliminado bloque del input contraseña en el panel expandible
+  * Eliminado `row.user?.hasPassword` del resumen de fila
+  * Eliminado el hasPassword del tipo Row.user
+  * Hint actualizado: "selector del login (sin contraseña)"
+  * Grid sm:grid-cols-12 ajustado: 4 cols para el checkbox + 8 cols para el email
+- Editado src/app/api/company/permissions/route.ts:
+  * Eliminado import bcrypt
+  * Eliminada lógica de hashing de password en PUT
+  * Si canLogin=true y no existe User → se crea con password=random (placeholder, schema NOT NULL pero nunca validado)
+  * Si canLogin=true y existe User → update sin tocar password
+  * GET ya no devuelve hasPassword
+- UserView.tsx: sin cambios (sigue honrando can_print/can_send y los 10 permisos)
+- tsc --noEmit: limpio en todos los archivos tocados
+- next build: ✓ Compiled successfully in 3.5s
+- Commit dd5d9bc, pushed a origin/main
+
+Stage Summary:
+- Login vuelve a ser libre: selector "Entrar como:" sin contraseña
+- El módulo Configuración sigue gestionando: quién puede entrar (checkbox Puede iniciar sesión) + email (identificador) + 10 permisos granulares
+- User.password en DB sigue siendo NOT NULL por schema; se guarda un placeholder random que nunca se valida
+- Si el admin marca "Puede iniciar sesión" en un profesional → aparece en el selector del login → entra directamente
+- Si lo desmarca → desaparece del selector y no puede entrar
