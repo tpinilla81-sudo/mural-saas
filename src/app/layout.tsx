@@ -1,15 +1,12 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 
-const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
-const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
-
+// Branding removed: title and description are intentionally generic so the app
+// does not leak its identity to anyone inspecting the HTML <head> or browser tab.
 export const metadata: Metadata = {
-  title: "Mural by Método",
-  description: "Plataforma de gestión de turnos profesional",
-  icons: { icon: "/logo.jpeg" },
+  title: "Acceso",
+  description: "Plataforma de gestión",
 };
 
 export const viewport: Viewport = {
@@ -17,13 +14,12 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: "#2E5D3A",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="es" suppressHydrationWarning>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+      <body className="antialiased">
         {children}
         <Toaster />
       </body>

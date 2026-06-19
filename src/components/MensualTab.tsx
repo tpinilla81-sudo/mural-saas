@@ -190,7 +190,6 @@ export default function MensualTab() {
       <div className="flex-1 overflow-auto bg-white text-gray-900 rounded-xl p-5" id="print-target">
         <div className="flex justify-between items-end mb-3 border-b-[3px] border-gray-900 pb-2">
           <h1 className="text-xl font-black text-gray-900">{MESES[month].toUpperCase()} {year}</h1>
-          <div className="text-xs text-gray-500 text-right">MURAL PLASTIC SURGERY</div>
         </div>
         <table className="w-full border-collapse table-fixed">
           <thead>

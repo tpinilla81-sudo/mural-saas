@@ -69,5 +69,8 @@ export const authOptions: NextAuthOptions = {
   },
   session: { strategy: "jwt" },
   pages: { signIn: "/" },
-  secret: process.env.NEXTAUTH_SECRET || "mural-saas-secret-key-2024-stable",
+  // No hardcoded fallback — the deployment MUST provide NEXTAUTH_SECRET.
+  // If it is missing, NextAuth will throw at startup, which is the desired
+  // behavior: never silently fall back to a known value.
+  secret: process.env.NEXTAUTH_SECRET,
 };
