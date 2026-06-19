@@ -6,18 +6,30 @@ import { useSession } from "next-auth/react";
 // Permission keys (mirrors server-side CSV in User.permissions)
 type Perms = {
   view_diario: boolean;
+  edit_diario: boolean;
   view_mensual: boolean;
+  edit_mensual: boolean;
+  view_sedes: boolean;
+  edit_sedes: boolean;
   view_own_only: boolean;
   view_assigned_sedes: boolean;
+  can_print: boolean;
+  can_send: boolean;
 };
 
 function parsePerms(csv?: string): Perms {
   const set = new Set((csv || "").split(",").map(s => s.trim()).filter(Boolean));
   return {
     view_diario: set.has("view_diario"),
+    edit_diario: set.has("edit_diario"),
     view_mensual: set.has("view_mensual"),
+    edit_mensual: set.has("edit_mensual"),
+    view_sedes: set.has("view_sedes"),
+    edit_sedes: set.has("edit_sedes"),
     view_own_only: set.has("view_own_only"),
     view_assigned_sedes: set.has("view_assigned_sedes"),
+    can_print: set.has("can_print"),
+    can_send: set.has("can_send"),
   };
 }
 
@@ -70,6 +82,34 @@ export default function UserView() {
     if (perms.view_diario && !perms.view_mensual) setView("diario");
     else setView("mensual");
   }, [(session?.user as any)?.permissions]);
+
+  // Print handler — uses the browser's native print dialog
+  const handlePrint = () => {
+    const title = `${view === "diario" ? "Diario" : "Mensual"} - ${MESES[month]} ${year}`;
+    const oldTitle = document.title;
+    document.title = title;
+    window.print();
+    setTimeout(() => { document.title = oldTitle; }, 1000);
+  };
+
+  // Send handler — opens a pre-filled mailto with a summary of the period
+  const handleSend = () => {
+    const subject = encodeURIComponent(
+      `${view === "diario" ? "Diario" : "Mensual"} de turnos - ${MESES[month]} ${year}`
+    );
+    const turnCount = filteredPlans.length;
+    const mySedes = (myPro?.assignedSedes || "")
+      .split(",").map(s => s.trim()).filter(Boolean).join(", ");
+    const body = encodeURIComponent(
+      `Hola ${myPro?.alias || ""},\n\n` +
+      `Aquí tienes tu ${view === "diario" ? "diario" : "calendario mensual"} ` +
+      `de turnos para ${MESES[month]} ${year}.\n\n` +
+      `Total de turnos: ${turnCount}\n` +
+      (mySedes ? `Sedes asignadas: ${mySedes}\n` : "") +
+      `\nPuedes entrar a la plataforma para ver el detalle.\n\nSaludos.`
+    );
+    window.location.href = `mailto:?subject=${subject}&body=${body}`;
+  };
 
   // Apply filters
   const filteredPlans = plans.filter((p: any) => {
@@ -197,13 +237,40 @@ export default function UserView() {
             </button>
           </div>
         )}
+
+        {/* Action buttons: Print / Send (gated by perms) */}
+        <div className="flex gap-2 ml-auto sm:ml-0">
+          {perms.can_print && (
+            <button onClick={handlePrint}
+              className="px-3 py-2 rounded-lg text-xs font-bold bg-slate-800 text-slate-200 hover:bg-slate-700 border border-slate-700 transition flex items-center gap-1.5"
+              title="Imprimir vista actual">
+              <span>🖨️</span><span className="hidden sm:inline">Imprimir</span>
+            </button>
+          )}
+          {perms.can_send && (
+            <button onClick={handleSend}
+              className="px-3 py-2 rounded-lg text-xs font-bold bg-slate-800 text-slate-200 hover:bg-slate-700 border border-slate-700 transition flex items-center gap-1.5"
+              title="Enviar por email">
+              <span>✉️</span><span className="hidden sm:inline">Enviar</span>
+            </button>
+          )}
+        </div>
+
         {myPro && (
-          <div className="ml-auto text-right">
+          <div className="text-right">
             <div className="text-xs text-slate-400">Hola,</div>
             <div className="text-sm font-bold text-amber-400">{myPro.alias}</div>
           </div>
         )}
       </div>
+
+      {/* Editable banner when the user has edit perms on the current view */}
+      {((view === "diario" && perms.edit_diario) || (view === "mensual" && perms.edit_mensual)) && (
+        <div className="mb-3 px-3 py-2 rounded-lg bg-emerald-600/10 border border-emerald-600/30 text-emerald-400 text-xs font-bold flex items-center gap-2">
+          <span>✏️</span>
+          <span>Tienes permiso de edición para esta vista. Próximamente: edición inline.</span>
+        </div>
+      )}
 
       {/* Mensual view */}
       {view === "mensual" && (

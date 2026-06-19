@@ -20,6 +20,8 @@ const ROLE_LABEL: Record<string, string> = {
 export default function LoginForm() {
   const [users, setUsers] = useState<LoginUser[]>([]);
   const [selected, setSelected] = useState<string>("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [loadingList, setLoadingList] = useState(true);
@@ -43,11 +45,19 @@ export default function LoginForm() {
       setError("Selecciona un usuario");
       return;
     }
+    if (!password) {
+      setError("Introduce la contraseña");
+      return;
+    }
     setError("");
     setLoading(true);
-    const res = await signIn("credentials", { email: selected, redirect: false });
+    const res = await signIn("credentials", {
+      email: selected,
+      password,
+      redirect: false,
+    });
     setLoading(false);
-    if (res?.error) setError("No se pudo iniciar sesión");
+    if (res?.error) setError("Usuario o contraseña incorrectos");
   };
 
   // Group users: SUPER_ADMIN first, then by company
@@ -99,7 +109,7 @@ export default function LoginForm() {
               ) : (
                 <select
                   value={selected}
-                  onChange={(e) => setSelected(e.target.value)}
+                  onChange={(e) => { setSelected(e.target.value); setPassword(""); }}
                   className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-gray-900 text-sm focus:border-[#2E5D3A] focus:outline-none focus:ring-1 focus:ring-[#2E5D3A]/30"
                   size={Math.min(Math.max(users.length + 1, 4), 8)}
                 >
@@ -126,14 +136,38 @@ export default function LoginForm() {
               )}
               <p className="text-[11px] text-gray-400 mt-1.5">
                 {users.length > 0
-                  ? `${users.length} usuario(s) disponible(s). Selecciona y entra.`
+                  ? `${users.length} usuario(s) disponible(s).`
                   : "No hay usuarios configurados."}
               </p>
             </div>
 
+            <div>
+              <label className="block text-xs font-bold text-gray-400 uppercase mb-1.5 tracking-wider">
+                Contraseña:
+              </label>
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password"
+                  className="w-full px-4 py-3 pr-12 bg-white border border-gray-200 rounded-xl text-gray-900 text-sm focus:border-[#2E5D3A] focus:outline-none focus:ring-1 focus:ring-[#2E5D3A]/30"
+                  placeholder="Tu contraseña"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(s => !s)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 text-xs font-bold"
+                  tabIndex={-1}
+                >
+                  {showPassword ? "OCULTAR" : "VER"}
+                </button>
+              </div>
+            </div>
+
             <button
               type="submit"
-              disabled={loading || !selected}
+              disabled={loading || !selected || !password}
               className="w-full bg-[#3b6fb5] hover:bg-[#2d5a9e] disabled:opacity-50 text-white font-bold py-3 rounded-xl text-sm transition shadow-md"
             >
               {loading ? "Accediendo..." : "Entrar"}

@@ -1,18 +1,20 @@
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
+import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 
-// Passwordless auth: the user picks an identity from the login dropdown.
-// This app is for internal use only and runs behind a known URL.
+// Email + password auth. The company admin manages user credentials from
+// the Configuración tab; super admins still use this same flow.
 export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
-      name: "Selector",
+      name: "Credenciales",
       credentials: {
         email: { label: "Email", type: "email" },
+        password: { label: "Contraseña", type: "password" },
       },
       async authorize(credentials) {
-        if (!credentials?.email) return null;
+        if (!credentials?.email || !credentials?.password) return null;
 
         try {
           const user = await db.user.findUnique({
@@ -22,7 +24,13 @@ export const authOptions: NextAuthOptions = {
 
           if (!user || !user.isActive) return null;
 
-          // Passwordless: just return the user. The login picker lists all active users.
+          // Verify bcrypt hash. If for some reason the stored hash is a legacy
+          // random placeholder (length <= 20), reject — the admin must set a
+          // real password from Configuración.
+          if (!user.password || user.password.length <= 20) return null;
+          const ok = await bcrypt.compare(credentials.password, user.password);
+          if (!ok) return null;
+
           return {
             id: user.id,
             email: user.email,

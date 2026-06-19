@@ -2,27 +2,39 @@ import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
+import bcrypt from "bcryptjs";
 
-// Permission keys stored as CSV in User.permissions
-const PERM_KEYS = ["view_diario", "view_mensual", "view_own_only", "view_assigned_sedes"] as const;
-type PermKey = (typeof PERM_KEYS)[number];
+// ───────────────────────────────────────────────────────────
+// Permission catalog (kept in sync with ConfigTab.tsx + UserView.tsx)
+// ───────────────────────────────────────────────────────────
+export const PERM_KEYS = [
+  "view_diario",
+  "edit_diario",
+  "view_mensual",
+  "edit_mensual",
+  "view_sedes",
+  "edit_sedes",
+  "view_own_only",
+  "view_assigned_sedes",
+  "can_print",
+  "can_send",
+] as const;
+export type PermKey = (typeof PERM_KEYS)[number];
 
-function parsePerms(csv: string): Record<PermKey, boolean> {
+export function parsePerms(csv: string): Record<PermKey, boolean> {
   const set = new Set((csv || "").split(",").map(s => s.trim()).filter(Boolean));
-  return {
-    view_diario: set.has("view_diario"),
-    view_mensual: set.has("view_mensual"),
-    view_own_only: set.has("view_own_only"),
-    view_assigned_sedes: set.has("view_assigned_sedes"),
-  };
+  const out = {} as Record<PermKey, boolean>;
+  for (const k of PERM_KEYS) out[k] = set.has(k);
+  return out;
 }
 
-function permsToCsv(p: Record<PermKey, boolean>): string {
+export function permsToCsv(p: Record<PermKey, boolean>): string {
   return PERM_KEYS.filter(k => p[k]).join(",");
 }
 
 // GET /api/company/permissions
-// Returns all professionals of the company with their associated User (if any) and parsed permissions.
+// Returns all professionals of the company with their associated User (if any)
+// and parsed permissions.
 export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
@@ -73,6 +85,7 @@ export async function GET() {
         email: u.email,
         name: u.name,
         isActive: u.isActive,
+        hasPassword: !!u.password && u.password.length > 20, // bcrypt hashes are ~60 chars
         permissions: parsePerms(u.permissions),
       } : null,
       canLogin: !!u && u.isActive,
@@ -83,7 +96,17 @@ export async function GET() {
 }
 
 // PUT /api/company/permissions
-// Body: { professionalId, canLogin, view_diario, view_mensual, view_own_only, view_assigned_sedes }
+// Body: {
+//   professionalId,
+//   canLogin: boolean,
+//   email?: string,         // overrides pro.email if provided (used as username)
+//   password?: string,      // if provided (non-empty), sets a new password
+//   view_diario, edit_diario,
+//   view_mensual, edit_mensual,
+//   view_sedes, edit_sedes,
+//   view_own_only, view_assigned_sedes,
+//   can_print, can_send
+// }
 export async function PUT(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
@@ -94,7 +117,13 @@ export async function PUT(req: Request) {
   }
 
   const body = await req.json();
-  const { professionalId, canLogin, view_diario, view_mensual, view_own_only, view_assigned_sedes } = body;
+  const {
+    professionalId,
+    canLogin,
+    email,
+    password,
+  } = body;
+
   if (!professionalId) return NextResponse.json({ error: "Falta professionalId" }, { status: 400 });
 
   const pro = await db.professional.findFirst({
@@ -102,57 +131,79 @@ export async function PUT(req: Request) {
   });
   if (!pro) return NextResponse.json({ error: "Profesional no encontrado" }, { status: 404 });
 
-  if (!pro.email || !pro.email.includes("@")) {
+  // Resolve final email: body.email > pro.email
+  const finalEmail = (typeof email === "string" ? email.trim() : "") || pro.email;
+  if (!finalEmail || !finalEmail.includes("@")) {
     return NextResponse.json({ error: "El profesional necesita un email válido" }, { status: 400 });
   }
 
+  // Look for an existing linked User
   let linked = await db.user.findFirst({
     where: {
       companyId: user.companyId,
       OR: [
         { professionalId: pro.id },
-        { email: pro.email },
+        { email: finalEmail },
+        ...(pro.email ? [{ email: pro.email }] : []),
       ],
     },
   });
 
+  // Build perms object from body
   const perms: Record<PermKey, boolean> = {
-    view_diario: !!view_diario,
-    view_mensual: !!view_mensual,
-    view_own_only: !!view_own_only,
-    view_assigned_sedes: !!view_assigned_sedes,
+    view_diario: !!body.view_diario,
+    edit_diario: !!body.edit_diario,
+    view_mensual: !!body.view_mensual,
+    edit_mensual: !!body.edit_mensual,
+    view_sedes: !!body.view_sedes,
+    edit_sedes: !!body.edit_sedes,
+    view_own_only: !!body.view_own_only,
+    view_assigned_sedes: !!body.view_assigned_sedes,
+    can_print: !!body.can_print,
+    can_send: !!body.can_send,
   };
   const permsCsv = permsToCsv(perms);
 
+  // Hash the new password if one was provided
+  let newPasswordHash: string | null = null;
+  if (typeof password === "string" && password.trim().length > 0) {
+    if (password.length < 4) {
+      return NextResponse.json({ error: "La contraseña debe tener al menos 4 caracteres" }, { status: 400 });
+    }
+    newPasswordHash = await bcrypt.hash(password.trim(), 10);
+  }
+
   if (canLogin) {
-    if (!linked) {
-      const collision = await db.user.findUnique({ where: { email: pro.email } });
-      if (collision) {
-        return NextResponse.json(
-          { error: `El email ${pro.email} ya está usado por otro usuario` },
-          { status: 400 }
-        );
-      }
+    // Email collision check across the whole users table
+    const collision = await db.user.findUnique({ where: { email: finalEmail } });
+    if (collision && (!linked || collision.id !== linked.id)) {
+      return NextResponse.json(
+        { error: `El email ${finalEmail} ya está usado por otro usuario` },
+        { status: 400 }
+      );
     }
 
     if (linked) {
       linked = await db.user.update({
         where: { id: linked.id },
         data: {
+          email: finalEmail,
           isActive: true,
           role: "USER",
           companyId: user.companyId,
           professionalId: pro.id,
           name: `${pro.firstName} ${pro.lastName}`.trim(),
           permissions: permsCsv,
+          ...(newPasswordHash ? { password: newPasswordHash } : {}),
         },
       });
     } else {
       linked = await db.user.create({
         data: {
-          email: pro.email,
+          email: finalEmail,
           name: `${pro.firstName} ${pro.lastName}`.trim(),
-          password: Math.random().toString(36).slice(2) + Date.now().toString(36),
+          password: newPasswordHash
+            ?? await bcrypt.hash(Math.random().toString(36).slice(2) + Date.now().toString(36), 10),
           role: "USER",
           companyId: user.companyId,
           professionalId: pro.id,
@@ -161,11 +212,21 @@ export async function PUT(req: Request) {
         },
       });
     }
+
+    // Also sync the professional's email + username (alias) so the pro record stays consistent
+    await db.professional.update({
+      where: { id: pro.id },
+      data: { email: finalEmail },
+    });
   } else {
     if (linked) {
       linked = await db.user.update({
         where: { id: linked.id },
-        data: { isActive: false, permissions: permsCsv },
+        data: {
+          isActive: false,
+          permissions: permsCsv,
+          ...(newPasswordHash ? { password: newPasswordHash } : {}),
+        },
       });
     }
   }
@@ -179,6 +240,7 @@ export async function PUT(req: Request) {
       email: linked.email,
       name: linked.name,
       isActive: linked.isActive,
+      hasPassword: !!linked.password && linked.password.length > 20,
       permissions: parsePerms(linked.permissions),
     } : null,
   });

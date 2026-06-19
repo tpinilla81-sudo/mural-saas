@@ -53,7 +53,12 @@ model User {
   isActive      Boolean  @default(true)
   // When this user is a login for a Professional, links back to the Professional row.
   professionalId String?
-  // CSV of permissions for USER role: view_diario, view_mensual, view_own_only, view_assigned_sedes
+  // CSV of granular permissions for USER role:
+  //   view_diario, edit_diario
+  //   view_mensual, edit_mensual
+  //   view_sedes, edit_sedes
+  //   view_own_only, view_assigned_sedes
+  //   can_print, can_send
   permissions   String   @default("")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

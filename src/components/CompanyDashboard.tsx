@@ -8,8 +8,9 @@ import CalendariosTab from "@/components/CalendariosTab";
 import DiarioTab from "@/components/DiarioTab";
 import MensualTab from "@/components/MensualTab";
 import CompanyProfileTab from "@/components/CompanyProfileTab";
+import ConfigTab from "@/components/ConfigTab";
 
-type MainTab = "empresa" | "diario";
+type MainTab = "empresa" | "diario" | "config";
 type DiarioSubTab = "sedes" | "pros" | "cal" | "diario" | "mensual";
 
 export default function CompanyDashboard() {
@@ -20,6 +21,7 @@ export default function CompanyDashboard() {
   const mainTabs: { key: MainTab; label: string; icon: string }[] = [
     { key: "empresa", label: "MI EMPRESA", icon: "🏢" },
     { key: "diario", label: "DIARIO", icon: "📅" },
+    { key: "config", label: "CONFIGURACIÓN", icon: "⚙️" },
   ];
 
   const diarioSubs: { key: DiarioSubTab; label: string }[] = [
@@ -52,6 +54,9 @@ export default function CompanyDashboard() {
       <div className="flex-1 overflow-auto">
         {/* ═══════ MI EMPRESA ═══════ */}
         {tab === "empresa" && <CompanyProfileTab />}
+
+        {/* ═══════ CONFIGURACIÓN ═══════ */}
+        {tab === "config" && <ConfigTab />}
 
         {/* ═══════ DIARIO ═══════ */}
         {tab === "diario" && (
