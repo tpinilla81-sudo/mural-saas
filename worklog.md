@@ -176,3 +176,71 @@ Stage Summary:
   * Mensual: calendario con solo sus asignaciones (o todas si no tiene filtros)
   * Diario: tabla sedes×días de solo lectura, solo de sus sedes si aplica
 - En producción hay que rotar credenciales de Neon y NEXTAUTH_SECRET (commit anterior expuso .env).
+
+---
+Task ID: 13
+Agent: main
+Task: Módulo Configuración con permisos granulares + login con contraseña por profesional
+
+Work Log:
+- User: "los perison tieien qeu ser , ver y manejar su diario, ver y manejar sus sedes, , lo mismo con mensual,poder imprimirr, enviar...etc.eso por profesional, habra qeu darles un usuario y contraseña qeu tambien gestiona en configuracion"
+- Catálogo de permisos ampliado de 4 a 10 claves en User.permissions (String CSV, sin migración):
+  * view_diario, edit_diario
+  * view_mensual, edit_mensual
+  * view_sedes, edit_sedes
+  * view_own_only, view_assigned_sedes (pre-existentes)
+  * can_print, can_send (nuevos)
+- API src/app/api/company/permissions/route.ts reescrito:
+  * GET ahora devuelve hasPassword (booleano derivado del length del hash) en el objeto user
+  * PUT acepta body completo: { professionalId, canLogin, email, password, view_diario, edit_diario, view_mensual, edit_mensual, view_sedes, edit_sedes, view_own_only, view_assigned_sedes, can_print, can_send }
+  * Si password viene no vacío y >= 4 chars → bcrypt hash + guarda en user.password
+  * Si canLogin=true y no existe User → lo crea (con la contraseña hasheada o un random si no se proveyó)
+  * Si canLogin=true y existe User → actualiza email, password (si vino), perms
+  * Si canLogin=false → desactiva el User (isActive=false)
+  * Sync del email también al registro Professional
+  * PERM_KEYS exportado para reutilización
+- src/lib/auth.ts: reactivado flujo con contraseña
+  * CredentialsProvider ahora pide email + password
+  * authorize(): lookup user por email, check isActive, check que user.password sea un hash real (length>20, evita aceptar placeholders legacy), bcrypt.compare(password, user.password)
+  * Devuelve same session user (role, companyId, professionalId, permissions)
+- src/components/LoginForm.tsx: añadido campo contraseña
+  * Mantiene el selector de usuario (autocomplete el email)
+  * Input password con botón VER/OCULTAR
+  * signIn("credentials", { email, password, redirect: false })
+  * Validación: sin contraseña → error "Introduce la contraseña"
+- src/components/ConfigTab.tsx (NUEVO, ~430 líneas):
+  * Lista colapsable de profesionales (load from /api/company/permissions)
+  * Cada fila muestra: avatar (iniciales), nombre + alias, badge ACCESO ACTIVO/SIN ACCESO, email, indicador "con contraseña", contador de permisos activos
+  * Click expande → panel con:
+    - Checkbox "Puede iniciar sesión"
+    - Input Email (usuario)
+    - Input Contraseña (placeholder cambia según hasPassword: "Dejar vacío para mantener" vs "Mínimo 4 caracteres")
+    - Grid de 10 permisos agrupados en 5 cards: Diario / Mensual / Sedes / Filtros / Acciones
+    - Cada permiso tiene label + help tooltip
+    - Cascada automática: marcar edit_X activa view_X; desmarcar view_X desactiva edit_X
+    - Perms deshabilitados si canLogin=false
+    - Botón Guardar (sólo habilitado si dirty)
+  * Toast de éxito/error
+  * Footer con conteo de activos
+- src/components/CompanyDashboard.tsx:
+  * Añadido import ConfigTab
+  * type MainTab ahora "empresa" | "diario" | "config"
+  * mainTabs array incluye { key: "config", label: "CONFIGURACIÓN", icon: "⚙️" }
+  * Render condicional {tab === "config" && <ConfigTab />}
+- src/components/UserView.tsx:
+  * type Perms extendido a las 10 claves
+  * parsePerms() actualizado
+  * handlePrint() → window.print() con título dinámico (Diario/Mensual - MES AÑO)
+  * handleSend() → mailto: con subject y body pre-rellenados (resumen del periodo, total de turnos, sedes asignadas)
+  * Topbar: botones 🖨️ Imprimir (si can_print) y ✉️ Enviar (si can_send) — ocultos en móvil el label
+  * Banner verde "Tienes permiso de edición para esta vista" cuando edit_diario/edit_mensual está activo en la vista correspondiente (placeholder para futura edición inline)
+- prisma/schema.prisma: solo actualizado el comentario del campo User.permissions para listar las 10 claves (la columna ya era String CSV, no requiere migración)
+- tsc --noEmit: limpio en todos los archivos tocados. Los errores restantes son pre-existentes (facturación eliminada, scripts migrate, examples).
+- next build: ✓ Compiled successfully in 3.5s
+- Commit a1ce6d3, pushed a origin/main
+
+Stage Summary:
+- El COMPANY_ADMIN entra a "Configuración" (nueva pestaña ⚙️) y ve todos sus profesionales.
+- Por cada profesional puede: activar/desactivar acceso, asignar email + contraseña, y marcar granularmente qué puede ver/editar (diario, mensual, sedes) + si puede imprimir/enviar.
+- El login ahora pide contraseña real (bcrypt hasheado en DB). Los usuarios existentes que no tengan hash real (placeholders legacy) son rechazados hasta que el admin les asigne una desde Configuración.
+- El profesional logueado ve botones Imprimir (window.print) y Enviar (mailto pre-rellenado) según sus permisos, y un banner indicando que tiene permiso de edición en la vista actual (edición inline pendiente de implementar).
