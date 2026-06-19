@@ -122,3 +122,57 @@ Stage Summary:
 - Toda la UI y la API de facturación a clientes se han eliminado del código.
 - Los modelos de DB siguen existiendo (sin uso) — no se ha alterado la DB.
 - .env des-trackeado para evitar exposición futura de credenciales.
+
+---
+Task ID: 12
+Agent: main
+Task: Crear módulo de configuración de permisos para que los profesionales puedan entrar a ver cosas
+
+Work Log:
+- User: "LKO QUE SI QUE VAMOS HACER EN UN MODULO DE CONFIGURACION CON PERMISOS PARA DAR A LOPROFESIONALES ESTOS PERMISOS Y QEU PUEDAN ENTRAR A VER COSAS"
+- Schema: añadidos 2 campos a User (model en prisma/schema.prisma):
+  * professionalId String?  → link al Professional cuando este User es su login
+  * permissions String @default("")  → CSV con claves: view_diario, view_mensual, view_own_only, view_assigned_sedes
+- DB sync: `npx prisma db push --skip-generate` (7.74s OK) + `npx prisma generate` (Prisma client v6.19.2)
+- API nueva: src/app/api/company/permissions/route.ts
+  * GET: lista todos los profesionales de la empresa con su User asociado (vía professionalId o email fallback) y permisos parseados
+  * PUT: { professionalId, canLogin, view_diario, view_mensual, view_own_only, view_assigned_sedes }
+    - canLogin=true → crea o reactiva un User (role=USER, email=pro.email, professionalId=pro.id, password=random)
+    - canLogin=false → desactiva el User (no borra)
+    - Comprueba colisión de email; requiere email válido en el profesional
+    - Requiere COMPANY_ADMIN o SUPER_ADMIN
+- Auth: src/lib/auth.ts
+  * authorize() ahora devuelve professionalId + permissions (cast `as any` para sortear tipo User estricto de next-auth)
+  * callbacks jwt/session propagan professionalId y permissions al token y a session.user
+- api-auth.ts: SessionUser ampliado con professionalId? y permissions?
+- UI: src/components/CompanyProfileTab.tsx
+  * Nueva sección "Permisos" junto a Datos y Usuarios
+  * Tabla desktop + tarjetas móvil con 5 checkboxes por profesional:
+    1. Puede entrar (canLogin)
+    2. Ver diario
+    3. Ver mensual
+    4. Solo sus turnos
+    5. Solo sus sedes
+  * Checkboxes 2-5 deshabilitados si canLogin=false; canLogin deshabilitado si pro no tiene email
+  * Actualización optimista + sync servidor + toasts
+  * Carga bajo demanda al entrar a la sección (useEffect)
+- Bug pre-existente arreglado: deleteUser(u) → deleteUser(u.id) en 2 sitios (mobile + desktop)
+- UserView: src/components/UserView.tsx (reescrito)
+  * Lee session.user.permissions y professionalId
+  * Carga el Professional vinculado (vía /api/company/professionals) para saber alias y assignedSedes
+  * Filtra planes según view_own_only (alias match) y view_assigned_sedes (sede in assignedSedes CSV)
+  * Si tiene ambos view_diario + view_mensual → toggle para cambiar entre vista Mensual (calendario) y Diario (tabla sedes×días, solo lectura)
+  * Vista Diario también filtra las sedes visibles (solo las asignadas)
+  * Saluda al pro por alias arriba a la derecha
+- tsc --noEmit limpio en todos los archivos tocados
+- next build: ✓ Compiled successfully in 3.6s; ruta /api/company/permissions generada como dynamic f
+- Commit d252a1a, pushed a origin/main
+
+Stage Summary:
+- El COMPANY_ADMIN entra en "Mi Empresa → Permisos" y ve todos sus profesionales.
+- Marca "Puede entrar" en un profesional → se crea automáticamente un User (role=USER) con su email → aparece en el selector passwordless del login.
+- El admin elige qué puede ver ese profesional: diario, mensual, y si ve todo o solo sus turnos/sedes.
+- El profesional entra con su email (sin contraseña) y ve una vista filtrada:
+  * Mensual: calendario con solo sus asignaciones (o todas si no tiene filtros)
+  * Diario: tabla sedes×días de solo lectura, solo de sus sedes si aplica
+- En producción hay que rotar credenciales de Neon y NEXTAUTH_SECRET (commit anterior expuso .env).
