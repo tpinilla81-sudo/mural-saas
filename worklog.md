@@ -93,3 +93,32 @@ Work Log:
 Stage Summary:
 - En la vista Diaria solo queda un filtro visible: los círculos de color de sede (multiselección, siempre presentes bajo el toolbar).
 - El resto de filtros (Profesional/Ciudad/Provincia/Aviso) y el botón Filtros han desaparecido por completo.
+
+---
+Task ID: 11
+Agent: main
+Task: Eliminar el módulo de facturación (pestaña FACTURACIÓN y todo su código)
+
+Work Log:
+- User: "quita el modulo de facturacion, no lo necestamos al final"
+- Editado src/components/CompanyDashboard.tsx:
+  * Eliminado el import BillTab
+  * Eliminada la pestaña "facturacion" del tipo MainTab y del array mainTabs
+  * Eliminado el render condicional {tab === "facturacion" && <BillTab />}
+- Editado src/app/layout.tsx: description ahora "Plataforma de gestión de turnos profesional" (sin "y facturación")
+- Borrados físicamente:
+  * src/components/BillTab.tsx
+  * src/components/bill/ (7 vistas: entrada-view, diario-view, registros-view, clientes-view, catalogo-view, facturas-view, configuracion-view)
+  * src/lib/bill-config.tsx (BillConfigProvider)
+  * src/lib/bill-utils.ts
+  * src/app/api/company/bill/ (toda la carpeta: catalogo, clientes, config, diario, factura-seq, registros con sus sub-rutas)
+- Schema de Prisma NO tocado: los modelos Bill* (BillCliente, BillCatalogo, BillRegistro, BillDiarioItem, BillDiarioLine, BillConfig, BillFacturaSeq) siguen en schema.prisma y en DB, pero ya no se referencian desde la app. Si se quiere limpiar DB, hacer migración aparte.
+- Conservados /api/company/billing y /api/company/invoices: son del módulo de SUSCRIPCIÓN SaaS (pagos de la empresa a Mural), no de facturación a clientes. Se confirman usados en SuperAdminDashboard y CompanyProfileTab (billingMethod, planName, price).
+- Commit ec9a131. En ese commit se coló por error .env (con credenciales de Neon) — corregido en commit 5f6ba80 que hace git rm --cached .env. El .env sigue en el working tree para uso local/producción pero ya no se trackea. (Ya estaba en .gitignore, pero al haber sido trackeado antes, el cached override se mantuvo.)
+- tsc --noEmit limpio para los archivos modificados (CompanyDashboard, layout). Los errores restantes son pre-existentes (schema.prisma desactualizado en otros módulos).
+
+Stage Summary:
+- La pestaña FACTURACIÓN ya no aparece en el menú principal de la empresa.
+- Toda la UI y la API de facturación a clientes se han eliminado del código.
+- Los modelos de DB siguen existiendo (sin uso) — no se ha alterado la DB.
+- .env des-trackeado para evitar exposición futura de credenciales.
