@@ -31,7 +31,9 @@ export const authOptions: NextAuthOptions = {
             companyId: user.companyId || undefined,
             companyName: user.company?.name || undefined,
             companySlug: user.company?.slug || undefined,
-          };
+            professionalId: user.professionalId || undefined,
+            permissions: user.permissions || "",
+          } as any;
         } catch (error) {
           console.error("[AUTH] authorize error:", error);
           return null;
@@ -46,6 +48,8 @@ export const authOptions: NextAuthOptions = {
         token.companyId = (user as any).companyId;
         token.companyName = (user as any).companyName;
         token.companySlug = (user as any).companySlug;
+        token.professionalId = (user as any).professionalId;
+        token.permissions = (user as any).permissions;
       }
       return token;
     },
@@ -56,6 +60,8 @@ export const authOptions: NextAuthOptions = {
         (session.user as any).companyId = token.companyId;
         (session.user as any).companyName = token.companyName;
         (session.user as any).companySlug = token.companySlug;
+        (session.user as any).professionalId = token.professionalId;
+        (session.user as any).permissions = token.permissions;
       }
       return session;
     },

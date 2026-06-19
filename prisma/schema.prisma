@@ -43,16 +43,20 @@ model Company {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String
-  password  String
-  image     String?
-  role      String   @default("USER") // SUPER_ADMIN | COMPANY_ADMIN | USER
-  companyId String?
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String
+  password      String
+  image         String?
+  role          String   @default("USER") // SUPER_ADMIN | COMPANY_ADMIN | USER
+  companyId     String?
+  isActive      Boolean  @default(true)
+  // When this user is a login for a Professional, links back to the Professional row.
+  professionalId String?
+  // CSV of permissions for USER role: view_diario, view_mensual, view_own_only, view_assigned_sedes
+  permissions   String   @default("")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   company Company?  @relation(fields: [companyId], references: [id])
 }

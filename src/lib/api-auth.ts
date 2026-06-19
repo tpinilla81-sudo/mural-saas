@@ -10,6 +10,8 @@ export type SessionUser = {
   companyId?: string;
   companyName?: string;
   companySlug?: string;
+  professionalId?: string;
+  permissions?: string;
 };
 
 export async function getSessionUser(): Promise<SessionUser | null> {
