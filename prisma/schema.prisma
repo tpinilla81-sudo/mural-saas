@@ -172,6 +172,7 @@ model Plan {
   date              String   // YYYY-MM-DD
   turn              String   // MANANA | TARDE
   professionalAlias String
+  notes             String   @default("") // free-form note shown when clicking the card
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 

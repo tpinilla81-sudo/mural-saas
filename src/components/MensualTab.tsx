@@ -2,18 +2,32 @@
 
 import { useState, useEffect } from "react";
 
+interface PlanEntry {
+  id: string;
+  sedeId: string;
+  date: string;
+  turn: string;
+  professionalAlias: string;
+  notes?: string;
+}
+
 export default function MensualTab() {
   const [year, setYear] = useState(new Date().getFullYear());
   const [month, setMonth] = useState(new Date().getMonth());
   const [sedes, setSedes] = useState<any[]>([]);
   const [professionals, setProfessionals] = useState<any[]>([]);
-  const [plans, setPlans] = useState<any[]>([]);
+  const [plans, setPlans] = useState<PlanEntry[]>([]);
   const [holidays, setHolidays] = useState<any[]>([]);
   const [selectedSedes, setSelectedSedes] = useState<Set<string>>(new Set());
   const [selectedPros, setSelectedPros] = useState<Set<string>>(new Set());
   const [showSedeDD, setShowSedeDD] = useState(false);
   const [showProDD, setShowProDD] = useState(false);
   const [loaded, setLoaded] = useState(false);
+
+  // Note editor modal: open when a card is clicked
+  const [noteModal, setNoteModal] = useState<{ planId: string; sedeName: string; sedeTask: string; proName: string; date: string; turn: string } | null>(null);
+  const [noteText, setNoteText] = useState("");
+  const [noteSaving, setNoteSaving] = useState(false);
 
   async function load() {
     const [sRes, pRes, plRes, hRes] = await Promise.all([
@@ -63,6 +77,55 @@ export default function MensualTab() {
     return ((r * 299 + g * 587 + b * 114) / 1000) >= 140 ? "#000" : "#fff";
   };
 
+  // Open the note editor for a specific plan card
+  const openNoteEditor = (plan: PlanEntry, sede: any, proName: string) => {
+    setNoteModal({
+      planId: plan.id,
+      sedeName: sede.name,
+      sedeTask: sede.task,
+      proName,
+      date: plan.date,
+      turn: plan.turn,
+    });
+    setNoteText(plan.notes || "");
+  };
+
+  const closeNoteEditor = () => {
+    setNoteModal(null);
+    setNoteText("");
+  };
+
+  const saveNote = async () => {
+    if (!noteModal) return;
+    setNoteSaving(true);
+    try {
+      const res = await fetch(`/api/company/plan/${noteModal.planId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes: noteText }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setPlans(prev => prev.map(p => p.id === noteModal.planId ? { ...p, notes: updated.notes } : p));
+        closeNoteEditor();
+      } else {
+        alert("No se pudo guardar la nota.");
+      }
+    } catch (e) {
+      alert("Error de red al guardar la nota.");
+    } finally {
+      setNoteSaving(false);
+    }
+  };
+
+  // Format date label for the modal
+  const formatDateLabel = (dateStr: string) => {
+    const [y, m, d] = dateStr.split("-").map(Number);
+    const date = new Date(y, m - 1, d);
+    const wd = ["DOM", "LUN", "MAR", "MIÉ", "JUE", "VIE", "SÁB"][date.getDay()];
+    return `${wd} ${d}/${m}/${y}`;
+  };
+
   const firstDay = new Date(year, month, 1);
   const lastDay = new Date(year, month + 1, 0);
   let startWeekday = firstDay.getDay();
@@ -83,18 +146,35 @@ export default function MensualTab() {
 
     const assigns: React.ReactNode[] = [];
     filteredSedes.forEach(sede => {
-      const dayPlans = plans.filter((p: any) => p.sedeId === sede.id && p.date === f);
-      dayPlans.forEach((p: any) => {
+      const dayPlans = plans.filter((p: PlanEntry) => p.sedeId === sede.id && p.date === f);
+      dayPlans.forEach((p: PlanEntry) => {
         if (!selectedPros.has(p.professionalAlias)) return;
         const pro = professionals.find((x: any) => x.alias === p.professionalAlias);
         const nombre = pro ? `${pro.firstName} ${pro.lastName}` : p.professionalAlias;
         const turnLabel = p.turn === "MANANA" ? "M" : "T";
+        const hasNote = !!(p.notes && p.notes.trim());
+        const notePreview = hasNote ? p.notes!.trim() : "";
+        // Truncate tooltip preview
+        const tooltipLines = [
+          `${sede.name} / ${sede.task} · ${p.turn === "MANANA" ? "Mañana" : "Tarde"} · ${nombre}`,
+          hasNote ? `📝 ${notePreview.length > 200 ? notePreview.slice(0, 200) + "…" : notePreview}` : "Click para añadir nota",
+        ].join("\n");
         assigns.push(
-          <div key={p.id} className="text-[9px] px-1 py-0.5 rounded font-bold leading-tight border border-black/10 break-words"
+          <div
+            key={p.id}
+            onClick={(e) => { e.stopPropagation(); openNoteEditor(p, sede, nombre); }}
+            className="text-[9px] px-1 py-0.5 rounded font-bold leading-tight border border-black/10 break-words cursor-pointer hover:ring-2 hover:ring-amber-500 hover:ring-offset-0 transition relative"
             style={{ background: sede.color, color: textColorFor(sede.color) }}
-            title={`${sede.name} / ${sede.task} · ${p.turn} · ${nombre}`}>
+            title={tooltipLines}
+          >
             <span className="inline-block font-black px-0.5 mr-0.5 bg-black/80 text-white rounded-[2px]">{turnLabel}</span>
             {sede.name} / {sede.task} - {nombre}
+            {hasNote && (
+              <span
+                className="absolute top-0 right-0 -mt-1 -mr-1 text-[10px] bg-amber-400 text-black rounded-full w-3.5 h-3.5 flex items-center justify-center font-bold border border-black/60 leading-none"
+                title="Tiene nota"
+              >•</span>
+            )}
           </div>
         );
       });
@@ -190,6 +270,7 @@ export default function MensualTab() {
       <div className="flex-1 overflow-auto bg-white text-gray-900 rounded-xl p-5" id="print-target">
         <div className="flex justify-between items-end mb-3 border-b-[3px] border-gray-900 pb-2">
           <h1 className="text-xl font-black text-gray-900">{MESES[month].toUpperCase()} {year}</h1>
+          <span className="text-[10px] text-gray-500 font-bold hidden sm:block">Click en una tarjeta para añadir/editar nota</span>
         </div>
         <table className="w-full border-collapse table-fixed">
           <thead>
@@ -202,6 +283,62 @@ export default function MensualTab() {
           <tbody>{rows}</tbody>
         </table>
       </div>
+
+      {/* ═══ Note editor modal ═══ */}
+      {noteModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={closeNoteEditor}
+        >
+          <div
+            className="bg-white border-2 border-gray-900 rounded-xl p-4 sm:p-6 w-full max-w-md space-y-4 shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="border-b-2 border-gray-900 pb-2">
+              <h3 className="text-gray-900 font-black text-lg">Nota del turno</h3>
+              <p className="text-[11px] text-gray-600 font-bold uppercase tracking-wide">
+                {formatDateLabel(noteModal.date)} · {noteModal.turn === "MANANA" ? "Mañana" : "Tarde"}
+              </p>
+              <p className="text-xs text-gray-800 font-bold mt-0.5">
+                {noteModal.sedeName}{noteModal.sedeTask ? ` / ${noteModal.sedeTask}` : ""} · {noteModal.proName}
+              </p>
+            </div>
+            <div>
+              <label className="block text-[11px] font-extrabold text-gray-700 uppercase mb-1.5">NOTA</label>
+              <textarea
+                value={noteText}
+                onChange={e => setNoteText(e.target.value)}
+                autoFocus
+                maxLength={2000}
+                rows={6}
+                placeholder="Escribe aquí la nota (visible en tooltip al pasar el ratón)…"
+                className="w-full px-3 py-2 bg-gray-50 border-2 border-gray-300 focus:border-amber-500 focus:bg-white rounded-lg text-sm text-gray-900 font-medium resize-none outline-none transition"
+              />
+              <div className="flex justify-between items-center mt-1">
+                <span className="text-[10px] text-gray-500 font-bold">{noteText.length}/2000</span>
+                {noteText.trim().length > 0 && (
+                  <button
+                    onClick={() => setNoteText("")}
+                    className="text-[10px] text-red-600 hover:text-red-800 font-bold uppercase"
+                  >Borrar nota</button>
+                )}
+              </div>
+            </div>
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={closeNoteEditor}
+                disabled={noteSaving}
+                className="flex-1 py-2 px-4 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg font-bold text-sm transition disabled:opacity-50"
+              >Cancelar</button>
+              <button
+                onClick={saveNote}
+                disabled={noteSaving}
+                className="flex-1 py-2 px-4 bg-gray-900 hover:bg-black text-white rounded-lg font-bold text-sm transition disabled:opacity-50"
+              >{noteSaving ? "Guardando…" : "Guardar"}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
