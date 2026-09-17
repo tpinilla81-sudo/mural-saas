@@ -415,3 +415,66 @@ Stage Summary:
 - Si el PIN está vacío al guardar, el acceso queda libre (sin PIN) — utilidad para "Quitar PIN".
 - El PIN se almacena como hash bcrypt, nunca se expone en la API (sólo el booleano hasPin).
 - Si el admin no configura PIN para nadie, el comportamiento es idéntico al anterior (login libre total).
+
+---
+Task ID: 17
+Agent: main
+Task: Incorporar poder escribir notas al pinchar en cualquier tarjeta de cualquier día de la agenda mensual
+
+Work Log:
+- Schema: añadida columna `Plan.notes String @default("")` (no nullable, string vacío por defecto).
+- Prisma Client regenerado (`npx prisma generate` OK). El Prisma type Plan ahora incluye `notes: string`.
+- Nota: `npx prisma db push` FALLA porque el .env local apunta a una DB Neon que NO es la
+  de producción (tiene tablas distintas — AuditResult, BoardConfiguration, etc.) y además
+  está desincronizada con el schema (falta columna `slug` en Company, entre otras). El usuario
+  tendrá que aplicar el cambio a su DB de producción manualmente:
+  SQL directo: `ALTER TABLE "Plan" ADD COLUMN "notes" TEXT NOT NULL DEFAULT '';`
+  O bien: `npx prisma db push` con su DATABASE_URL de producción real.
+- API PUT /api/company/plan/[id]: ampliado para aceptar dos modos:
+  * `{ professionalAlias: "X" }` → actualiza profesional (comportamiento anterior)
+  * `{ notes: "texto" }` → actualiza solo la nota (max 2000 chars, "" = borrar)
+  * Verificación de seguridad: el plan debe pertenecer a la companyId del usuario que
+    lo edita ( impide escribir notas en planes ajenos vía ID ).
+- MensualTab.tsx (reescrito):
+  * Tipo PlanEntry con notes?: string
+  * Estado nuevo: noteModal (planId, sedeName, sedeTask, proName, date, turn), noteText,
+    noteSaving
+  * openNoteEditor(p, sede, nombre): abre modal precargado con la nota existente
+  * saveNote(): PUT /api/company/plan/{id} con body { notes: noteText }; al confirmar,
+    actualiza el plan en local state sin recargar todo
+  * Cada tarjeta de asignación ahora es clickeable (cursor-pointer, hover ring amber-500).
+  * Indicador visual: punto ámbar (•) en esquina superior derecha de la tarjeta si tiene nota.
+  * Tooltip de la tarjeta muestra: sede/tarea/turno/profesor en línea 1; si tiene nota,
+    "📝 {nota truncada a 200 chars}"; si no, "Click para añadir nota".
+  * Modal de nota:
+    - Cabecera con fecha formateada (DIA dd/mm/yyyy) y turno (Mañana/Tarde)
+    - Textarea autoFocus, maxLength 2000, 6 rows, resize-none
+    - Contador "X/2000"
+    - Botón "Borrar nota" visible solo si hay texto (vacia el textarea, no guarda aún)
+    - Botones Cancelar / Guardar
+    - Mientras guarda: "Guardando…" y deshabilita ambos botones
+    - Cerrar clickando fuera del modal
+  * Hint visible en la cabecera de la tabla: "Click en una tarjeta para añadir/editar nota"
+- tsc --noEmit: limpio en los archivos tocados (los errores preexistentes en
+  catalog/invoices/professionals no son de esta feature, son código muerto que
+  referencia modelos eliminados).
+- next build: ✓ Compiled successfully in 7.6s
+- Commit local 1e54731 creado con mensaje "feat(mensual): notas por tarjeta en la agenda
+  mensual"
+- git push origin main: FALLIDO — token de GitHub expirado durante la sesión. El commit
+  queda en local, listo para ser empujado en cuanto se renueve el token o se reintente
+  desde un entorno con credenciales válidas.
+
+Stage Summary:
+- Cada tarjeta de asignación de la agenda mensual (cada celda con sede+turno+profesional)
+  es ahora clickeable.
+- Al pinchar, abre un modal donde se puede escribir una nota libre (hasta 2000 chars).
+- La nota se guarda asociada al turno (sede+fecha+turno), NO al profesional — así
+  persiste aunque se cambie el profesional asignado a ese turno.
+- Si una tarjeta tiene nota, se le ve un punto ámbar en la esquina.
+- El tooltip al pasar el ratón por la tarjeta muestra un preview de la nota.
+- Las notas viajan en la API dentro del objeto Plan y se cargan junto con la agenda,
+  no generan peticiones extra al abrir la vista.
+- IMPORTANTE para el usuario: la columna `notes` debe añadirse a la DB de producción.
+  El despliegue en Vercel (vercel.json buildCommand = "npx prisma generate && next build")
+  NO hace `db push` automáticamente. Hay que ejecutarlo aparte contra la DB real.
