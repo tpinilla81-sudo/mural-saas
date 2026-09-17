@@ -478,3 +478,45 @@ Stage Summary:
 - IMPORTANTE para el usuario: la columna `notes` debe añadirse a la DB de producción.
   El despliegue en Vercel (vercel.json buildCommand = "npx prisma generate && next build")
   NO hace `db push` automáticamente. Hay que ejecutarlo aparte contra la DB real.
+
+---
+Task ID: 18
+Agent: main
+Task: Migración de la app a nueva cuenta Vercel (tono8) + descubrimiento y resolución del origen real de los datos (Firebase)
+
+Work Log:
+- Empujados commits pendientes a GitHub con token nuevo del usuario (f089275..dba3dd5).
+- Configurado proyecto Vercel "mural-saas" (prj_Sx403AugFAQGoE7jFEs24rNv41pg) vía API con token de la cuenta tono8:
+  * 5 env vars creadas (DATABASE_URL, DIRECT_URL, NEXTAUTH_URL=https://mural-saas.vercel.app, NEXTAUTH_SECRET nuevo, AUTH_TRUST_HOST=true)
+  * Deploy de producción disparado vía API → READY en ~1 min
+- BUG post-deploy: /api/auth/login-users devolvía 500.
+- INVESTIGACIÓN:
+  1. El .env del workspace había sido SOBRESCRITO por otra sesión (apuntaba a SQLite de bill-by-metodo). Restaurado desde git history (commit 2f58f5d).
+  2. La DB Neon del repo (ep-autumn-queen/neondb) resulta ser la de la 5S APP: el 8-jul-2026 un push del schema de 5S borró TODAS las tablas del mural (sedes, planes, profesionales...). Los usuarios mural@/admin@/julio@ siguen ahí pero con schema viejo.
+  3. El deploy antiguo my-project-lemon-five-83.vercel.app está MUERTO (404). El proyecto "my-project" de tono8 es la 5S app, no el mural.
+  4. EL USUARIO TENÍA RAZÓN: los datos reales viven en FIREBASE RTDB. Identificado y verificado ACCESO PÚBLICO:
+     https://mural-80cc6-default-rtdb.europe-west1.firebasedatabase.app
+     - /reyesa_V13_DEFINITIVA (sedes, pros, plan, avisos, festivos, calendarios)
+     - /panel_v163 (ausencias AUS-/AV-)
+- SOLUCIÓN EJECUTADA:
+  1. CREATE DATABASE "mural" en el mismo proyecto Neon (5S intocada en neondb).
+  2. prisma db push del schema mural (incluye User.pin y Plan.notes) → OK 23s.
+  3. Company "Mural Plastic Surgery" (slug=mural, id cmu5usell0000n49v0no4qglb) + 3 Users recreados (password dummy hasheada — el login es passwordless; PIN sin configurar).
+  4. MIGRACIÓN Firebase→Postgres con datos FRESCOS: script nuevo scripts/migrate-firebase-fast.mjs (createMany bulk; el original individual tardaba >5min por roundtrips a US-East).
+     Resultado: 17 sedes, 11 profesionales, 122 planes, 1003 avisos, 758 festivos.
+  5. Vercel env vars DATABASE_URL/DIRECT_URL actualizadas a /mural vía API (PATCH upsert) + redeploy → READY.
+  6. Verificación en vivo: login 200, login-users devuelve los 3 usuarios de la DB nueva, APIs protegidas 401 sin sesión. ✓
+- Commits locales pendientes de push NO creados para los scripts con tokens (seguridad): set_vercel_env.sh, trigger_deploy.sh, monitor_deploy.sh, update_env_redeploy.sh contienen el token Vercel en claro y quedan SIN trackear. f5ff4e3 (que los contiene) NO debe pushearse.
+
+Stage Summary:
+- LA APP MIGRADA Y OPERATIVA: https://mural-saas.vercel.app (cuenta Vercel tono8)
+- Datos: frescos desde Firebase RTDB (no el dump de junio)
+- DB nueva "mural" en el mismo proyecto Neon; neondb de la 5S intacta
+- Login: selector passwordless con los 3 usuarios; PIN opcional no configurado
+- Feature de notas (Plan.notes) disponible desde el primer momento en la DB nueva
+
+PENDIENTES DE SEGURIDAD (avisar al usuario):
+1. La Firebase RTDB del mural es PÚBLICA (lectura Y escritura sin auth): datos personales de profesionales (emails, teléfonos) expuestos. Añadir reglas de seguridad URGENTE.
+2. La password de la DB Neon está en el historial público del repo (commits 1f4998e, ec9a131, 2f58f5d...). Rotar la password en Neon (afecta también a la 5S si comparte proyecto).
+3. Revocar el token de Vercel (vcp_...) tras esta migración — expira en 1 día igualmente.
+4. No pushear f5ff4e3 (contiene tokens en scripts). Considerar borrarlo local: git reset --hard dba3dd5 y rehacer commits limpios.
