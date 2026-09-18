@@ -38,8 +38,11 @@ export default function AppShell() {
       {/* Navbar */}
       <nav className="bg-black px-3 sm:px-6 py-3 flex items-center gap-3 border-b-2 border-[#6BBE7A] shrink-0">
         <div className="flex items-center gap-2 sm:gap-3">
-          <div className="h-8 w-8 sm:h-9 sm:w-9 rounded bg-[#6BBE7A] flex items-center justify-center text-black font-black text-sm">
-            {(session.user?.name || "?")[0].toUpperCase()}
+          {/* Logo MURAL (placa blanca como la app original) */}
+          <img src="/mural-logo.png" alt="MURAL" className="h-9 sm:h-10 w-auto bg-white rounded-lg px-1.5 shadow-md" />
+          <div className="leading-none hidden sm:block select-none">
+            <span className="text-amber-500 font-black text-base tracking-wide">MURAL</span>
+            <small className="block text-white text-[9px] font-bold tracking-[2px] mt-0.5">PLASTIC SURGERY</small>
           </div>
         </div>
 

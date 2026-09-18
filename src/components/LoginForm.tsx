@@ -82,13 +82,9 @@ export default function LoginForm() {
       <div className="w-full max-w-sm">
         {/* White card */}
         <div className="bg-white rounded-2xl p-8 shadow-2xl">
-          {/* Generic access header — no branding */}
+          {/* Logo MURAL */}
           <div className="flex flex-col items-center mb-6">
-            <div className="h-20 w-20 rounded-full mb-3 bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-300">
-              <svg className="h-10 w-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 11c0-1.657 1.343-3 3-3s3 1.343 3 3-1.343 3-3 3-3-1.343-3-3z M5 11c0-1.657 1.343-3 3-3s3 1.343 3 3-1.343 3-3 3-3-1.343-3-3z M3 21v-2a4 4 0 014-4h10a4 4 0 014 4v2" />
-              </svg>
-            </div>
+            <img src="/mural-logo.png" alt="MURAL Plastic Surgery" className="w-44 h-auto mb-3" />
           </div>
 
           {/* Form */}

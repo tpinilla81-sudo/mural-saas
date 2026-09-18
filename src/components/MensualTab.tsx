@@ -269,7 +269,10 @@ export default function MensualTab() {
 
       <div className="flex-1 overflow-auto bg-white text-gray-900 rounded-xl p-5" id="print-target">
         <div className="flex justify-between items-end mb-3 border-b-[3px] border-gray-900 pb-2">
-          <h1 className="text-xl font-black text-gray-900">{MESES[month].toUpperCase()} {year}</h1>
+          <div className="flex items-center gap-3">
+            <img src="/mural-logo.png" alt="MURAL" className="h-10 w-auto" />
+            <h1 className="text-xl font-black text-gray-900">{MESES[month].toUpperCase()} {year}</h1>
+          </div>
           <span className="text-[10px] text-gray-500 font-bold hidden sm:block">Click en una tarjeta para añadir/editar nota</span>
         </div>
         <table className="w-full border-collapse table-fixed">
