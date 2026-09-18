@@ -520,3 +520,52 @@ PENDIENTES DE SEGURIDAD (avisar al usuario):
 2. La password de la DB Neon está en el historial público del repo (commits 1f4998e, ec9a131, 2f58f5d...). Rotar la password en Neon (afecta también a la 5S si comparte proyecto).
 3. Revocar el token de Vercel (vcp_...) tras esta migración — expira en 1 día igualmente.
 4. No pushear f5ff4e3 (contiene tokens en scripts). Considerar borrarlo local: git reset --hard dba3dd5 y rehacer commits limpios.
+
+---
+Task ID: 19
+Agent: main
+Task: Recuperar el logo de MURAL + traspaso completo de datos de la app HTML antigua (Firebase RTDB) a la nueva (Neon)
+
+Work Log:
+- User: "TE HAS OLVIDADO POR EL CAMINO DEL LOGO DE MURAL. TENGO UNA ANTIGUA APP IGUAL A ESTA Q ES UN CODIGO HTML Y QUE TRABAJA CON FIREBASE, PODRIAMOS TRASPASAR ESA INFORMACION Y NO PERDER NADA A ESTA NUEVA CON NEON?"
+- Descubrimiento clave: la app HTML antigua (download/mural.html) usa Firebase RTDB
+  "planificador-reybesa-tudela" (path reyesa_V13_DEFINITIVA) — la instancia ACTIVA.
+  La migración de la Task 18 usó "mural-80cc6" que es una COPIA DESACTUALIZADA
+  (17 sedes vs 22, sin notas_asignacion, sin personalCats).
+- Descargados datos FRESCOS en vivo (HTTP 200, lectura pública): download/firebase_live.json
+  (8 colecciones: sedes 22, pros 10, plan 15 sedes, notas_asignacion 7, festivos 5 provincias,
+  calendarios 5×138 fechas idénticas 2026-2040, avisos 11, personalCats 1) + panel_v163 (3365).
+- Análisis panel_v163: contiene datos de la app INDUSTRIAL Reyesa (ROCKWOOL, VIBRACOUSTIC,
+  RODAMIENTOS...) que COMPARTE el proyecto Firebase → NO es del mural, EXCLUIDO de la
+  migración (la Task 18 lo había importado contaminando con 1003 avisos, ahora limpiados).
+- personalCats (1 categoría "TORNEO DE GOLF", sin referencias): excluido, no hay modelo.
+- Fix .env local: apuntaba a SQLite (unset DATABASE_URL del shell que pisaba todo) →
+  postgres a la DB Neon "mural". El shell de sesión tenía exportada la URL SQLite vieja.
+- scripts/migrate-firebase-live.mjs (nuevo, commiteado): borra datos viejos de la company
+  e importa desde la instancia ACTIVA: sedes con ord/color/hm/ht, pros completos, 395 planes
+  con notas_asignacion FUSIONADAS en Plan.notes (nueva feature), festivos = festivos[provincia]
+  ∪ calendario compartido (726 rows, 5 provincias), 11 avisos con pid/sid resueltos.
+- LOGO: public/mural-logo.png = logo original de la app antigua (1024×559, verificado
+  contra las partes base64 inline del mural.html). Añadido en 3 sitios:
+  * AppShell navbar: placa blanca con logo + "MURAL" dorado + "PLASTIC SURGERY" (como la app original)
+  * LoginForm: logo centrado sobre la tarjeta blanca
+  * MensualTab: logo junto al mes en la cabecera de impresión (print-target, PDF)
+- Commit fdc05de → push → deploy Vercel READY (mural-saas-cgpc14098).
+- Verificación end-to-end con navegador headless:
+  * login-users 200, login OK, sesión Admin Mural OK
+  * API: 22 sedes, 10 pros, mensual sept-2026 = 56 planes / 5 con nota, 726 festivos
+  * Login: "LOGO PRESENTE" | Navbar: "MURAL PLASTIC SURGERY" | Mensual: logoMensual:true,
+    SEPTIEMBRE 2026, 5 indicadores de nota (coinciden con API)
+- Screenshots: download/verify_login_logo.png, verify_navbar_logo.png, verify_mensual.png
+
+Stage Summary:
+- https://mural-saas.vercel.app OPERATIVA con TODOS los datos de la app antigua:
+  22 sedes, 10 profesionales, 395 planes (23 con notas), 726 festivos (2026-2040), 11 avisos.
+- Las notas de asignación de Firebase ya son visibles/editables con la nueva feature de notas.
+- Logo MURAL original restaurado en login, navbar y cabecera de impresión mensual.
+- El selector de años del mensual ahora llega a 2040 (gracias al calendario compartido).
+- scripts/migrate-firebase-live.mjs queda commiteado para re-sincronizar si el usuario
+  sigue usando la app antigua durante la transición.
+- PENDIENTE (avisar al usuario): 2 sedes vacías importadas tal cual (existían en Firebase,
+  se pueden borrar desde la pestaña Sedes). Seguridad: Firebase RTDB pública (leer+escribir
+  sin auth), password Neon en historial git público (rotar), token Vercel a revocar.
