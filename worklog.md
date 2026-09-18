@@ -621,3 +621,33 @@ Stage Summary:
   re-verificar tras futuros cambios.
 - PENDIENTE: si el usuario quiere cambiar la contraseña, editar el script
   set-admin-password.cjs y volver a ejecutarlo contra producción.
+
+---
+Task ID: 21
+Agent: main
+Task: Cambiar la contraseña de acceso a "julio1974@"
+
+Work Log:
+- User: "que la contraseña sea: julio1974@"
+- scripts/set-admin-password.cjs: actualizada la constante newPassword a "julio1974@".
+- Ejecutado contra producción (Neon "mural"):
+  ✓ SUPER_ADMIN mural@mural.app password set to "julio1974@"
+  verify bcrypt.compare → ✓ OK
+- scripts/test-single-password-login.mjs y verify-session.mjs actualizados a la nueva
+  contraseña y re-ejecutados contra https://mural-saas.vercel.app:
+  POST password=julio1974@ → 200 + session-token ✓ (autentica como mural@mural.app SUPER_ADMIN)
+  POST password=Mural2024! → 401 (vieja contraseña rechazada) ✓
+  POST password=wrongpass   → 401 ✓
+  POST password=""          → 401 ✓
+  POST password=admin123    → 401 ✓
+  POST password=mural123    → 401 ✓
+- No hizo falta tocar código ni redeploy: la contraseña vive en la DB (bcrypt hash en
+  User.password), el flujo de auth.ts ya itera usuarios y compara el input con el hash
+  de cada uno.
+
+Stage Summary:
+- La contraseña de acceso a https://mural-saas.vercel.app ahora es: julio1974@
+- Entra como SUPER_ADMIN (mural@mural.app, Mural Plastic Surgery).
+- La anterior (Mural2024!) ya no funciona.
+- Para futuros cambios: editar la línea `const newPassword = '...'` en
+  scripts/set-admin-password.cjs y volver a ejecutar `node scripts/set-admin-password.cjs`.
