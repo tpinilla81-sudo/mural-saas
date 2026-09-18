@@ -569,3 +569,55 @@ Stage Summary:
 - PENDIENTE (avisar al usuario): 2 sedes vacías importadas tal cual (existían en Firebase,
   se pueden borrar desde la pestaña Sedes). Seguridad: Firebase RTDB pública (leer+escribir
   sin auth), password Neon en historial git público (rotar), token Vercel a revocar.
+
+---
+Task ID: 20
+Agent: main
+Task: Simplificar el acceso — un solo campo de contraseña (sin selector de usuarios)
+
+Work Log:
+- User: "cambiar el acceso, solo meter una contraseña, la que es"
+- src/lib/auth.ts:
+  * CredentialsProvider ahora declara solo `password` (sin `email` ni `pin`)
+  * authorize() carga TODOS los usuarios activos, los ordena por prioridad de rol
+    (SUPER_ADMIN > COMPANY_ADMIN > USER) y devuelve el PRIMERO cuyo hash bcrypt
+    coincida con la contraseña introducida. Determinístico en caso de empate.
+  * Eliminado el flujo anterior (selector por email + PIN opcional de 4 dígitos)
+- src/components/LoginForm.tsx:
+  * Eliminado el dropdown de usuarios, fetch a /api/auth/login-users, estado de
+    carga de lista, agrupación SUPER_ADMIN/usuarios por empresa, lógica de PIN.
+  * Sustituido por un único input type=password con autofocus + botón Entrar.
+  * Logo MURAL conservado, paleta y disposición intactas.
+  * Mensajes: "Contraseña incorrecta" en caso de fallo.
+- scripts/set-admin-password.cjs (nuevo, NO commiteado — opera contra la DB):
+  * Setea el password del SUPER_ADMIN (mural@mural.app) a "Mural2024!" — la
+    contraseña histórica que el usuario ya conocía (cf. reset-all-pw.cjs).
+  * Ejecutado contra producción (Neon "mural"):
+    ✓ mural@mural.app password set to "Mural2024!"
+    verify bcrypt.compare → ✓ OK
+    role=SUPER_ADMIN  companyId=cmu5usell0000n49v0no4qglb
+- tsc --noEmit: sin errores nuevos en auth.ts ni LoginForm.tsx (errores preexistentes
+  en catalog/invoices/professionals no son de esta feature).
+- next build: ✓ Compiled successfully in 7.7s.
+- Commit 1c6294d "feat(login): simplify to single-password field" → push a origin/main.
+- Verificación E2E contra https://mural-saas.vercel.app:
+  POST /api/auth/callback/credentials con password=Mural2024!  → 200 + session-token ✓
+  POST con password=wrongpass  → 401 ✗
+  POST con password=""        → 401 ✗
+  POST con password=admin123  → 401 ✗
+  POST con password=mural123  → 401 ✗
+  GET /api/auth/session con la cookie devuelta:
+    user.email = mural@mural.app
+    user.role = SUPER_ADMIN
+    user.companyName = Mural Plastic Surgery
+    user.companySlug = mural
+
+Stage Summary:
+- El login ahora es un solo campo: teclear "Mural2024!" y pulsar Entrar.
+- Se autentica como SUPER_ADMIN (mural@mural.app) de Mural Plastic Surgery.
+- Eliminado el selector de usuarios y el flujo de PIN — la app es de un único
+  usuario principal, así que el acceso queda radicalmente simplificado.
+- scripts/test-single-password-login.mjs y verify-session.mjs quedan para
+  re-verificar tras futuros cambios.
+- PENDIENTE: si el usuario quiere cambiar la contraseña, editar el script
+  set-admin-password.cjs y volver a ejecutarlo contra producción.
