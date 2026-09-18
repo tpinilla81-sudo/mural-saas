@@ -3,51 +3,66 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 
-// Login flow:
-//   1. User picks an identity from the login dropdown (passwordless by default).
-//   2. If the user has a PIN configured, the login form also sends `pin` and we
-//      verify it with bcrypt.compare. If it's missing or wrong, login fails.
-//   3. If no PIN is configured, login is open (only requires `email`).
-// The COMPANY_ADMIN controls WHO can log in (isActive) and whether a PIN is
-// required, from the Configuración tab.
+// Simple single-password login flow:
+//   1. The login form presents ONE password input (no user picker).
+//   2. authorize() fetches all active users and returns the first one whose
+//      bcrypt-hashed password matches the supplied value. We prefer
+//      SUPER_ADMIN > COMPANY_ADMIN > USER to make the match deterministic
+//      when more than one user shares the same password.
+//   3. If no user matches, login fails with the generic "Credenciales
+//      incorrectas" error that NextAuth surfaces to the form.
+//
+// The previous PIN flow (per-user 4-digit PIN) is removed: the admin can
+// still rotate the login password by changing it directly in the database
+// for the relevant user.
+const ROLE_PRIORITY: Record<string, number> = {
+  SUPER_ADMIN: 0,
+  COMPANY_ADMIN: 1,
+  USER: 2,
+};
+
 export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
-      name: "Selector",
+      name: "Contraseña",
       credentials: {
-        email: { label: "Email", type: "email" },
-        pin: { label: "PIN", type: "text" },
+        password: { label: "Contraseña", type: "password" },
       },
       async authorize(credentials) {
-        if (!credentials?.email) return null;
+        if (!credentials?.password) return null;
 
         try {
-          const user = await db.user.findUnique({
-            where: { email: credentials.email },
+          const users = await db.user.findMany({
+            where: { isActive: true },
             include: { company: true },
+            orderBy: { email: "asc" },
           });
 
-          if (!user || !user.isActive) return null;
+          // Sort by role priority so SUPER_ADMIN wins ties.
+          users.sort(
+            (a, b) =>
+              (ROLE_PRIORITY[a.role] ?? 99) - (ROLE_PRIORITY[b.role] ?? 99),
+          );
 
-          // If a PIN is configured for this user, verify it
-          if (user.pin) {
-            const providedPin = (credentials.pin || "").trim();
-            if (!providedPin) return null;
-            const ok = await bcrypt.compare(providedPin, user.pin);
-            if (!ok) return null;
+          for (const user of users) {
+            if (!user.password) continue;
+            const ok = await bcrypt.compare(credentials.password, user.password);
+            if (!ok) continue;
+
+            return {
+              id: user.id,
+              email: user.email,
+              name: user.name,
+              role: user.role,
+              companyId: user.companyId || undefined,
+              companyName: user.company?.name || undefined,
+              companySlug: user.company?.slug || undefined,
+              professionalId: user.professionalId || undefined,
+              permissions: user.permissions || "",
+            } as any;
           }
 
-          return {
-            id: user.id,
-            email: user.email,
-            name: user.name,
-            role: user.role,
-            companyId: user.companyId || undefined,
-            companyName: user.company?.name || undefined,
-            companySlug: user.company?.slug || undefined,
-            professionalId: user.professionalId || undefined,
-            permissions: user.permissions || "",
-          } as any;
+          return null;
         } catch (error) {
           console.error("[AUTH] authorize error:", error);
           return null;
