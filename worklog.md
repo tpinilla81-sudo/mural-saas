@@ -651,3 +651,37 @@ Stage Summary:
 - La anterior (Mural2024!) ya no funciona.
 - Para futuros cambios: editar la línea `const newPassword = '...'` en
   scripts/set-admin-password.cjs y volver a ejecutar `node scripts/set-admin-password.cjs`.
+
+---
+Task ID: 22
+Agent: main
+Task: Dejar un único usuario activo (Julio Murillo / julio1974@) y que entre directo a la app
+
+Work Log:
+- User: "solo hay un usuario que es el de la contraseña julio1974@, así que por ahora eso
+  eliminalo, no hace falta. este usuario directamente entra en la app y ya"
+- Diagnóstico: tras la Task 21, julio1974@ entraba como Julio Murillo (COMPANY_ADMIN) y
+  veía la app Mural correctamente. PERO también existían 2 usuarios más activos:
+    - mural@mural.app (SUPER_ADMIN) con contraseña super1974@
+    - admin@mural.es   (COMPANY_ADMIN) con contraseña aleatoria
+  El usuario no quiere ese segundo login SaaS — sólo quiere julio1974@.
+- scripts/leave-only-julio.cjs (nuevo):
+  * Confirma Julio Murillo con password julio1974@, isActive=true, role=COMPANY_ADMIN.
+  * Desactiva mural@mural.app (SUPER_ADMIN) → isActive=false.
+  * Desactiva admin@mural.es → isActive=false.
+- Resultado: usuarios activos tras la limpieza = 1 (juliomurillozardoya@gmail.com).
+- No hace falta tocar código ni redeploy: auth.ts ya filtra `where: { isActive: true }`.
+- Verificación E2E contra https://mural-saas.vercel.app:
+  julio1974@ → ✓ session  | email=juliomurillozardoya@gmail.com | role=COMPANY_ADMIN | company=Mural Plastic Surgery
+  super1974@ → 401 (rechazada) ✓
+  Mural2024! → 401 (rechazada) ✓
+
+Stage Summary:
+- Único usuario activo en el sistema: Julio Murillo (juliomurillozardoya@gmail.com,
+  COMPANY_ADMIN de Mural Plastic Surgery).
+- Para entrar: teclear "julio1974@" y pulsar Entrar → va directo a la app Mural
+  (pestañas Diario, Mi Empresa, Configuración).
+- El panel SaaS (empresas + usuarios) sigue en el código (SuperAdminDashboard) pero
+  no es accesible porque no hay ningún SUPER_ADMIN activo.
+- Para reactivarlo en el futuro: ejecutar scripts/reassign-passwords.cjs o activar
+  mural@mural.app con una contraseña distinta en la DB.
