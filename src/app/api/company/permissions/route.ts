@@ -34,7 +34,7 @@ export function permsToCsv(p: Record<PermKey, boolean>): string {
 
 // GET /api/company/permissions
 // Returns all professionals of the company with their associated User (if any)
-// and parsed permissions.
+// and parsed permissions + mensual view restrictions.
 export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
@@ -85,8 +85,12 @@ export async function GET() {
         email: u.email,
         name: u.name,
         isActive: u.isActive,
-        hasPin: !!u.pin,
+        hasPassword: !!u.password && u.password.startsWith("$2"),
         permissions: parsePerms(u.permissions),
+        allowedSedes: u.allowedSedes || "",
+        allowedPros: u.allowedPros || "",
+        showNotes: u.showNotes !== false,
+        showVacaciones: u.showVacaciones !== false,
       } : null,
       canLogin: !!u && u.isActive,
     };
@@ -99,17 +103,18 @@ export async function GET() {
 // Body: {
 //   professionalId,
 //   canLogin: boolean,
-//   email?: string,         // overrides pro.email if provided (used as login identifier)
-//   pin?: string | null,   // 4-digit PIN to set; null/"" to clear; undefined to leave unchanged
-//   view_diario, edit_diario,
-//   view_mensual, edit_mensual,
-//   view_sedes, edit_sedes,
-//   view_own_only, view_assigned_sedes,
-//   can_print, can_send
+//   email?: string,          // login identifier (auto-generated if missing)
+//   password?: string,       // plain password to set (bcrypt-hashed). Required when
+//                            // enabling login on a user that has no password yet.
+//   passwordCleared?: boolean, // true → reset to a random unknown hash (login impossible)
+//   view_diario, edit_diario, view_mensual, edit_mensual,
+//   view_sedes, edit_sedes, view_own_only, view_assigned_sedes,
+//   can_print, can_send,
+//   allowedSedes?: string,   // CSV of sede names visible in Mensual ("" = all)
+//   allowedPros?: string,    // CSV of pro aliases visible in Mensual ("" = all)
+//   showNotes?: boolean,     // can see notes on cards
+//   showVacaciones?: boolean // can see vacation/absence cards
 // }
-// Note: login is passwordless. The User.password column is required NOT NULL by
-// the schema, so we store a random placeholder hash that is never checked.
-// The PIN is optional and stored as a bcrypt hash.
 export async function PUT(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
@@ -120,21 +125,22 @@ export async function PUT(req: Request) {
   }
 
   const body = await req.json();
-  const { professionalId, canLogin, email, pin } = body;
+  const { professionalId, canLogin, email, password, passwordCleared } = body;
   if (!professionalId) return NextResponse.json({ error: "Falta professionalId" }, { status: 400 });
 
-  // Validate PIN if explicitly provided (string or null). `undefined` means "leave unchanged".
-  let pinHash: string | null | undefined = undefined;
-  if (pin !== undefined) {
-    if (pin === null || pin === "") {
-      pinHash = null; // clear
-    } else {
-      const pinStr = String(pin).trim();
-      if (!/^\d{4}$/.test(pinStr)) {
-        return NextResponse.json({ error: "El PIN debe ser 4 dígitos" }, { status: 400 });
-      }
-      pinHash = await bcrypt.hash(pinStr, 10);
+  // Password handling:
+  //  - password (non-empty string) → hash and store (the login password for this access)
+  //  - passwordCleared === true → store a random unknown hash so the access can't log in
+  //  - undefined → leave unchanged
+  let passwordHash: string | undefined | null = undefined;
+  if (typeof password === "string" && password.trim() !== "") {
+    const pw = password.trim();
+    if (pw.length < 4) {
+      return NextResponse.json({ error: "La contraseña debe tener al menos 4 caracteres" }, { status: 400 });
     }
+    passwordHash = await bcrypt.hash(pw, 10);
+  } else if (passwordCleared === true) {
+    passwordHash = "revoked_" + Math.random().toString(36).slice(2) + Date.now().toString(36);
   }
 
   const pro = await db.professional.findFirst({
@@ -142,10 +148,10 @@ export async function PUT(req: Request) {
   });
   if (!pro) return NextResponse.json({ error: "Profesional no encontrado" }, { status: 404 });
 
-  // Resolve final email: body.email > pro.email
-  const finalEmail = (typeof email === "string" ? email.trim() : "") || pro.email;
+  // Resolve final email: body.email > pro.email > auto-generated from alias
+  let finalEmail = (typeof email === "string" ? email.trim() : "") || pro.email;
   if (!finalEmail || !finalEmail.includes("@")) {
-    return NextResponse.json({ error: "El profesional necesita un email válido" }, { status: 400 });
+    finalEmail = `${(pro.alias || "acceso").toLowerCase().replace(/[^a-z0-9]/g, "")}@acceso.mural`;
   }
 
   // Look for an existing linked User
@@ -175,12 +181,28 @@ export async function PUT(req: Request) {
   };
   const permsCsv = permsToCsv(perms);
 
+  // Mensual view restrictions
+  const allowedSedes = typeof body.allowedSedes === "string" ? body.allowedSedes : "";
+  const allowedPros = typeof body.allowedPros === "string" ? body.allowedPros : "";
+  const showNotes = body.showNotes !== false;
+  const showVacaciones = body.showVacaciones !== false;
+
   if (canLogin) {
     // Email collision check across the whole users table
     const collision = await db.user.findUnique({ where: { email: finalEmail } });
     if (collision && (!linked || collision.id !== linked.id)) {
       return NextResponse.json(
         { error: `El email ${finalEmail} ya está usado por otro usuario` },
+        { status: 400 }
+      );
+    }
+
+    // A password is mandatory to enable login (either a new one or one set previously)
+    const existing = linked ? await db.user.findUnique({ where: { id: linked.id } }) : null;
+    const hasExistingPw = !!existing && existing.password.startsWith("$2");
+    if (!passwordHash && !hasExistingPw) {
+      return NextResponse.json(
+        { error: "Introduce una contraseña para este acceso (mínimo 4 caracteres)" },
         { status: 400 }
       );
     }
@@ -196,7 +218,11 @@ export async function PUT(req: Request) {
           professionalId: pro.id,
           name: `${pro.firstName} ${pro.lastName}`.trim(),
           permissions: permsCsv,
-          ...(pinHash !== undefined ? { pin: pinHash } : {}),
+          allowedSedes,
+          allowedPros,
+          showNotes,
+          showVacaciones,
+          ...(passwordHash ? { password: passwordHash } : {}),
         },
       });
     } else {
@@ -204,23 +230,27 @@ export async function PUT(req: Request) {
         data: {
           email: finalEmail,
           name: `${pro.firstName} ${pro.lastName}`.trim(),
-          // Schema requires NOT NULL; password is never checked (passwordless login)
-          password: Math.random().toString(36).slice(2) + Date.now().toString(36),
+          password: passwordHash || Math.random().toString(36).slice(2) + Date.now().toString(36),
           role: "USER",
           companyId: user.companyId,
           professionalId: pro.id,
           isActive: true,
           permissions: permsCsv,
-          ...(pinHash !== undefined && pinHash !== null ? { pin: pinHash } : {}),
+          allowedSedes,
+          allowedPros,
+          showNotes,
+          showVacaciones,
         },
       });
     }
 
     // Also sync the professional's email so the pro record stays consistent
-    await db.professional.update({
-      where: { id: pro.id },
-      data: { email: finalEmail },
-    });
+    if (finalEmail.includes("@") && !finalEmail.endsWith("@acceso.mural")) {
+      await db.professional.update({
+        where: { id: pro.id },
+        data: { email: finalEmail },
+      });
+    }
   } else {
     if (linked) {
       linked = await db.user.update({
@@ -228,7 +258,11 @@ export async function PUT(req: Request) {
         data: {
           isActive: false,
           permissions: permsCsv,
-          ...(pinHash !== undefined ? { pin: pinHash } : {}),
+          allowedSedes,
+          allowedPros,
+          showNotes,
+          showVacaciones,
+          ...(passwordHash ? { password: passwordHash } : {}),
         },
       });
     }
@@ -243,8 +277,12 @@ export async function PUT(req: Request) {
       email: linked.email,
       name: linked.name,
       isActive: linked.isActive,
-      hasPin: !!linked.pin,
+      hasPassword: !!linked.password && linked.password.startsWith("$2"),
       permissions: parsePerms(linked.permissions),
+      allowedSedes: linked.allowedSedes || "",
+      allowedPros: linked.allowedPros || "",
+      showNotes: linked.showNotes !== false,
+      showVacaciones: linked.showVacaciones !== false,
     } : null,
   });
 }

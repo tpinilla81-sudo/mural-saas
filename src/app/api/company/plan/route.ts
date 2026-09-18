@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
-import { requireCompanyAdmin, getSessionUser } from "@/lib/api-auth";
+import { requireCompanyAdmin, requireCompanyUser } from "@/lib/api-auth";
 import { db } from "@/lib/db";
 
 export async function GET(req: Request) {
-  const { error, status, user } = await requireCompanyAdmin();
+  // Read access is available to any company user (USER accesses need this for their views)
+  const { error, status, user } = await requireCompanyUser();
   if (error) return NextResponse.json({ error }, { status });
 
   const companyId = user!.companyId!;

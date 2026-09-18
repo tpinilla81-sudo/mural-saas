@@ -46,21 +46,32 @@ export default function UserView() {
   const [plans, setPlans] = useState<any[]>([]);
   const [sedes, setSedes] = useState<any[]>([]);
   const [holidays, setHolidays] = useState<any[]>([]);
+  const [avisos, setAvisos] = useState<any[]>([]);
   const [myPro, setMyPro] = useState<MyPro | null>(null);
   const [view, setView] = useState<"mensual" | "diario">("mensual");
 
   const perms = parsePerms((session?.user as any)?.permissions);
   const professionalId = (session?.user as any)?.professionalId as string | undefined;
 
+  // ── Mensual view restrictions configured in Configuración de Accesos ──
+  const allowedSedesCsv: string = (session?.user as any)?.allowedSedes || "";
+  const allowedProsCsv: string = (session?.user as any)?.allowedPros || "";
+  const showNotes: boolean = (session?.user as any)?.showNotes !== false;
+  const showVacaciones: boolean = (session?.user as any)?.showVacaciones !== false;
+  const allowedSedeNames = new Set(allowedSedesCsv.split(",").map(s => s.trim().toUpperCase()).filter(Boolean));
+  const allowedProAliases = new Set(allowedProsCsv.split(",").map(s => s.trim()).filter(Boolean));
+
   async function load() {
-    const [plRes, sRes, hRes] = await Promise.all([
+    const [plRes, sRes, hRes, aRes] = await Promise.all([
       fetch(`/api/company/plan?year=${year}&month=${month}`),
       fetch("/api/company/sedes"),
       fetch("/api/company/holidays"),
+      fetch("/api/company/avisos"),
     ]);
     if (plRes.ok) setPlans(await plRes.json());
     if (sRes.ok) setSedes(await sRes.json());
     if (hRes.ok) setHolidays(await hRes.json());
+    if (aRes.ok) setAvisos(await aRes.json());
 
     // If the user has a linked professional, fetch it to know alias + assigned sedes
     if (professionalId) {
@@ -117,6 +128,13 @@ export default function UserView() {
     if (perms.view_own_only && myPro) {
       if (p.professionalAlias !== myPro.alias) return false;
     }
+    // Restriction: allowed professionals (from Configuración de Accesos)
+    if (allowedProAliases.size > 0 && !allowedProAliases.has(p.professionalAlias)) return false;
+    // Restriction: allowed sedes (from Configuración de Accesos)
+    if (allowedSedeNames.size > 0) {
+      const sede = sedes.find((s: any) => s.id === p.sedeId);
+      if (!sede || !allowedSedeNames.has((sede.name || "").toUpperCase())) return false;
+    }
     // "Solo sus sedes": only show plans in sedes listed in my assignedSedes
     if (perms.view_assigned_sedes && myPro) {
       const sede = sedes.find((s: any) => s.id === p.sedeId);
@@ -165,14 +183,57 @@ export default function UserView() {
     const assigns = dayPlans.map((p: any) => {
       const sede = sedes.find((s: any) => s.id === p.sedeId);
       const turnLabel = p.turn === "MANANA" ? "M" : "T";
+      const hasNote = showNotes && !!(p.notes && p.notes.trim());
+      const notePreview = hasNote ? p.notes.trim() : "";
+      const tooltip = [
+        `${sede?.name || ""} / ${sede?.task || ""} · ${p.turn === "MANANA" ? "Mañana" : "Tarde"} · ${p.professionalAlias || ""}`,
+        ...(hasNote ? ["📝 " + (notePreview.length > 200 ? notePreview.slice(0, 200) + "…" : notePreview)] : []),
+      ].join("\n");
       return (
-        <div key={p.id} className="text-[9px] px-1 py-0.5 rounded font-bold leading-tight border border-black/10"
-          style={{ background: sede?.color || "#94a3b8", color: textColorFor(sede?.color || "#94a3b8") }}>
+        <div key={p.id} className="text-[9px] px-1 py-0.5 rounded font-bold leading-tight border border-black/10 relative"
+          style={{ background: sede?.color || "#94a3b8", color: textColorFor(sede?.color || "#94a3b8") }}
+          title={tooltip}>
           <span className="inline-block font-black px-0.5 mr-0.5 bg-black/80 text-white rounded-[2px]">{turnLabel}</span>
           {sede?.name} / {sede?.task}
+          {hasNote && (
+            <span
+              className="absolute top-0 right-0 -mt-1 -mr-1 text-[10px] bg-amber-400 text-black rounded-full w-3.5 h-3.5 flex items-center justify-center font-bold border border-black/60 leading-none"
+              title="Tiene nota"
+            >•</span>
+          )}
         </div>
       );
     });
+
+    // Vacation / absence cards (if allowed by this access)
+    if (showVacaciones) {
+      const dayAvisos = avisos.filter((a: any) => {
+        if (a.date !== f) return false;
+        const sede = sedes.find((s: any) => s.id === a.sedeId);
+        if (!sede) return false;
+        if (allowedSedeNames.size > 0 && !allowedSedeNames.has((sede.name || "").toUpperCase())) return false;
+        const avisoAlias = a.professional?.alias;
+        if (avisoAlias && allowedProAliases.size > 0 && !allowedProAliases.has(avisoAlias)) return false;
+        if (perms.view_own_only && myPro && avisoAlias && avisoAlias !== myPro.alias) return false;
+        return true;
+      });
+      dayAvisos.forEach((a: any) => {
+        const sede = sedes.find((s: any) => s.id === a.sedeId);
+        const reason = (a.reason || "AUSENCIA").toUpperCase();
+        const turnLabel = a.turn === "M" ? "M" : a.turn === "T" ? "T" : "";
+        assigns.push(
+          <div key={`av-${a.id}`}
+            className="text-[9px] px-1 py-0.5 rounded font-bold leading-tight border border-red-900/40 break-words"
+            style={{ background: "repeating-linear-gradient(45deg, #fee2e2, #fee2e2 5px, #fecaca 5px, #fecaca 10px)", color: "#7f1d1d" }}
+            title={`${reason}${a.professional ? ` · ${a.professional.firstName || ""} ${a.professional.lastName || ""}`.trim() : ""}${sede ? ` · ${sede.name}` : ""}`}>
+            {turnLabel && <span className="inline-block font-black px-0.5 mr-0.5 bg-red-900 text-white rounded-[2px]">{turnLabel}</span>}
+            <span className="font-black">🏖 {reason}</span>
+            {a.professional ? ` - ${a.professional.alias || a.professional.firstName}` : ""}
+            {sede ? ` (${sede.name})` : ""}
+          </div>
+        );
+      });
+    }
 
     const tdClass = fest ? "bg-red-100" : we ? "bg-purple-50" : "bg-gray-50";
     cells.push(
@@ -200,6 +261,8 @@ export default function UserView() {
 
   const diarioRows = sedes
     .filter((s: any) => {
+      // Restriction: allowed sedes (from Configuración de Accesos)
+      if (allowedSedeNames.size > 0 && !allowedSedeNames.has((s.name || "").toUpperCase())) return false;
       // "Solo sus sedes": hide sedes not in my assignedSedes
       if (perms.view_assigned_sedes && myPro) {
         const mySedes = (myPro.assignedSedes || "").split(",").map((x: string) => x.trim().toUpperCase()).filter(Boolean);

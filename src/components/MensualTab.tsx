@@ -11,17 +11,33 @@ interface PlanEntry {
   notes?: string;
 }
 
+interface AvisoEntry {
+  id: string;
+  date: string;
+  sedeId: string;
+  turn: string; // M | T
+  professionalId: string | null;
+  reason: string;
+  professional?: { alias: string; firstName: string; lastName: string } | null;
+  sede?: { name: string } | null;
+}
+
+type CardFilter = "todas" | "nota" | "sin";
+
 export default function MensualTab() {
   const [year, setYear] = useState(new Date().getFullYear());
   const [month, setMonth] = useState(new Date().getMonth());
   const [sedes, setSedes] = useState<any[]>([]);
   const [professionals, setProfessionals] = useState<any[]>([]);
   const [plans, setPlans] = useState<PlanEntry[]>([]);
+  const [avisos, setAvisos] = useState<AvisoEntry[]>([]);
   const [holidays, setHolidays] = useState<any[]>([]);
   const [selectedSedes, setSelectedSedes] = useState<Set<string>>(new Set());
   const [selectedPros, setSelectedPros] = useState<Set<string>>(new Set());
   const [showSedeDD, setShowSedeDD] = useState(false);
   const [showProDD, setShowProDD] = useState(false);
+  const [cardFilter, setCardFilter] = useState<CardFilter>("todas");
+  const [showVac, setShowVac] = useState(true);
   const [loaded, setLoaded] = useState(false);
 
   // Note editor modal: open when a card is clicked
@@ -30,11 +46,12 @@ export default function MensualTab() {
   const [noteSaving, setNoteSaving] = useState(false);
 
   async function load() {
-    const [sRes, pRes, plRes, hRes] = await Promise.all([
+    const [sRes, pRes, plRes, hRes, aRes] = await Promise.all([
       fetch("/api/company/sedes"),
       fetch("/api/company/professionals"),
       fetch(`/api/company/plan?year=${year}&month=${month}`),
       fetch("/api/company/holidays"),
+      fetch("/api/company/avisos"),
     ]);
     const s = sRes.ok ? await sRes.json() : [];
     const p = pRes.ok ? await pRes.json() : [];
@@ -42,6 +59,7 @@ export default function MensualTab() {
     setProfessionals(p);
     if (plRes.ok) setPlans(await plRes.json());
     if (hRes.ok) setHolidays(await hRes.json());
+    if (aRes.ok) setAvisos(await aRes.json());
     if (!loaded) {
       setSelectedSedes(new Set(s.map((x: any) => x.id)));
       setSelectedPros(new Set(p.map((x: any) => x.alias)));
@@ -149,6 +167,10 @@ export default function MensualTab() {
       const dayPlans = plans.filter((p: PlanEntry) => p.sedeId === sede.id && p.date === f);
       dayPlans.forEach((p: PlanEntry) => {
         if (!selectedPros.has(p.professionalAlias)) return;
+        // Card filter by note presence
+        const hasNoteCard = !!(p.notes && p.notes.trim());
+        if (cardFilter === "nota" && !hasNoteCard) return;
+        if (cardFilter === "sin" && hasNoteCard) return;
         const pro = professionals.find((x: any) => x.alias === p.professionalAlias);
         const nombre = pro ? `${pro.firstName} ${pro.lastName}` : p.professionalAlias;
         const turnLabel = p.turn === "MANANA" ? "M" : "T";
@@ -179,6 +201,38 @@ export default function MensualTab() {
         );
       });
     });
+
+    // ── Vacation / absence cards (avisos) ──
+    if (showVac) {
+      const dayAvisos = avisos.filter(a => a.date === f && selectedSedes.has(a.sedeId));
+      dayAvisos.forEach(a => {
+        // Pro filter: sede-level avisos (no professional) always show; pro-level only if selected
+        const avisoProAlias = a.professional?.alias;
+        if (avisoProAlias && !selectedPros.has(avisoProAlias)) return;
+        const sede = sedes.find(x => x.id === a.sedeId);
+        const proName = a.professional
+          ? `${a.professional.firstName || ""} ${a.professional.lastName || ""}`.trim() || avisoProAlias
+          : "";
+        const reason = (a.reason || "AUSENCIA").toUpperCase();
+        const turnLabel = a.turn === "M" ? "M" : a.turn === "T" ? "T" : "";
+        assigns.push(
+          <div
+            key={`av-${a.id}`}
+            className="text-[9px] px-1 py-0.5 rounded font-bold leading-tight border border-red-900/40 break-words"
+            style={{
+              background: "repeating-linear-gradient(45deg, #fee2e2, #fee2e2 5px, #fecaca 5px, #fecaca 10px)",
+              color: "#7f1d1d",
+            }}
+            title={`${reason}${proName ? ` · ${proName}` : ""}${sede ? ` · ${sede.name}` : ""}${a.turn ? ` · ${a.turn === "M" ? "Mañana" : "Tarde"}` : ""}`}
+          >
+            {turnLabel && <span className="inline-block font-black px-0.5 mr-0.5 bg-red-900 text-white rounded-[2px]">{turnLabel}</span>}
+            <span className="font-black">🏖 {reason}</span>
+            {proName ? ` - ${avisoProAlias || proName}` : ""}
+            {sede ? ` (${sede.name})` : ""}
+          </div>
+        );
+      });
+    }
 
     const tdClass = fest ? "bg-red-100" : we ? "bg-purple-50" : "bg-gray-50";
     cells.push(
@@ -262,6 +316,30 @@ export default function MensualTab() {
               ))}
             </div>
           )}
+        </div>
+        {/* Card type filter: notes */}
+        <div>
+          <label className="block text-xs font-extrabold text-blue-400 uppercase mb-1">TARJETAS</label>
+          <select
+            value={cardFilter}
+            onChange={e => setCardFilter(e.target.value as CardFilter)}
+            className="w-40 sm:w-44 px-2 py-1.5 sm:py-2 bg-slate-900 border border-slate-600 rounded text-white text-xs font-bold"
+          >
+            <option value="todas">Todas</option>
+            <option value="nota">📝 Solo con nota</option>
+            <option value="sin">Sin nota</option>
+          </select>
+        </div>
+        {/* Vacaciones / ausencias toggle */}
+        <div>
+          <label className="block text-xs font-extrabold text-blue-400 uppercase mb-1">VACACIONES</label>
+          <button
+            onClick={() => setShowVac(!showVac)}
+            className={`px-3 py-2 rounded-lg text-xs font-bold transition ${showVac ? "bg-red-500 text-white" : "bg-slate-700 text-slate-400 hover:bg-slate-600"}`}
+            title="Mostrar u ocultar las tarjetas de vacaciones y ausencias"
+          >
+            {showVac ? "🏖 Mostrando" : "Ocultas"}
+          </button>
         </div>
         <button onClick={() => { setYear(new Date().getFullYear()); setMonth(new Date().getMonth()); }} className="bg-amber-500 hover:bg-amber-400 text-black font-black px-3 py-2 rounded-lg text-xs transition">HOY</button>
         <button onClick={() => window.print()} className="bg-slate-700 hover:bg-slate-600 text-white font-bold px-3 py-2 rounded-lg text-xs transition hidden sm:block">🖨️ PDF</button>

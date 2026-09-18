@@ -59,6 +59,10 @@ export const authOptions: NextAuthOptions = {
               companySlug: user.company?.slug || undefined,
               professionalId: user.professionalId || undefined,
               permissions: user.permissions || "",
+              allowedSedes: user.allowedSedes || "",
+              allowedPros: user.allowedPros || "",
+              showNotes: user.showNotes !== false,
+              showVacaciones: user.showVacaciones !== false,
             } as any;
           }
 
@@ -79,6 +83,10 @@ export const authOptions: NextAuthOptions = {
         token.companySlug = (user as any).companySlug;
         token.professionalId = (user as any).professionalId;
         token.permissions = (user as any).permissions;
+        token.allowedSedes = (user as any).allowedSedes;
+        token.allowedPros = (user as any).allowedPros;
+        token.showNotes = (user as any).showNotes;
+        token.showVacaciones = (user as any).showVacaciones;
       }
       return token;
     },
@@ -91,6 +99,10 @@ export const authOptions: NextAuthOptions = {
         (session.user as any).companySlug = token.companySlug;
         (session.user as any).professionalId = token.professionalId;
         (session.user as any).permissions = token.permissions;
+        (session.user as any).allowedSedes = token.allowedSedes || "";
+        (session.user as any).allowedPros = token.allowedPros || "";
+        (session.user as any).showNotes = token.showNotes !== false;
+        (session.user as any).showVacaciones = token.showVacaciones !== false;
       }
       return session;
     },

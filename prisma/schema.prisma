@@ -62,6 +62,15 @@ model User {
   permissions   String   @default("")
   // Optional 4-digit PIN (bcrypt-hashed). If set, login requires it; if null, login is open.
   pin           String?
+  // ── Mensual view restrictions for this access (empty/false = no restriction beyond perms) ──
+  // CSV of sede NAMES this access can see in the monthly view ("" = all sedes)
+  allowedSedes  String   @default("")
+  // CSV of professional ALIASES this access can see in the monthly view ("" = all)
+  allowedPros   String   @default("")
+  // Whether this access can see note indicators / note text on cards
+  showNotes     Boolean  @default(true)
+  // Whether this access can see vacation/absence (aviso) cards in the monthly view
+  showVacaciones Boolean @default(true)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

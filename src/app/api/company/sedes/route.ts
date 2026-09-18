@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
-import { requireCompanyAdmin, getSessionUser } from "@/lib/api-auth";
+import { requireCompanyAdmin, requireCompanyUser, getSessionUser } from "@/lib/api-auth";
 import { db } from "@/lib/db";
 
 export async function GET() {
-  const { error, status, user } = await requireCompanyAdmin();
+  // Read access available to any company user (restricted accesses need it)
+  const { error, status, user } = await requireCompanyUser();
   if (error) return NextResponse.json({ error }, { status });
 
   const companyId = user!.role === "SUPER_ADMIN" 
