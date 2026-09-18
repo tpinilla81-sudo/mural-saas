@@ -685,3 +685,76 @@ Stage Summary:
   no es accesible porque no hay ningún SUPER_ADMIN activo.
 - Para reactivarlo en el futuro: ejecutar scripts/reassign-passwords.cjs o activar
   mural@mural.app con una contraseña distinta en la DB.
+
+---
+Task ID: 23
+Agent: main
+Task: Configuración de accesos con contraseñas y permisos específicos + filtros de tarjetas en Mensual
+
+Work Log:
+- User: "EN CONFIGURACION CONFIGURACION DE ACCESOS CREA CONTRASEÑAS PARA ENTRAR Y PERMISOS O
+  ACCESOS MAS ESPECIFICOS. EN MENSUAL CREA PERMISOS PARA PODER ELEGIR VER TARJETAS DE UNA O
+  VARIAS SEDES, DE UNO O VARIOS PROFESIONALES Y QUE TARJETAS, DE VACACIONES..., NOTAS O NO
+  NOTAS....ETC"
+- Schema (prisma/schema.prisma): 4 columnas nuevas en User:
+  * allowedSedes TEXT NOT NULL DEFAULT '' (CSV nombres de sedes visibles en mensual; "" = todas)
+  * allowedPros TEXT NOT NULL DEFAULT '' (CSV alias de profesionales visibles; "" = todos)
+  * showNotes BOOLEAN NOT NULL DEFAULT true (ver notas en tarjetas)
+  * showVacaciones BOOLEAN NOT NULL DEFAULT true (ver tarjetas de vacaciones/ausencias)
+- Migración aplicada a producción (scripts/add_user_access_columns.cjs, ALTER TABLE ADD COLUMN
+  IF NOT EXISTS — aditivo, sin pérdida). Nota: el .env había sido sobrescrito OTRA VEZ a
+  SQLite por otra sesión; restaurado a Neon mural.
+- src/lib/api-auth.ts: nuevo helper requireCompanyUser() (cualquier rol con companyId) +
+  SessionUser ampliado con los 4 campos nuevos.
+- GETs abiertos a usuarios USER (lectura): plan, sedes, holidays, professionals, avisos.
+  Las escrituras siguen requiriendo COMPANY_ADMIN/SUPER_ADMIN.
+- src/lib/auth.ts: jwt/session callbacks exponen allowedSedes/allowedPros/showNotes/
+  showVacaciones.
+- /api/company/permissions:
+  * GET devuelve hasPassword + allowedSedes/allowedPros/showNotes/showVacaciones por acceso
+  * PUT acepta password (bcrypt, mín. 4 chars), passwordCleared, y los 4 campos de
+    restricción. Email ahora OPCIONAL (auto-genera alias@acceso.mural si falta).
+  * Al activar login exige contraseña (nueva o existente).
+- ConfigTab.tsx (reescrito):
+  * Campo "Contraseña de entrada" (nueva / cambiar / indicador de activa)
+  * Sección "Vista Mensual — qué puede ver este acceso":
+    - Sedes visibles: checkboxes con color, TODAS/ELEGIR
+    - Profesionales visibles: checkboxes con alias+nombre, TODOS/ELEGIR
+    - Toggles: 📝 Ver notas / 🏖 Ver vacaciones/ausencias
+  * Grupos de permisos anteriores (Diario/Mensual/Sedes/Filtros/Acciones) intactos
+- MensualTab.tsx:
+  * Filtro TARJETAS: Todas / 📝 Solo con nota / Sin nota
+  * Toggle VACACIONES: mostrar/ocultar tarjetas de ausencias
+  * Tarjetas de avisos (VACACIONES/BAJA/FORMACION/PERMISO...) visibles en el calendario con
+    estilo rayado rojo, etiqueta M/T, motivo, profesional y sede; filtran por sedes/pros
+    seleccionados
+- UserView.tsx (accesos restringidos):
+  * filteredPlans aplica allowedPros/allowedSedes de la sesión
+  * diarioRows filtra por allowedSedes
+  * Mensual muestra indicador de nota + tooltip (si showNotes) y tarjetas de ausencias
+    (si showVacaciones), ambas respetando las restricciones
+- next build: ✓ Compiled successfully (8.3s). Commit 21ebe14 → push → deploy READY.
+- Verificación E2E (scripts/verify-access-features.mjs) contra producción:
+  1. julio1974@ → COMPANY_ADMIN, sesión con los 4 campos nuevos ✓
+  2. GET permissions: 10 profesionales ✓
+  3. Creado acceso de prueba AT (Alma) con contraseña alma5678, sedes "VITORIA,VIT MED.
+     ESTÉTICA", pros "AT,JM" → 200, hasPassword=true ✓
+  4. Login alma5678 → USER, sesión lleva allowedSedes/allowedPros exactos ✓
+  5. USER lee plan(56)/sedes(20)/avisos(11)/holidays/professionals → 200; PUT permissions
+     como USER → 403 ✓
+  6. Cleanup: acceso desactivado → contraseña alma5678 rechazada ✓
+  7. julio1974@ sigue entrando ✓
+
+Stage Summary:
+- Configuración de Accesos: cada profesional puede tener su PROPIA contraseña de entrada y
+  permisos específicos: pestañas (diario/mensual/sedes), edición, sedes visibles,
+  profesionales visibles, ver notas, ver vacaciones.
+- El login único por contraseña sigue igual: se teclea la contraseña del acceso y entra con
+  sus permisos (julio1974@ = admin con todo).
+- Mensual (admin): filtros nuevos TARJETAS (todas/solo con nota/sin nota) y VACACIONES
+  (mostrar/ocultar), además de los filtros de sedes y profesionales existentes. Las
+  tarjetas de vacaciones/ausencias ahora se ven en el calendario.
+- Los accesos restringidos ven el mensual/diario filtrados según sus permisos, sin notas
+  y/o sin vacaciones si así se configura.
+- Para crear un acceso: Configuración → Configuración de Accesos → desplegar un
+  profesional → activar "Puede iniciar sesión" → contraseña → elegir permisos → Guardar.
