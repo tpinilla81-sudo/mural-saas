@@ -8,11 +8,9 @@ import {
   norm,
   parseDateAnswer,
   parseListNumber,
-  parseReasonAnswer,
   parseTurnAnswer,
   parseYesNo,
   proLabel,
-  REASON_OPTIONS,
   shortDateLabel,
   turnPhrase,
   upcomingDays,
@@ -29,8 +27,10 @@ import {
 // NUMERADA EN PANTALLA y la app solo dice "elige número".
 // El conductor responde con el número ("dos", "el 3") — rápido,
 // fiable y sin escuchar listas largas por altavoz.
-// Flujo: día → sede → profesional → turno → motivo → nota →
+// Flujo: día → sede → profesional → turno → ¿nota? (sí/no) →
 // confirmación. Tras guardar: "¿Igual, nuevo o terminar?"
+// Sin MOTIVO: la tarjeta ya se identifica con profesional + sede
+// + día; si el conductor quiere detalle, dicta una nota libre.
 // ═══════════════════════════════════════════════════════════════
 
 // Web Speech API — typings mínimos
@@ -46,7 +46,7 @@ interface SRInstance {
 }
 type SRConstructor = new () => SRInstance;
 
-type Step = "date" | "sede" | "pro" | "turn" | "reason" | "note" | "noteText" | "confirm" | "saving" | "again";
+type Step = "date" | "sede" | "pro" | "turn" | "note" | "noteText" | "confirm" | "saving" | "again";
 
 interface ListItem { n: number; label: string; sub?: string }
 
@@ -62,7 +62,6 @@ interface Draft {
   sedeId: string;
   professionalId: string;
   turn: "M" | "T" | "ALL";
-  reason: string;
   note: string;
 }
 
@@ -76,8 +75,12 @@ interface HandsFreeOverlayProps {
 }
 
 const emptyDraft = (): Draft => ({
-  date: "", sedeId: "", professionalId: "", turn: "ALL", reason: "VACACIONES", note: "",
+  date: "", sedeId: "", professionalId: "", turn: "ALL", note: "",
 });
+
+// Sin pregunta de motivo: la tarjeta ya dice quién/dónde/cuándo.
+// Valor genérico que la app ya usa como fallback en todas las vistas.
+const DEFAULT_REASON = "AUSENCIA";
 
 const DATE_LIST_SIZE = 10;
 
@@ -244,8 +247,10 @@ export default function HandsFreeOverlay({
     { n: 2, label: "TARDE", sub: "turno T" },
     { n: 3, label: "TODO EL DÍA", sub: "mañana + tarde" },
   ];
-  const reasonOptions = (): ListItem[] =>
-    REASON_OPTIONS.map((r, i) => ({ n: i + 1, label: r }));
+  const noteOptions = (): ListItem[] => [
+    { n: 1, label: "SÍ", sub: "dictar una nota" },
+    { n: 2, label: "NO", sub: "guardar sin nota" },
+  ];
   const againOptions = (): ListItem[] => [
     { n: 1, label: "IGUAL", sub: "misma sede y profesional" },
     { n: 2, label: "NUEVO", sub: "empezar de cero" },
@@ -265,7 +270,6 @@ export default function HandsFreeOverlay({
         `en ${sedeName}`,
         `para ${proName}`,
         turnPhrase(d.turn),
-        d.reason.toLowerCase(),
         d.note ? `nota: ${d.note}` : "",
       ].filter(Boolean).join(", "),
       parts: [
@@ -273,7 +277,6 @@ export default function HandsFreeOverlay({
         sedeName,
         proName,
         turnPhrase(d.turn),
-        d.reason,
         d.note ? `📝 ${d.note}` : "",
       ].filter(Boolean),
     };
@@ -305,7 +308,7 @@ export default function HandsFreeOverlay({
             sedeId: d.sedeId,
             professionalId: d.professionalId || null,
             turn: t,
-            reason: d.reason,
+            reason: DEFAULT_REASON,
             note: d.note,
           }),
         });
@@ -370,10 +373,10 @@ export default function HandsFreeOverlay({
         const keep = skipSedeProTurnRef.current && draftRef.current.sedeId;
         skipSedeProTurnRef.current = false;
         if (keep) {
-          gotoRef.current("reason", {
-            title: "¿Motivo?",
-            say: "Motivo. Elige número.",
-            items: reasonOptions(),
+          gotoRef.current("note", {
+            title: "¿Quieres poner nota?",
+            say: "¿Quieres poner nota? Di sí o no.",
+            items: noteOptions(),
             echo: `El ${dateLabel(date)} · igual que antes`,
           });
           return;
@@ -442,49 +445,42 @@ export default function HandsFreeOverlay({
           return;
         }
         setDraftField({ turn });
-        gotoRef.current("reason", {
-          title: "¿Motivo?",
-          say: "Motivo. Elige número.",
-          items: reasonOptions(),
+        gotoRef.current("note", {
+          title: "¿Quieres poner nota?",
+          say: "¿Quieres poner nota? Di sí o no.",
+          items: noteOptions(),
           echo: turnPhrase(turn),
         });
         return;
       }
-      case "reason": {
-        const reason = parseReasonAnswer(raw);
-        if (!reason) {
-          gotoRef.current("reason", {
-            title: "¿Motivo?",
-            say: "No he entendido. Motivo: elige número.",
-            items: reasonOptions(),
-          });
+      case "note": {
+        // Estricto: solo sí o no (voz o número de lista). Nada de dictar aquí.
+        let yn = parseYesNo(raw);
+        if (yn === null) {
+          const n = parseListNumber(raw, 2);
+          yn = n === 1 ? true : n === 2 ? false : null;
+        }
+        if (yn === true) {
+          gotoRef.current("noteText", { title: "Di la nota", say: "Dime la nota." });
           return;
         }
-        setDraftField({ reason });
-        gotoRef.current("note", {
-          title: "¿Alguna nota?",
-          say: "Nota: di la nota ahora, o di: sin nota.",
-          echo: reason,
-        });
-        return;
-      }
-      case "note": {
-        const t = norm(raw);
-        if (parseYesNo(raw) === false || /\b(sin nota|salta|saltear|ninguna|sin)\b/.test(t)) {
+        if (yn === false) {
           setDraftField({ note: "" });
           askConfirm();
           return;
         }
-        if (parseYesNo(raw) === true) {
-          gotoRef.current("noteText", { title: "Di la nota", say: "Dime la nota." });
-          return;
-        }
-        setDraftField({ note: raw.replace(/^nota[:\s]+/i, "").trim() });
-        askConfirm();
+        gotoRef.current("note", {
+          title: "¿Quieres poner nota?",
+          say: "No he entendido. ¿Quieres poner nota? Di sí o no.",
+          items: noteOptions(),
+        });
         return;
       }
       case "noteText": {
-        setDraftField({ note: raw.replace(/^nota[:\s]+/i, "").trim() });
+        // Nota libre en un paso; «sin nota» por si se arrepiente
+        const t = norm(raw);
+        if (/\b(sin nota|ninguna nota|salta|saltear)\b/.test(t)) setDraftField({ note: "" });
+        else setDraftField({ note: raw.replace(/^nota[:\s]+/i, "").trim() });
         askConfirm();
         return;
       }
@@ -614,10 +610,9 @@ export default function HandsFreeOverlay({
     sede: "2 · SEDE",
     pro: "3 · PROFESIONAL",
     turn: "4 · TURNO",
-    reason: "5 · MOTIVO",
-    note: "6 · NOTA",
-    noteText: "6 · NOTA",
-    confirm: "7 · CONFIRMAR",
+    note: "5 · ¿NOTA?",
+    noteText: "5 · NOTA",
+    confirm: "6 · CONFIRMAR",
     saving: "GUARDANDO…",
     again: "¿OTRO AVISO?",
   };
@@ -730,18 +725,8 @@ export default function HandsFreeOverlay({
             </div>
           )}
 
-          {/* Nota: atajo táctil para saltar */}
-          {(step === "note") && (
-            <button
-              onClick={() => handlerRef.current("sin nota")}
-              className="shrink-0 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-300 font-black py-3 rounded-2xl text-base active:scale-95 transition"
-            >
-              ⤵ SIN NOTA (saltar)
-            </button>
-          )}
-
           {/* Borrador en curso */}
-          <div className="bg-slate-900/50 border border-slate-700 rounded-2xl px-4 py-2.5 grid grid-cols-3 sm:grid-cols-6 gap-2 text-center shrink-0">
+          <div className="bg-slate-900/50 border border-slate-700 rounded-2xl px-4 py-2.5 grid grid-cols-3 sm:grid-cols-5 gap-2 text-center shrink-0">
             <DraftCell label="Día" value={draft.date ? shortDateLabel(draft.date) : ""} />
             <DraftCell label="Sede" value={sedes.find(s => s.id === draft.sedeId)?.name || ""} />
             <DraftCell
@@ -753,7 +738,6 @@ export default function HandsFreeOverlay({
               }
             />
             <DraftCell label="Turno" value={draft.turn && draft.sedeId ? turnPhrase(draft.turn) : ""} />
-            <DraftCell label="Motivo" value={draft.reason} />
             <DraftCell label="Nota" value={draft.note} />
           </div>
 
