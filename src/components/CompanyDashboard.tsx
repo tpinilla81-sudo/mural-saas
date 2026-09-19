@@ -10,6 +10,7 @@ import MensualTab from "@/components/MensualTab";
 import CompanyProfileTab from "@/components/CompanyProfileTab";
 import ConfigTab from "@/components/ConfigTab";
 import { VoiceAvisoModal } from "@/components/VoiceAvisoButton";
+import HandsFreeOverlay from "@/components/HandsFreeOverlay";
 import { warmUpMic } from "@/lib/mic";
 
 type MainTab = "empresa" | "diario" | "config";
@@ -27,6 +28,7 @@ export default function CompanyDashboard() {
   // Los tabs internos cargan los suyos; estos alimentan los overlays globales.
   const [sedes, setSedes] = useState<SedeLike[]>([]);
   const [pros, setPros] = useState<ProLike[]>([]);
+  const [voiceCarOpen, setVoiceCarOpen] = useState(false);
   const [voicePcOpen, setVoicePcOpen] = useState(false);
 
   // ── MICRO: pedir permiso automáticamente AL ABRIR la app (una vez) ──
@@ -84,9 +86,17 @@ export default function CompanyDashboard() {
           </button>
         ))}
 
-        {/* ── Botón de voz global: a la derecha, resaltado — SOLO en la pestaña DIARIO ── */}
+        {/* ── Botones de voz globales: a la derecha, resaltados — SOLO en la pestaña DIARIO ── */}
         {tab === "diario" && (
         <div className="ml-auto flex gap-2 shrink-0 pl-2">
+          <button
+            onClick={() => setVoiceCarOpen(true)}
+            disabled={sedes.length === 0}
+            className="bg-gradient-to-b from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 disabled:opacity-40 text-black font-black px-3 sm:px-5 py-2 rounded-xl text-xs sm:text-base shadow-[0_0_18px_rgba(245,158,11,0.5)] active:scale-95 transition flex items-center gap-1.5 whitespace-nowrap"
+            title="Modo Coche: la app pregunta por voz y tú respondes sin tocar la pantalla"
+          >
+            🔊<span className="hidden sm:inline"> MODO COCHE</span><span className="sm:hidden"> Coche</span>
+          </button>
           <button
             onClick={() => setVoicePcOpen(true)}
             disabled={sedes.length === 0}
@@ -135,7 +145,17 @@ export default function CompanyDashboard() {
         )}
       </div>
 
-      {/* ── Overlay de voz global (abre desde cualquier pestaña) ── */}
+      {/* ── Overlays de voz globales (abren desde cualquier pestaña) ── */}
+      {voiceCarOpen && (
+        <HandsFreeOverlay
+          onClose={() => setVoiceCarOpen(false)}
+          onSaved={() => { /* los tabs recargan al montarse */ }}
+          sedes={sedes}
+          professionals={pros}
+          contextYear={now.getFullYear()}
+          contextMonth={now.getMonth()}
+        />
+      )}
       {voicePcOpen && (
         <VoiceAvisoModal
           onClose={() => setVoicePcOpen(false)}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import HandsFreeOverlay from "@/components/HandsFreeOverlay";
 import { warmUpMic, warmUpMicWithTimeout } from "@/lib/mic";
 
 // ═══════════════════════════════════════════════════════════
@@ -588,9 +589,9 @@ export default function VoiceAvisoButton({ sedes, professionals, onSaved, contex
 }
 
 // ═══════════════════════════════════════════════════════════
-// VoiceButtons — botón Modo PC (dictado libre con vista previa).
-// (El Modo Coche se retiró: la app ya se usa desde Android Auto / CarPlay.)
+// VoiceButtons — dos botones: Modo Coche (manos libres) + Modo PC
 // Para insertar en toolbars de Diario / Mensual / Permiso.
+// Funciona en móvil, tablet y PC (los dos modos disponibles).
 // ═══════════════════════════════════════════════════════════
 interface VoiceButtonsProps {
   sedes: SedeLike[];
@@ -602,18 +603,28 @@ interface VoiceButtonsProps {
 
 export function VoiceButtons({ sedes, professionals, onSaved, contextYear, contextMonth }: VoiceButtonsProps) {
   const [pcOpen, setPcOpen] = useState(false);
+  const [carOpen, setCarOpen] = useState(false);
 
-  const pcDisabled = sedes.length === 0;
+  const carDisabled = sedes.length === 0;
 
   return (
     <>
       <div className="flex gap-1.5 shrink-0">
-        {/* Modo PC: dictado libre con vista previa editable.
+        {/* Modo Coche: manos libres, la app pregunta y tú respondes.
             Al pulsar se activa el micro (permiso) — imprescindible en
             Android, donde SpeechRecognition sin permiso previo falla. */}
         <button
+          onClick={() => { void warmUpMic(); setCarOpen(true); }}
+          disabled={carDisabled}
+          className="bg-amber-600/90 hover:bg-amber-500 disabled:opacity-40 text-white font-black px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm transition shrink-0 flex items-center gap-1.5"
+          title="Modo Coche: la app pregunta por voz y tú respondes sin mirar la pantalla"
+        >
+          🔊<span className="hidden sm:inline"> Modo Coche</span><span className="sm:hidden"> Coche</span>
+        </button>
+        {/* Modo PC: dictado libre con vista previa editable */}
+        <button
           onClick={() => { void warmUpMic(); setPcOpen(true); }}
-          disabled={pcDisabled}
+          disabled={carDisabled}
           className="bg-[#2E5D3A] hover:bg-[#3a7a4c] disabled:opacity-40 text-white font-black px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm transition shrink-0 flex items-center gap-1.5"
           title="Modo PC: dices la frase entera en una vez y la app la analiza"
         >
@@ -624,6 +635,17 @@ export function VoiceButtons({ sedes, professionals, onSaved, contextYear, conte
       {pcOpen && (
         <VoiceAvisoModal
           onClose={() => setPcOpen(false)}
+          onSaved={onSaved}
+          sedes={sedes}
+          professionals={professionals}
+          contextYear={contextYear}
+          contextMonth={contextMonth}
+        />
+      )}
+
+      {carOpen && (
+        <HandsFreeOverlay
+          onClose={() => setCarOpen(false)}
           onSaved={onSaved}
           sedes={sedes}
           professionals={professionals}

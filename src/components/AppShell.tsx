@@ -77,6 +77,13 @@ export default function AppShell() {
               {role === "SUPER_ADMIN" ? "Super Admin" : role === "COMPANY_ADMIN" ? (session.user as any)?.companyName : "Usuario"}
             </div>
           </div>
+          <a
+            href="/coche"
+            className="bg-amber-500 hover:bg-amber-400 text-black px-3 py-2 rounded-lg text-sm font-black transition shadow-[0_0_14px_rgba(245,158,11,0.45)]"
+            title="Modo Coche: solo manos libres por seguridad (la app pregunta por voz y tú respondes)"
+          >
+            🚗
+          </a>
           <button
             onClick={() => signOut()}
             className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-sm font-bold transition"
@@ -108,6 +115,13 @@ export default function AppShell() {
               {role === "SUPER_ADMIN" ? "Super Admin" : role === "COMPANY_ADMIN" ? (session.user as any)?.companyName : "Usuario"}
             </div>
           </div>
+          <a
+            href="/coche"
+            onClick={() => setMenuOpen(false)}
+            className="block text-center w-full bg-[#2E5D3A]/30 border border-[#6BBE7A]/50 hover:bg-[#2E5D3A] text-[#6BBE7A] hover:text-white font-bold py-2 rounded-lg text-sm transition"
+          >
+            🚗 Modo coche
+          </a>
           <button
             onClick={() => { signOut(); setMenuOpen(false); }}
             className="w-full bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white font-bold py-2 rounded-lg text-sm transition"
