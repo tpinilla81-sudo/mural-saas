@@ -3,6 +3,7 @@
 import { SessionProvider, useSession } from "next-auth/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { VoiceAvisoModal } from "@/components/VoiceAvisoButton";
+import HandsFreeOverlay from "@/components/HandsFreeOverlay";
 
 // ═══════════════════════════════════════════════════════════════
 // MODO COCHE — pantalla para móvil/tablet en el soporte del coche
@@ -36,6 +37,7 @@ function CarScreen() {
   const [pros, setPros] = useState<{ id: string; alias: string; firstName: string; lastName: string }[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
+  const [handsFreeOpen, setHandsFreeOpen] = useState(false);
   const [now, setNow] = useState<Date | null>(null);
 
   const wakeRef = useRef<{ release: () => Promise<void> } | null>(null);
@@ -175,6 +177,21 @@ function CarScreen() {
               Pulsa y di: «el día 15 en Vitoria, Julio, vacaciones, nota: se va de viaje»
             </p>
           </div>
+
+          {/* Manos libres: diálogo 100% por voz, sin tocar la pantalla */}
+          <div className="flex flex-col items-center gap-1">
+            <button
+              onClick={() => setHandsFreeOpen(true)}
+              disabled={!loaded || sedes.length === 0}
+              className="w-64 max-w-full bg-slate-900/70 border-2 border-[#6BBE7A] text-[#6BBE7A] hover:bg-[#2E5D3A]/40 active:scale-[0.98] disabled:opacity-40 font-black py-3 rounded-2xl text-lg shadow-lg transition"
+              title="Diálogo por voz: la app pregunta y tú contestas hablando"
+            >
+              🔊 MANOS LIBRES
+            </button>
+            <p className="text-[10px] sm:text-xs text-slate-500 font-bold text-center max-w-[16rem]">
+              Para conducir: la app pregunta por voz y tú solo hablas
+            </p>
+          </div>
         </section>
 
         {/* Columna derecha: avisos de hoy */}
@@ -250,6 +267,17 @@ function CarScreen() {
       {voiceOpen && (
         <VoiceAvisoModal
           onClose={() => setVoiceOpen(false)}
+          onSaved={load}
+          sedes={sedes}
+          professionals={pros}
+          contextYear={current.getFullYear()}
+          contextMonth={current.getMonth()}
+        />
+      )}
+
+      {handsFreeOpen && (
+        <HandsFreeOverlay
+          onClose={() => setHandsFreeOpen(false)}
           onSaved={load}
           sedes={sedes}
           professionals={pros}
