@@ -29,6 +29,20 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     return NextResponse.json(plan);
   }
 
+  // Move card to another day (drag & drop o botón MOVER)
+  if (body.date !== undefined) {
+    const date = String(body.date);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return NextResponse.json({ error: "Fecha inválida" }, { status: 400 });
+    }
+    const existing = await db.plan.findUnique({ where: { id }, select: { companyId: true } });
+    if (!existing || existing.companyId !== user!.companyId) {
+      return NextResponse.json({ error: "No encontrado" }, { status: 404 });
+    }
+    const plan = await db.plan.update({ where: { id }, data: { date } });
+    return NextResponse.json(plan);
+  }
+
   return NextResponse.json({ error: "Sin cambios" }, { status: 400 });
 }
 

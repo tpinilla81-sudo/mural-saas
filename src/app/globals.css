@@ -233,3 +233,12 @@ html[data-brand="1"] .bg-\[\#6BBE7A\] { background-color: color-mix(in srgb, var
 html[data-brand="1"] .border-\[\#6BBE7A\] { border-color: var(--brand) !important; }
 html[data-brand="1"] .from-\[\#3a7a4c\] { --tw-gradient-from: var(--brand) !important; }
 html[data-brand="1"] .to-\[\#2E5D3A\] { --tw-gradient-to: var(--brand) !important; }
+
+/* ─────────────────────────────────────────────────────────────
+   Tipografía auto-ajustable (móvil / tablet / PC): las letras
+   escalan con el ancho de pantalla para NO superponerse.
+   .auto-text → tarjetas y celdas del calendario mensual
+   .auto-dow  → cabecera de días de la semana
+   ───────────────────────────────────────────────────────────── */
+.auto-text { font-size: clamp(8.5px, 0.55vw + 6.5px, 11px); }
+.auto-dow  { font-size: clamp(7px, 0.42vw + 5.2px, 11px); letter-spacing: 0.02em; }

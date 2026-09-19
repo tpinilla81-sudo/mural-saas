@@ -2,9 +2,6 @@
 
 import { useState, useEffect, useRef } from "react";
 
-const AVISO_REASONS = ["BAJA", "FORMACION", "PERMISO", "VACACIONES"] as const;
-type AvisoReason = (typeof AVISO_REASONS)[number];
-
 interface PlanEntry {
   id: string;
   sedeId: string;
@@ -51,19 +48,27 @@ export default function MensualTab() {
 
   // Aviso note editor modal (click on an aviso card)
   const [avisoNoteModal, setAvisoNoteModal] = useState<{ avisoId: string; sedeName: string; proName: string; date: string; turn: string; reason: string } | null>(null);
+  // Fecha destino para MOVER tarjetas a otro día
+  const [planMoveDate, setPlanMoveDate] = useState("");
+  const [avisoMoveDate, setAvisoMoveDate] = useState("");
 
-  // ── Añadir en Mensual: programar turno (plan) o crear aviso (tarjeta) ──
+  // ── Añadir en Mensual: programar turno (el aviso/ausencia se retiró) ──
   const [addModal, setAddModal] = useState<{ date: string } | null>(null);
-  const [addKind, setAddKind] = useState<"" | "plan" | "aviso">("");
   const [addSede, setAddSede] = useState("");
   const [addTurn, setAddTurn] = useState<"MANANA" | "TARDE">("MANANA");
-  const [addPro, setAddPro] = useState("");            // alias (plan)
-  const [addAvisoPro, setAddAvisoPro] = useState("");  // id (aviso)
-  const [addReason, setAddReason] = useState<AvisoReason>("VACACIONES");
-  const [addDates, setAddDates] = useState<string[]>([]);
-  const [addExtraDate, setAddExtraDate] = useState("");
-  const [addNote, setAddNote] = useState("");
+  const [addPro, setAddPro] = useState("");            // alias
   const [addSaving, setAddSaving] = useState(false);
+
+  // ── Compacto por JS (max-width 959px, NO por breakpoint sm:): así, al girar
+  // el móvil a horizontal, los filtros NO se despliegan solos ──
+  const [isCompact, setIsCompact] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 959px)");
+    const apply = () => setIsCompact(mq.matches);
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
 
   // ── Month navigation: swipe táctil + flechas ‹ › ──
   const [slideDir, setSlideDir] = useState<"" | "next" | "prev">("");
@@ -120,6 +125,7 @@ export default function MensualTab() {
 
   const MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
   const DOW_HEADER = ["LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERNES", "SÁBADO", "DOMINGO"];
+  const DOW_SHORT = ["L", "M", "X", "J", "V", "S", "D"];
 
   const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   const isWE = (d: Date) => d.getDay() === 0 || d.getDay() === 6;
@@ -155,6 +161,7 @@ export default function MensualTab() {
       turn: plan.turn,
     });
     setNoteText(plan.notes || "");
+    setPlanMoveDate(plan.date);
   };
 
   const closeNoteEditor = () => {
@@ -200,6 +207,7 @@ export default function MensualTab() {
       reason: (a.reason || "AUSENCIA").toUpperCase(),
     });
     setNoteText(a.note || "");
+    setAvisoMoveDate(a.date);
   };
 
   const saveAvisoNote = async () => {
@@ -242,24 +250,12 @@ export default function MensualTab() {
 
   const filteredSedes = sedes.filter(s => selectedSedes.has(s.id));
 
-  // ── Añadir en Mensual (turno / aviso) ──
+  // ── Añadir en Mensual (turno): el diálogo se abre directo en el formulario ──
   const openAddDialog = (date: string) => {
     setAddModal({ date });
-    setAddKind("");
     setAddSede(filteredSedes[0]?.id || sedes[0]?.id || "");
     setAddTurn("MANANA");
     setAddPro("");
-    setAddAvisoPro("");
-    setAddReason("VACACIONES");
-    setAddDates([date]);
-    setAddExtraDate("");
-    setAddNote("");
-  };
-
-  const chipExtra = (d: string) => {
-    if (!d || addDates.includes(d)) return;
-    setAddDates(ds => [...ds, d].sort());
-    setAddExtraDate("");
   };
 
   const savePlanAdd = async () => {
@@ -284,34 +280,77 @@ export default function MensualTab() {
     }
   };
 
-  const saveAvisoAdd = async () => {
-    if (!addModal || !addSede || addDates.length === 0) return;
-    setAddSaving(true);
+  // ── Borrar / mover TARJETAS (turnos y avisos) — con mensaje de confirmación ──
+  const deletePlan = async () => {
+    if (!noteModal) return;
+    if (!confirm(`¿Borrar el turno de ${noteModal.proName} en ${noteModal.sedeName} (${formatDateLabel(noteModal.date)})?`)) return;
     try {
-      let failed = 0;
-      for (const d of addDates) {
-        const res = await fetch("/api/company/avisos", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            date: d,
-            sedeId: addSede,
-            turn: addTurn === "MANANA" ? "M" : "T",
-            professionalId: addAvisoPro || null,
-            reason: addReason,
-            note: addNote,
-          }),
-        });
-        if (!res.ok) failed++;
-      }
-      if (failed > 0) alert(`No se pudieron guardar ${failed} aviso(s).`);
-      setAddModal(null);
-      await load();
-    } catch {
-      alert("Error de red al guardar el aviso.");
-    } finally {
-      setAddSaving(false);
-    }
+      const res = await fetch(`/api/company/plan/${noteModal.planId}`, { method: "DELETE" });
+      if (res.ok) {
+        setPlans(prev => prev.filter(p => p.id !== noteModal.planId));
+        closeNoteEditor();
+      } else alert("No se pudo borrar el turno.");
+    } catch { alert("Error de red al borrar el turno."); }
+  };
+
+  const movePlan = async () => {
+    if (!noteModal || !planMoveDate || planMoveDate === noteModal.date) return;
+    try {
+      const res = await fetch(`/api/company/plan/${noteModal.planId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: planMoveDate }),
+      });
+      if (res.ok) { closeNoteEditor(); await load(); }
+      else alert("No se pudo mover el turno.");
+    } catch { alert("Error de red al mover el turno."); }
+  };
+
+  const deleteAviso = async () => {
+    if (!avisoNoteModal) return;
+    if (!confirm(`¿Borrar el aviso de ${avisoNoteModal.reason} (${formatDateLabel(avisoNoteModal.date)})?`)) return;
+    try {
+      const res = await fetch(`/api/company/avisos/${avisoNoteModal.avisoId}`, { method: "DELETE" });
+      if (res.ok) {
+        setAvisos(prev => prev.filter(a => a.id !== avisoNoteModal.avisoId));
+        setAvisoNoteModal(null);
+        setNoteText("");
+      } else alert("No se pudo borrar el aviso.");
+    } catch { alert("Error de red al borrar el aviso."); }
+  };
+
+  const moveAviso = async () => {
+    if (!avisoNoteModal || !avisoMoveDate || avisoMoveDate === avisoNoteModal.date) return;
+    try {
+      const res = await fetch(`/api/company/avisos/${avisoNoteModal.avisoId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: avisoMoveDate }),
+      });
+      if (res.ok) { setAvisoNoteModal(null); setNoteText(""); await load(); }
+      else alert("No se pudo mover el aviso.");
+    } catch { alert("Error de red al mover el aviso."); }
+  };
+
+  // ── Mover tarjeta ARRASTRANDO a otro día (PC: drag & drop) ──
+  const handleDrop = async (e: React.DragEvent, targetDate: string) => {
+    let data: { kind?: string; id?: string } = {};
+    try { data = JSON.parse(e.dataTransfer.getData("text/plain") || "{}"); } catch { return; }
+    if (!data?.id || !data?.kind) return;
+    const isPlan = data.kind === "plan";
+    const card: PlanEntry | AvisoEntry | undefined = isPlan
+      ? plans.find(p => p.id === data.id)
+      : avisos.find(a => a.id === data.id);
+    if (!card || card.date === targetDate) return;
+    try {
+      const res = await fetch(isPlan ? `/api/company/plan/${data.id}` : `/api/company/avisos/${data.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: targetDate }),
+      });
+      if (res.ok) await load();
+      else alert("No se pudo mover la tarjeta.");
+    } catch { alert("Error de red al mover la tarjeta."); }
   };
 
   const cells: React.ReactNode[] = [];
@@ -341,13 +380,15 @@ export default function MensualTab() {
         // Truncate tooltip preview
         const tooltipLines = [
           `${sede.name} / ${sede.task} · ${p.turn === "MANANA" ? "Mañana" : "Tarde"} · ${nombre}`,
-          hasNote ? `📝 ${notePreview.length > 200 ? notePreview.slice(0, 200) + "…" : notePreview}` : "Click para añadir nota",
+          hasNote ? `📝 ${notePreview.length > 200 ? notePreview.slice(0, 200) + "…" : notePreview}` : "Click: nota · mover · borrar",
         ].join("\n");
         assigns.push(
           <div
             key={p.id}
             onClick={(e) => { e.stopPropagation(); openNoteEditor(p, sede, nombre); }}
-            className="text-[9px] px-1 py-0.5 rounded font-bold leading-tight border border-black/10 break-words cursor-pointer hover:ring-2 hover:ring-amber-500 hover:ring-offset-0 transition relative"
+            draggable
+            onDragStart={(e) => { e.dataTransfer.setData("text/plain", JSON.stringify({ kind: "plan", id: p.id })); e.dataTransfer.effectAllowed = "move"; }}
+            className="text-[1em] px-1 py-0.5 rounded font-bold leading-tight border border-black/10 break-words cursor-pointer hover:ring-2 hover:ring-amber-500 hover:ring-offset-0 transition relative"
             style={{ background: sede.color, color: textColorFor(sede.color) }}
             title={tooltipLines}
           >
@@ -383,14 +424,16 @@ export default function MensualTab() {
           <div
             key={`av-${a.id}`}
             onClick={(e) => { e.stopPropagation(); openAvisoNoteEditor(a); }}
-            className="text-[9px] px-1 py-0.5 rounded font-bold leading-tight border border-red-900/40 break-words cursor-pointer hover:ring-2 hover:ring-red-500 hover:ring-offset-0 transition relative"
+            draggable
+            onDragStart={(e) => { e.dataTransfer.setData("text/plain", JSON.stringify({ kind: "aviso", id: a.id })); e.dataTransfer.effectAllowed = "move"; }}
+            className="text-[1em] px-1 py-0.5 rounded font-bold leading-tight border border-red-900/40 break-words cursor-pointer hover:ring-2 hover:ring-red-500 hover:ring-offset-0 transition relative"
             style={{
               background: "repeating-linear-gradient(45deg, #fee2e2, #fee2e2 5px, #fecaca 5px, #fecaca 10px)",
               color: "#7f1d1d",
             }}
             title={[
               `${reason}${proName ? ` · ${proName}` : ""}${sede ? ` · ${sede.name}` : ""}${a.turn ? ` · ${a.turn === "M" ? "Mañana" : "Tarde"}` : ""}`,
-              hasNote ? `📝 ${notePreview.length > 200 ? notePreview.slice(0, 200) + "…" : notePreview}` : "Click para añadir nota al aviso",
+              hasNote ? `📝 ${notePreview.length > 200 ? notePreview.slice(0, 200) + "…" : notePreview}` : "Click: nota · mover · borrar el aviso",
             ].join("\n")}
           >
             {turnLabel && <span className="inline-block font-black px-0.5 mr-0.5 bg-red-900 text-white rounded-[2px]">{turnLabel}</span>}
@@ -410,20 +453,25 @@ export default function MensualTab() {
 
     const tdClass = fest ? "bg-red-100" : we ? "bg-purple-50" : "bg-gray-50";
     cells.push(
-      <td key={day} className={`border border-gray-300 h-[110px] p-1 align-top ${tdClass}`}>
+      <td
+        key={day}
+        className={`border border-gray-300 h-auto min-h-[96px] sm:min-h-[110px] p-1 align-top ${tdClass}`}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => { e.preventDefault(); handleDrop(e, f); }}
+      >
         <div className="font-black text-[13px] text-gray-900 flex justify-between items-center gap-1">
           <span>{day}</span>
           <div className="flex items-center gap-1 min-w-0">
-            {fest && <span className="text-[8px] font-black bg-red-700 text-white px-1 py-0.5 rounded truncate">FESTIVO · {festProvs.join(", ")}</span>}
+            {fest && <span className="text-[8px] font-black bg-red-700 text-white px-1 py-0.5 rounded truncate max-w-[70px] sm:max-w-none">FESTIVO · {festProvs.join(", ")}</span>}
             <button
               onClick={(e) => { e.stopPropagation(); openAddDialog(f); }}
               className="no-print shrink-0 h-5 w-5 rounded-full bg-gray-900 text-white text-[13px] font-black leading-none items-center justify-center hover:bg-amber-500 hover:text-black active:scale-90 transition hidden sm:flex"
-              title="Añadir turno (programar) o aviso de ausencia este día"
+              title="Programar turno este día"
             >+</button>
             <button
               onClick={(e) => { e.stopPropagation(); openAddDialog(f); }}
               className="no-print sm:hidden shrink-0 h-6 w-6 rounded-full bg-gray-900 text-white text-sm font-black leading-none flex items-center justify-center active:scale-90 transition"
-              title="Añadir turno o aviso este día"
+              title="Programar turno este día"
             >+</button>
           </div>
         </div>
@@ -440,8 +488,9 @@ export default function MensualTab() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-2 sm:p-3 mb-2 sm:mb-3 shrink-0 no-print">
-        {/* Barra compacta (móvil): mes + filtros desplegables — deja ver las tarjetas */}
-        <div className="sm:hidden flex items-center gap-2">
+        {/* Barra compacta (móvil/tablet ≤959px, controlada por JS): mes + filtros desplegables.
+            Al girar el móvil a horizontal NO se despliegan solos. */}
+        <div className={`${isCompact ? "flex" : "hidden"} items-center gap-2`}>
           <button onClick={() => goMonth(-1)} className="h-9 w-9 shrink-0 rounded-full bg-slate-900 border border-slate-600 text-white text-lg font-black flex items-center justify-center active:scale-90 transition" title="Mes anterior">‹</button>
           <div className="flex-1 text-center font-black text-white text-sm truncate">{MESES[month].toUpperCase()} {year}</div>
           <button onClick={() => goMonth(1)} className="h-9 w-9 shrink-0 rounded-full bg-slate-900 border border-slate-600 text-white text-lg font-black flex items-center justify-center active:scale-90 transition" title="Mes siguiente">›</button>
@@ -450,8 +499,8 @@ export default function MensualTab() {
           </button>
         </div>
 
-        {/* Filtros: ocultos en móvil hasta pulsar ⚙️ FILTROS; siempre visibles en PC */}
-        <div className={`${filtersOpen ? "flex" : "hidden"} sm:flex gap-2 sm:gap-3 items-end flex-wrap ${filtersOpen ? "mt-3" : ""}`}>
+        {/* Filtros: ocultos hasta pulsar ⚙️ FILTROS (móvil/tablet); siempre visibles en PC */}
+        <div className={`${isCompact ? (filtersOpen ? "flex" : "hidden") : "flex"} gap-2 sm:gap-3 items-end flex-wrap ${filtersOpen && isCompact ? "mt-3" : ""}`}>
         <div>
           <label className="block text-xs font-extrabold text-blue-400 uppercase mb-1">AÑO</label>
           <select value={year} onChange={e => setYear(parseInt(e.target.value))} className="w-20 sm:w-24 px-2 py-1.5 sm:py-2 bg-slate-900 border border-slate-600 rounded text-white text-xs">
@@ -554,17 +603,20 @@ export default function MensualTab() {
               title="Mes siguiente (desliza a la izquierda)"
             >›</button>
           </div>
-          <span className="text-[10px] text-gray-500 font-bold hidden sm:block">+ en cada día: añadir turno o aviso · click en tarjeta: nota</span>
+          <span className="text-[10px] text-gray-500 font-bold hidden sm:block">+ en cada día: programar turno · click en tarjeta: nota, mover o borrar · arrastra a otro día</span>
         </div>
         <div className="sm:hidden text-center text-[10px] text-gray-400 font-bold mb-2 no-print">
           Desliza el dedo ‹ › para cambiar de mes
         </div>
         <div key={`${year}-${month}`} className={slideDir === "next" ? "month-anim-next" : slideDir === "prev" ? "month-anim-prev" : ""}>
-        <table className="w-full border-collapse table-fixed">
+        <table className="w-full border-collapse table-fixed auto-text">
           <thead>
             <tr>
               {DOW_HEADER.map((d, i) => (
-                <th key={i} className={`py-2 text-[11px] font-bold text-center border border-gray-900 ${i >= 5 ? "bg-purple-900" : "bg-gray-900"}`} style={{ color: "#fff" }}>{d}</th>
+                <th key={i} className={`py-1.5 sm:py-2 auto-dow font-bold text-center border border-gray-900 ${i >= 5 ? "bg-purple-900" : "bg-gray-900"}`} style={{ color: "#fff" }}>
+                  <span className="sm:hidden">{DOW_SHORT[i]}</span>
+                  <span className="hidden sm:inline">{d}</span>
+                </th>
               ))}
             </tr>
           </thead>
@@ -612,7 +664,22 @@ export default function MensualTab() {
                 )}
               </div>
             </div>
+            <div>
+              <label className="block text-[11px] font-extrabold text-gray-700 uppercase mb-1.5">MOVER A OTRO DÍA</label>
+              <div className="flex gap-2">
+                <input type="date" value={avisoMoveDate} onChange={e => setAvisoMoveDate(e.target.value)} className="flex-1 px-2 py-2 bg-gray-50 border-2 border-gray-300 focus:border-amber-500 rounded-lg text-sm text-gray-900" />
+                <button onClick={moveAviso} disabled={noteSaving || !avisoMoveDate || avisoMoveDate === avisoNoteModal.date}
+                  className="px-3 py-2 bg-gray-900 hover:bg-black disabled:opacity-40 text-white rounded-lg font-bold text-xs transition whitespace-nowrap"
+                  title="Mover esta tarjeta de aviso al día elegido">→ MOVER</button>
+              </div>
+            </div>
             <div className="flex gap-2 pt-2">
+              <button
+                onClick={deleteAviso}
+                disabled={noteSaving}
+                className="flex-1 py-2 px-4 bg-red-600 hover:bg-red-700 text-white rounded-lg font-black text-sm transition disabled:opacity-50"
+                title="Borrar esta tarjeta de aviso"
+              >🗑 BORRAR</button>
               <button
                 onClick={() => { setAvisoNoteModal(null); setNoteText(""); }}
                 disabled={noteSaving}
@@ -668,7 +735,22 @@ export default function MensualTab() {
                 )}
               </div>
             </div>
+            <div>
+              <label className="block text-[11px] font-extrabold text-gray-700 uppercase mb-1.5">MOVER A OTRO DÍA</label>
+              <div className="flex gap-2">
+                <input type="date" value={planMoveDate} onChange={e => setPlanMoveDate(e.target.value)} className="flex-1 px-2 py-2 bg-gray-50 border-2 border-gray-300 focus:border-amber-500 rounded-lg text-sm text-gray-900" />
+                <button onClick={movePlan} disabled={noteSaving || !planMoveDate || planMoveDate === noteModal.date}
+                  className="px-3 py-2 bg-gray-900 hover:bg-black disabled:opacity-40 text-white rounded-lg font-bold text-xs transition whitespace-nowrap"
+                  title="Mover esta tarjeta de turno al día elegido">→ MOVER</button>
+              </div>
+            </div>
             <div className="flex gap-2 pt-2">
+              <button
+                onClick={deletePlan}
+                disabled={noteSaving}
+                className="flex-1 py-2 px-4 bg-red-600 hover:bg-red-700 text-white rounded-lg font-black text-sm transition disabled:opacity-50"
+                title="Borrar esta tarjeta de turno"
+              >🗑 BORRAR</button>
               <button
                 onClick={closeNoteEditor}
                 disabled={noteSaving}
@@ -694,133 +776,36 @@ export default function MensualTab() {
             className="bg-white border-2 border-gray-900 rounded-xl p-4 sm:p-6 w-full max-w-md space-y-4 shadow-2xl max-h-[92vh] overflow-y-auto"
             onClick={e => e.stopPropagation()}
           >
-            {!addKind ? (
-              <>
-                <div className="border-b-2 border-gray-900 pb-2">
-                  <h3 className="text-gray-900 font-black text-lg">Añadir · {formatDateLabel(addModal.date)}</h3>
-                  <p className="text-[11px] text-gray-600 font-bold uppercase tracking-wide">¿Qué quieres añadir este día?</p>
+            <div className="border-b-2 border-gray-900 pb-2">
+              <h3 className="text-gray-900 font-black text-lg">👷 Programar turno</h3>
+              <p className="text-[11px] text-gray-600 font-bold uppercase tracking-wide">{formatDateLabel(addModal.date)}</p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] font-extrabold text-gray-700 uppercase mb-1.5">SEDE</label>
+                <select value={addSede} onChange={e => setAddSede(e.target.value)} className="w-full px-2 py-2 bg-gray-50 border-2 border-gray-300 focus:border-amber-500 rounded-lg text-sm text-gray-900">
+                  {sedes.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[11px] font-extrabold text-gray-700 uppercase mb-1.5">TURNO</label>
+                <div className="flex gap-1.5">
+                  <button onClick={() => setAddTurn("MANANA")} className={`flex-1 py-2 rounded-lg font-bold text-xs border transition ${addTurn === "MANANA" ? "bg-gray-900 text-white border-gray-900" : "bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200"}`}>Mañana</button>
+                  <button onClick={() => setAddTurn("TARDE")} className={`flex-1 py-2 rounded-lg font-bold text-xs border transition ${addTurn === "TARDE" ? "bg-gray-900 text-white border-gray-900" : "bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200"}`}>Tarde</button>
                 </div>
-                <button
-                  onClick={() => setAddKind("plan")}
-                  className="w-full py-3.5 px-4 bg-gray-900 hover:bg-black text-white rounded-lg font-black text-sm text-left transition"
-                >
-                  👷 PROGRAMAR TURNO
-                  <span className="block text-[10px] font-bold text-gray-300 mt-0.5">Poner un profesional en una sede (mañana o tarde)</span>
-                </button>
-                <button
-                  onClick={() => setAddKind("aviso")}
-                  className="w-full py-3.5 px-4 bg-red-900 hover:bg-red-800 text-white rounded-lg font-black text-sm text-left transition"
-                >
-                  🏖 AVISO / AUSENCIA
-                  <span className="block text-[10px] font-bold text-red-200 mt-0.5">Tarjeta de vacaciones, baja, formación o permiso</span>
-                </button>
-                <button
-                  onClick={() => setAddModal(null)}
-                  className="w-full py-2 px-4 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg font-bold text-sm transition"
-                >Cancelar</button>
-              </>
-            ) : addKind === "plan" ? (
-              <>
-                <div className="border-b-2 border-gray-900 pb-2">
-                  <h3 className="text-gray-900 font-black text-lg">👷 Programar turno</h3>
-                  <p className="text-[11px] text-gray-600 font-bold uppercase tracking-wide">{formatDateLabel(addModal.date)}</p>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-extrabold text-gray-700 uppercase mb-1.5">SEDE</label>
-                    <select value={addSede} onChange={e => setAddSede(e.target.value)} className="w-full px-2 py-2 bg-gray-50 border-2 border-gray-300 focus:border-amber-500 rounded-lg text-sm text-gray-900">
-                      {sedes.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-extrabold text-gray-700 uppercase mb-1.5">TURNO</label>
-                    <div className="flex gap-1.5">
-                      <button onClick={() => setAddTurn("MANANA")} className={`flex-1 py-2 rounded-lg font-bold text-xs border transition ${addTurn === "MANANA" ? "bg-gray-900 text-white border-gray-900" : "bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200"}`}>Mañana</button>
-                      <button onClick={() => setAddTurn("TARDE")} className={`flex-1 py-2 rounded-lg font-bold text-xs border transition ${addTurn === "TARDE" ? "bg-gray-900 text-white border-gray-900" : "bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200"}`}>Tarde</button>
-                    </div>
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-[11px] font-extrabold text-gray-700 uppercase mb-1.5">PROFESIONAL</label>
-                  <select value={addPro} onChange={e => setAddPro(e.target.value)} className="w-full px-2 py-2 bg-gray-50 border-2 border-gray-300 focus:border-amber-500 rounded-lg text-sm text-gray-900">
-                    <option value="">— Selecciona —</option>
-                    {professionals.map(p => <option key={p.id} value={p.alias}>{p.alias} - {p.firstName} {p.lastName}</option>)}
-                  </select>
-                </div>
-                <div className="flex gap-2 pt-2">
-                  <button onClick={() => setAddKind("")} disabled={addSaving} className="flex-1 py-2 px-4 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg font-bold text-sm transition disabled:opacity-50">Atrás</button>
-                  <button onClick={savePlanAdd} disabled={addSaving || !addSede || !addPro} className="flex-1 py-2 px-4 bg-gray-900 hover:bg-black text-white rounded-lg font-bold text-sm transition disabled:opacity-50">{addSaving ? "Guardando…" : "Añadir turno"}</button>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="border-b-2 border-red-900 pb-2">
-                  <h3 className="text-gray-900 font-black text-lg">🏖 Aviso / Ausencia</h3>
-                  <p className="text-[11px] text-gray-600 font-bold uppercase tracking-wide">{formatDateLabel(addModal.date)}</p>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-extrabold text-gray-700 uppercase mb-1.5">SEDE</label>
-                    <select value={addSede} onChange={e => setAddSede(e.target.value)} className="w-full px-2 py-2 bg-gray-50 border-2 border-gray-300 focus:border-amber-500 rounded-lg text-sm text-gray-900">
-                      {sedes.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-extrabold text-gray-700 uppercase mb-1.5">TURNO</label>
-                    <div className="flex gap-1.5">
-                      <button onClick={() => setAddTurn("MANANA")} className={`flex-1 py-2 rounded-lg font-bold text-xs border transition ${addTurn === "MANANA" ? "bg-red-900 text-white border-red-900" : "bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200"}`}>Mañana</button>
-                      <button onClick={() => setAddTurn("TARDE")} className={`flex-1 py-2 rounded-lg font-bold text-xs border transition ${addTurn === "TARDE" ? "bg-red-900 text-white border-red-900" : "bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200"}`}>Tarde</button>
-                    </div>
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-[11px] font-extrabold text-gray-700 uppercase mb-1.5">PROFESIONAL (opcional)</label>
-                  <select value={addAvisoPro} onChange={e => setAddAvisoPro(e.target.value)} className="w-full px-2 py-2 bg-gray-50 border-2 border-gray-300 focus:border-amber-500 rounded-lg text-sm text-gray-900">
-                    <option value="">Sin profesional (cierre de sede)</option>
-                    {professionals.map(p => <option key={p.id} value={p.id}>{p.alias} - {p.firstName}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[11px] font-extrabold text-gray-700 uppercase mb-1.5">MOTIVO</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {AVISO_REASONS.map(r => (
-                      <button
-                        key={r}
-                        onClick={() => setAddReason(r)}
-                        className={`py-2 px-3 rounded-lg font-bold text-xs transition border ${addReason === r ? "bg-red-900 text-white border-red-900 scale-105" : "bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200"}`}
-                      >{r}</button>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-[11px] font-extrabold text-gray-700 uppercase mb-1.5">FECHAS ({addDates.length}) — toca la ✕ para quitar</label>
-                  <div className="flex flex-wrap gap-1.5 mb-2">
-                    {addDates.map(d => (
-                      <span key={d} className="inline-flex items-center gap-1 bg-gray-900 border border-gray-700 rounded-lg pl-2 pr-1 py-1 text-white text-xs font-bold">
-                        {d}
-                        {addDates.length > 1 && (
-                          <button onClick={() => setAddDates(ds => ds.filter(x => x !== d))} className="text-red-300 hover:text-red-400 w-4 h-4 rounded-full bg-gray-700 text-[10px] leading-none">✕</button>
-                        )}
-                      </span>
-                    ))}
-                  </div>
-                  <div className="flex gap-1.5 items-center flex-wrap">
-                    <input type="date" value={addExtraDate} onChange={e => setAddExtraDate(e.target.value)} className="px-2 py-1.5 bg-gray-50 border-2 border-gray-300 focus:border-amber-500 rounded-lg text-sm text-gray-900" />
-                    <button onClick={() => chipExtra(addExtraDate)} disabled={!addExtraDate} className="bg-[#2E5D3A] hover:bg-[#3a7a4c] disabled:opacity-40 text-white text-xs font-bold px-2.5 py-1.5 rounded-lg transition">+ Añadir</button>
-                    <button onClick={() => { const lastD = addDates[addDates.length - 1]; if (!lastD) return; const nd = new Date(lastD + "T00:00:00"); nd.setDate(nd.getDate() + 1); chipExtra(fmt(nd)); }} className="bg-gray-200 hover:bg-gray-300 text-gray-800 text-xs font-bold px-2.5 py-1.5 rounded-lg transition" title="Añadir el día siguiente">+1 día</button>
-                    <button onClick={() => { const lastD = addDates[addDates.length - 1]; if (!lastD) return; const nd = new Date(lastD + "T00:00:00"); nd.setDate(nd.getDate() + 7); chipExtra(fmt(nd)); }} className="bg-gray-200 hover:bg-gray-300 text-gray-800 text-xs font-bold px-2.5 py-1.5 rounded-lg transition" title="Añadir el mismo día de la semana próxima">+7 días</button>
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-[11px] font-extrabold text-gray-700 uppercase mb-1.5">NOTA (opcional)</label>
-                  <input value={addNote} onChange={e => setAddNote(e.target.value)} placeholder="p. ej. vuelve el lunes" className="w-full px-3 py-2 bg-gray-50 border-2 border-gray-300 focus:border-amber-500 rounded-lg text-sm text-gray-900" />
-                </div>
-                <div className="flex gap-2 pt-2">
-                  <button onClick={() => setAddKind("")} disabled={addSaving} className="flex-1 py-2 px-4 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg font-bold text-sm transition disabled:opacity-50">Atrás</button>
-                  <button onClick={saveAvisoAdd} disabled={addSaving || !addSede || addDates.length === 0} className="flex-1 py-2 px-4 bg-red-900 hover:bg-red-800 text-white rounded-lg font-bold text-sm transition disabled:opacity-50">{addSaving ? "Guardando…" : `Crear aviso${addDates.length > 1 ? ` (${addDates.length})` : ""}`}</button>
-                </div>
-              </>
-            )}
+              </div>
+            </div>
+            <div>
+              <label className="block text-[11px] font-extrabold text-gray-700 uppercase mb-1.5">PROFESIONAL</label>
+              <select value={addPro} onChange={e => setAddPro(e.target.value)} className="w-full px-2 py-2 bg-gray-50 border-2 border-gray-300 focus:border-amber-500 rounded-lg text-sm text-gray-900">
+                <option value="">— Selecciona —</option>
+                {professionals.map(p => <option key={p.id} value={p.alias}>{p.alias} - {p.firstName} {p.lastName}</option>)}
+              </select>
+            </div>
+            <div className="flex gap-2 pt-2">
+              <button onClick={() => setAddModal(null)} disabled={addSaving} className="flex-1 py-2 px-4 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg font-bold text-sm transition disabled:opacity-50">Cancelar</button>
+              <button onClick={savePlanAdd} disabled={addSaving || !addSede || !addPro} className="flex-1 py-2 px-4 bg-gray-900 hover:bg-black text-white rounded-lg font-bold text-sm transition disabled:opacity-50">{addSaving ? "Guardando…" : "Añadir turno"}</button>
+            </div>
           </div>
         </div>
       )}
