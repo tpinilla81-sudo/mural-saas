@@ -1135,3 +1135,32 @@ Work Log:
 
 Stage Summary:
 - El Modo Coche ya no pregunta el motivo: la tarjeta se identifica sola con profesional + sede + día. Un aviso se dicta en 4 respuestas (día, sede, pro, turno) + "¿nota? sí/no" opcional + "guarda" — y con IGUAL solo 3 (día, ¿nota?, guarda).
+
+---
+Task ID: 33
+Agent: main
+Task: Día LIBRE por voz en Modo Coche + las 12 mejoras (funcional/ágil/interactiva/rápida/moderna/profesional)
+
+Work Log:
+- PETICIÓN: "no me gusta la elección del día en modo coche, yo la dejaría libre" + "las mejoras hacerlas todas".
+- A) MODO COCHE — DÍA LIBRE: HandsFreeOverlay paso "date" ahora interpreta la voz con parseDateAnswer PRIMERO (hoy, mañana, pasado mañana, el viernes, día 15, 15 de octubre, 15/10, número suelto = día del mes). La lista de 10 días queda como APOYO TÁCTIL: los taps van por handleTap() (canal separado de la voz). Locución corta "¿Qué día?"; en fallo: "Di el día: mañana, viernes, día 15". Renumeración intacta (1·DÍA…6·CONFIRMAR). Tests nuevos: 68 OK / 0 fallos (parseDateAnswer libre: 23, viernes, el martes, veintiocho, inválido).
+- B) SCHEMA (db push OK): Aviso.seenAt; Company.brandColor + notifyEmail; modelos nuevos AuditLog y OutboxNotification (con índices y relación a Company).
+- C) APIs: lib/audit.ts (logAudit fire-and-forget + queueAvisoEmail con RESEND_API_KEY opcional); /api/company/audit (GET últimos 150); /api/company/stats (por mes/profesional/sede/motivo, año param); /api/company/outbox (GET cola + POST reintento si hay clave); /api/company/branding (GET ligero para cualquier usuario); avisos POST ahora audita y encola email; avisos/[id] PUT acepta seenAt ("now"/"clear", cualquier usuario con sesión) + auditoría en DELETE; profile PUT acepta brandColor + notifyEmail.
+- D) DIARIOTAB: botón ⧉ DUPLICAR (toolbar, reabre modal con el último aviso: sede/pro/turno/motivo/nota, fecha=hoy); GUARDADO OPTIMISTA (tarjetas temporales al instante, sustitución por las reales del servidor, reversión + recarga si falla); MULTI-DÍA en el modal (chips de fechas con ✕, input date, atajos +1 día / +7 días); campo NOTA opcional en el modal.
+- E) MENSUAL: botón ⤓ EXCEL (xlsx dinámico): hoja "Turnos M/AAAA" (matriz sedes × días con M/T y avisos marcados ⚠) + hoja "Avisos" del mes.
+- F) USERVIEW: swipe táctil en tarjetas de aviso → marcar VISTO (PATCH seenAt; verde ✓ y atenuada); clic alterno en escritorio marca/desmarca; campana 🔔 con nº de avisos nuevos (hoy en adelante sin seenAt) que los marca todos.
+- G) STATS: nueva sub-pestaña "📊 Datos" en DIARIO (StatsTab con recharts): avisos por mes (apilado M/T), por profesional (top 12), por sede, chips por motivo. Selector de año.
+- H) CONFIG: OpsPanel desplegable "📮 Envíos de avisos y auditoría": pestaña Envíos (cola con estados sent/failed/pending + botón Reintentar si hay RESEND_API_KEY) y pestaña Auditoría (últimos eventos AVISO_CREATE/DELETE/SEEN con usuario y fecha).
+- I) APPSHELL: toggle ☀️/🌙 tema claro (persistido en localStorage, html[data-theme="light"] sobrescribe superficies oscuras vía globals.css); logo corporativo (brand.logoUrl) y nombre en el navbar; color corporativo → var(--brand) + overrides CSS de los verdes del panel (bg-[#2E5D3A], bg-[#6BBE7A], bordes y gradientes) cuando data-brand=1. MI EMPRESA → Logo y Branding: input color + hex + campo "Email para avisos automáticos".
+- J) Paridad móvil: verificadas vistas sm:hidden ya existentes en Sedes/Pros (tarjetas) y Calendarios (grid responsivo) — no requirió cambios.
+- Animaciones: keyframes fadeIn/popIn en globals.css; aplicados a celdas de aviso y modales.
+- K) BUILD ✓ (12.7s). Tests 68/0 + 6/0. Commit 9fadfe5 → Vercel READY. E2E producción:
+  * /coche con cola de respuestas: voz "viernes" → 2·SEDE con echo "El viernes, 25 de septiembre" ✓; voz "23" → avanza ✓; flujo completo hasta 6·CONFIRMAR ✓ (sin motivo, como Task 32).
+  * Panel: botón ⧉ Duplicar en toolbar ✓; sub-pestaña 📊 Datos con 3 gráficas recharts y "12 aviso(s) en 2026" ✓; ⤓ Excel junto a 🖨️ PDF en Mensual ✓; tema claro/oscuro conmuta html[data-theme] y fondo ✓; OpsPanel presente ✓; COLOR CORPORATIVO y EMAIL PARA AVISOS en MI EMPRESA ✓ (innerText en mayúsculas por clase uppercase).
+  * API seenAt marcado/desmarcado sobre aviso real ✓ (quedó como estaba).
+  * Capturas: download/stats-datos-tab.png.
+- Nota despliegue: envío real de emails requiere añadir RESEND_API_KEY (y opcionalmente EMAIL_FROM) en Vercel → Settings → Environment Variables; sin clave, los envíos quedan "pending" visibles en Configuración.
+
+Stage Summary:
+- El Modo Coche deja elegir el día hablando libremente ("mañana", "viernes", "día 15", "23") sin depender de listas; el resto de pasos siguen con número/tap.
+- Implementadas las 12 mejoras: duplicar, guardado optimista, multi-día, PWA campana, estadísticas, Excel, tema claro + animaciones, swipe visto, paridad móvil (ya existente), branding corporativo, email automático con cola, auditoría.
