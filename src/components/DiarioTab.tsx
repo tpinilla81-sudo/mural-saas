@@ -88,13 +88,19 @@ export default function DiarioTab() {
   // Slot action dialog (touch-friendly: shows cell details before acting)
   const [slotDialog, setSlotDialog] = useState<{
     kind: "plan" | "aviso";
+    id: string;
+    sedeId: string;
     sedeName: string;
     date: string;
-    turn: string;
+    turn: string;       // "Mañana" | "Tarde" (display)
+    turnRaw: string;    // "MANANA" | "TARDE"
     main: string;
     detail: string;
-    onConfirm: () => void;
   } | null>(null);
+  // Fecha destino para MOVER la tarjeta desde el diálogo
+  const [moveDate, setMoveDate] = useState("");
+  // Celda resaltada mientras se arrastra una tarjeta (PC)
+  const [dropCell, setDropCell] = useState<string | null>(null);
 
   // View mode
   const [viewMode, setViewMode] = useState<"full" | "compact">("full");
@@ -189,6 +195,9 @@ export default function DiarioTab() {
   // profesionales por error al mover la vista.
   const onDragStart = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;              // solo botón izquierdo
+    // Sobre una tarjeta: el arrastre es para MOVER la tarjeta (drag & drop),
+    // no para desplazar la vista.
+    if ((e.target as HTMLElement)?.closest?.("[data-card]")) return;
     const el = scrollRef.current;
     if (!el) return;
     dragRef.current = {
@@ -294,18 +303,17 @@ export default function DiarioTab() {
     if (existing) {
       const sede = sedes.find(s => s.id === sedeId);
       const pro = professionals.find(p => p.alias === existing.professionalAlias);
+      setMoveDate(date);
       setSlotDialog({
         kind: "plan",
+        id: existing.id,
+        sedeId,
         sedeName: sede?.name || "",
         date,
         turn: turn === "MANANA" ? "Mañana" : "Tarde",
+        turnRaw: turn,
         main: existing.professionalAlias,
         detail: pro ? `${pro.firstName} ${pro.lastName}` : "",
-        onConfirm: async () => {
-          await fetch(`/api/company/plan/${existing.id}`, { method: "DELETE" });
-          setSlotDialog(null);
-          load();
-        },
       });
       return;
     }
@@ -328,18 +336,17 @@ export default function DiarioTab() {
     if (existing) {
       const sede = sedes.find(s => s.id === sedeId);
       const pro = professionals.find(p => p.id === existing.professionalId);
+      setMoveDate(date);
       setSlotDialog({
         kind: "aviso",
+        id: existing.id,
+        sedeId,
         sedeName: sede?.name || "",
         date,
         turn: turn === "MANANA" ? "Mañana" : "Tarde",
+        turnRaw: turn,
         main: (existing.reason || "AUSENCIA").toUpperCase(),
         detail: [pro ? `${pro.alias} - ${pro.firstName} ${pro.lastName}`.trim() : "Sin profesional (cierre de sede)", existing.note ? `📝 ${existing.note}` : ""].filter(Boolean).join(" · "),
-        onConfirm: async () => {
-          await fetch(`/api/company/avisos/${existing.id}`, { method: "DELETE" });
-          setSlotDialog(null);
-          load();
-        },
       });
       return;
     }
@@ -349,6 +356,67 @@ export default function DiarioTab() {
     setAvisoExtraDate("");
     setAvisoNote("");
     setModalPro("");
+  };
+
+  // ── Borrar la tarjeta del diálogo (con confirmación, como en V.MENSUAL) ──
+  const deleteFromDialog = async () => {
+    if (!slotDialog) return;
+    const isPlan = slotDialog.kind === "plan";
+    const what = isPlan ? "el turno" : "el aviso";
+    if (!confirm(`¿Borrar ${what} de ${slotDialog.main} en ${slotDialog.sedeName} (${slotDialog.date} · ${slotDialog.turn})?`)) return;
+    try {
+      const res = await fetch(isPlan ? `/api/company/plan/${slotDialog.id}` : `/api/company/avisos/${slotDialog.id}`, { method: "DELETE" });
+      if (res.ok) { setSlotDialog(null); load(); }
+      else alert("No se pudo borrar la tarjeta.");
+    } catch { alert("Error de red al borrar la tarjeta."); }
+  };
+
+  // ── Mover la tarjeta del diálogo a otro día (input de fecha) ──
+  const moveFromDialog = async () => {
+    if (!slotDialog || !moveDate || moveDate === slotDialog.date) return;
+    const isPlan = slotDialog.kind === "plan";
+    const conflict = isPlan
+      ? plans.some(p => p.id !== slotDialog.id && p.sedeId === slotDialog.sedeId && p.date === moveDate && p.turn === slotDialog.turnRaw)
+      : avisos.some(a => a.id !== slotDialog.id && a.sedeId === slotDialog.sedeId && a.date === moveDate && a.turn === (slotDialog.turnRaw === "MANANA" ? "M" : "T"));
+    if (conflict) { alert("Ese día ya tiene una tarjeta en ese turno. Bórrala primero."); return; }
+    try {
+      const res = await fetch(isPlan ? `/api/company/plan/${slotDialog.id}` : `/api/company/avisos/${slotDialog.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: moveDate }),
+      });
+      if (res.ok) { setSlotDialog(null); load(); }
+      else alert("No se pudo mover la tarjeta.");
+    } catch { alert("Error de red al mover la tarjeta."); }
+  };
+
+  // ── Soltar una tarjeta en otra celda (PC: drag & drop → mover a otro día) ──
+  const handleDrop = async (e: React.DragEvent, targetDate: string) => {
+    e.preventDefault();
+    setDropCell(null);
+    let data: { kind?: string; id?: string } = {};
+    try { data = JSON.parse(e.dataTransfer.getData("text/plain") || "{}"); } catch { return; }
+    if (!data?.id || !data?.kind) return;
+    const isPlan = data.kind === "plan";
+    const plan = isPlan ? plans.find(p => p.id === data.id) : undefined;
+    const aviso = !isPlan ? avisos.find(a => a.id === data.id) : undefined;
+    const card = plan || aviso;
+    if (!card || card.date === targetDate) return;
+    const conflict = plan
+      ? plans.some(p => p.id !== plan.id && p.sedeId === plan.sedeId && p.date === targetDate && p.turn === plan.turn)
+      : aviso
+        ? avisos.some(a => a.id !== aviso.id && a.sedeId === aviso.sedeId && a.date === targetDate && a.turn === aviso.turn)
+        : false;
+    if (conflict) { alert("Ese día ya tiene una tarjeta en ese turno. Bórrala primero."); return; }
+    try {
+      const res = await fetch(isPlan ? `/api/company/plan/${data.id}` : `/api/company/avisos/${data.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: targetDate }),
+      });
+      if (res.ok) load();
+      else alert("No se pudo mover la tarjeta.");
+    } catch { alert("Error de red al mover la tarjeta."); }
   };
 
   const addExtraDate = (d: string) => {
@@ -566,13 +634,14 @@ export default function DiarioTab() {
           <div className="hidden sm:flex text-[10px] text-slate-400 items-center gap-3 ml-auto">
             <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-purple-500/15 border border-purple-400 inline-block" /> Finde</span>
             <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-500/20 border border-red-400 inline-block" /> Festivo</span>
+            <span className="text-slate-400">🖱️ Arrastra una tarjeta a otro día · click en tarjeta: borrar o mover</span>
             <span className="flex items-center gap-1 text-slate-500" title="Atajos de teclado">
               <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-600 text-[9px] font-bold text-slate-300">T</kbd>
               <span>Hoy</span>
               <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-600 text-[9px] font-bold text-slate-300">←↑↓→</kbd>
-              <span>Mover</span>
+              <span>Vista</span>
               <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-600 text-[9px] font-bold text-slate-300">Drag</kbd>
-              <span>Arrastrar</span>
+              <span>Vista</span>
             </span>
           </div>
         </div>
@@ -581,6 +650,7 @@ export default function DiarioTab() {
         <div className="sm:hidden flex gap-2 mt-1 overflow-x-auto text-[8px] text-slate-400 pb-1">
           <span className="flex items-center gap-0.5 shrink-0"><span className="w-2 h-2 rounded bg-purple-500/15 inline-block" />WE</span>
           <span className="flex items-center gap-0.5 shrink-0"><span className="w-2 h-2 rounded bg-red-500/20 inline-block" />Fest</span>
+          <span className="shrink-0 font-bold text-amber-400/90">Toca tarjeta: borrar · mover</span>
         </div>
       </div>
 
@@ -650,11 +720,22 @@ export default function DiarioTab() {
                     const proNameT = planT ? (professionals.find(p => p.alias === planT.professionalAlias)?.firstName || '') + ' ' + (professionals.find(p => p.alias === planT.professionalAlias)?.lastName || '') : '';
 
                     return (
-                      <td key={i} className={`border-b-2 border-white/90 ${cellH} ${cellW} p-0.5 sm:p-1 ${we ? "bg-purple-500/15" : ""} ${fest ? "bg-red-500/20" : ""} ${isToday && !we && !fest ? "ring-1 ring-amber-500/50" : ""} ${dimCell ? "opacity-20" : ""}`}>
+                      <td key={i} className={`border-b-2 border-white/90 ${cellH} ${cellW} p-0.5 sm:p-1 ${we ? "bg-purple-500/15" : ""} ${fest ? "bg-red-500/20" : ""} ${isToday && !we && !fest ? "ring-1 ring-amber-500/50" : ""} ${dimCell ? "opacity-20" : ""} ${dropCell === `${sede.id}-${f}` ? "!ring-2 !ring-inset !ring-amber-400 bg-amber-500/20" : ""}`}
+                        onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; if (dropCell !== `${sede.id}-${f}`) setDropCell(`${sede.id}-${f}`); }}
+                        onDrop={(e) => handleDrop(e, f)}
+                      >
                         <div className="flex flex-col gap-0.5 items-center justify-center">
                           {sede.morningEnabled && (
                             <div
                               onClick={(e) => { if (suppressIfDragged(e)) return; avisoM ? openAvisoModal(sede.id, f, "MANANA") : handleSlotClick(sede.id, f, "MANANA"); }}
+                              draggable={!!(planM || avisoM)}
+                              data-card={planM || avisoM ? "1" : undefined}
+                              onDragStart={(e) => {
+                                if (avisoM) e.dataTransfer.setData("text/plain", JSON.stringify({ kind: "aviso", id: avisoM.id }));
+                                else if (planM) e.dataTransfer.setData("text/plain", JSON.stringify({ kind: "plan", id: planM.id }));
+                                e.dataTransfer.effectAllowed = "move";
+                              }}
+                              onDragEnd={() => setDropCell(null)}
                               className={`${viewMode === "compact" ? "h-4 sm:h-5" : "h-5 sm:h-6"} w-[85%] rounded flex items-center justify-center ${textSize} font-bold cursor-pointer transition animate-[fadeIn_.25s_ease-out] ${
                                 avisoM ? getAvisoColor(avisoM.reason) :
                                 planM ? "text-black border border-white" : "text-white/20 border border-white/5"
@@ -663,7 +744,7 @@ export default function DiarioTab() {
                                 background: avisoM ? undefined : (planM ? sede.color : "transparent"),
                                 borderLeft: (avisoM || planM) ? undefined : "2px solid #3b82f6"
                               }}
-                              title={avisoM ? `${avisoM.reason || "Aviso"}${avisoM.professionalId ? " - " + (professionals.find(p => p.id === avisoM.professionalId)?.alias || "") : " (sede)"}${avisoM.note ? `\n📝 ${avisoM.note}` : ""}` : planM ? `${planM.professionalAlias} - ${proNameM}` : "Mañana (sin asignar)"}
+                              title={avisoM ? `${avisoM.reason || "Aviso"}${avisoM.professionalId ? " - " + (professionals.find(p => p.id === avisoM.professionalId)?.alias || "") : " (sede)"}${avisoM.note ? `\n📝 ${avisoM.note}` : ""}\nClick: borrar o mover · arrastra a otro día` : planM ? `${planM.professionalAlias} - ${proNameM}\nClick: borrar o mover · arrastra a otro día` : "Mañana (sin asignar)"}
                             >
                               {avisoM ? getAvisoLabel(avisoM.reason) : (planM?.professionalAlias || "M")}
                             </div>
@@ -671,6 +752,14 @@ export default function DiarioTab() {
                           {sede.afternoonEnabled && (
                             <div
                               onClick={(e) => { if (suppressIfDragged(e)) return; avisoT ? openAvisoModal(sede.id, f, "TARDE") : handleSlotClick(sede.id, f, "TARDE"); }}
+                              draggable={!!(planT || avisoT)}
+                              data-card={planT || avisoT ? "1" : undefined}
+                              onDragStart={(e) => {
+                                if (avisoT) e.dataTransfer.setData("text/plain", JSON.stringify({ kind: "aviso", id: avisoT.id }));
+                                else if (planT) e.dataTransfer.setData("text/plain", JSON.stringify({ kind: "plan", id: planT.id }));
+                                e.dataTransfer.effectAllowed = "move";
+                              }}
+                              onDragEnd={() => setDropCell(null)}
                               className={`${viewMode === "compact" ? "h-4 sm:h-5" : "h-5 sm:h-6"} w-[85%] rounded flex items-center justify-center ${textSize} font-bold cursor-pointer transition animate-[fadeIn_.25s_ease-out] ${
                                 avisoT ? getAvisoColor(avisoT.reason) :
                                 planT ? "text-black border border-white" : "text-white/20 border border-white/5"
@@ -679,7 +768,7 @@ export default function DiarioTab() {
                                 background: avisoT ? undefined : (planT ? sede.color : "transparent"),
                                 borderLeft: (avisoT || planT) ? undefined : "2px solid #f59e0b"
                               }}
-                              title={avisoT ? `${avisoT.reason || "Aviso"}${avisoT.professionalId ? " - " + (professionals.find(p => p.id === avisoT.professionalId)?.alias || "") : " (sede)"}${avisoT.note ? `\n📝 ${avisoT.note}` : ""}` : planT ? `${planT.professionalAlias} - ${proNameT}` : "Tarde (sin asignar)"}
+                              title={avisoT ? `${avisoT.reason || "Aviso"}${avisoT.professionalId ? " - " + (professionals.find(p => p.id === avisoT.professionalId)?.alias || "") : " (sede)"}${avisoT.note ? `\n📝 ${avisoT.note}` : ""}\nClick: borrar o mover · arrastra a otro día` : planT ? `${planT.professionalAlias} - ${proNameT}\nClick: borrar o mover · arrastra a otro día` : "Tarde (sin asignar)"}
                             >
                               {avisoT ? getAvisoLabel(avisoT.reason) : (planT?.professionalAlias || "T")}
                             </div>
@@ -711,12 +800,22 @@ export default function DiarioTab() {
               <div className="text-white font-black text-lg">{slotDialog.main}</div>
               {slotDialog.detail && <div className="text-xs text-slate-300 font-bold mt-0.5 break-words">{slotDialog.detail}</div>}
             </div>
+            <div>
+              <label className="block text-[10px] sm:text-xs font-extrabold text-blue-400 uppercase mb-1">MOVER A OTRO DÍA</label>
+              <div className="flex gap-2">
+                <input type="date" value={moveDate} onChange={e => setMoveDate(e.target.value)}
+                  className="flex-1 bg-slate-900 border border-slate-600 rounded px-2 py-2 text-white text-sm" />
+                <button onClick={moveFromDialog} disabled={!moveDate || moveDate === slotDialog.date}
+                  className="px-3 py-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-white rounded-lg font-bold text-xs transition whitespace-nowrap"
+                  title="Mover esta tarjeta al día elegido">→ MOVER</button>
+              </div>
+            </div>
             <div className="flex gap-3 pt-1">
               <button onClick={() => setSlotDialog(null)} className="flex-1 py-2 px-4 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-bold text-sm transition">
                 Cerrar
               </button>
-              <button onClick={slotDialog.onConfirm} className="flex-1 py-2 px-4 bg-red-600 hover:bg-red-500 text-white rounded-lg font-bold text-sm transition">
-                {slotDialog.kind === "plan" ? "Eliminar asignación" : "Eliminar aviso"}
+              <button onClick={deleteFromDialog} className="flex-1 py-2 px-4 bg-red-600 hover:bg-red-500 text-white rounded-lg font-black text-sm transition" title="Borrar esta tarjeta">
+                🗑 BORRAR
               </button>
             </div>
           </div>
