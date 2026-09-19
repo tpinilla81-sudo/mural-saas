@@ -41,12 +41,21 @@ function CarScreen() {
   const [loaded, setLoaded] = useState(false);
   const [handsFreeOpen, setHandsFreeOpen] = useState(false);
   const [now, setNow] = useState<Date | null>(null);
+  const [micState, setMicState] = useState<"checking" | "ok" | "blocked">("checking");
 
   const wakeRef = useRef<{ release: () => Promise<void> } | null>(null);
 
   // Redirect al login si no hay sesión
   useEffect(() => {
     if (status === "unauthenticated") window.location.href = "/";
+  }, [status]);
+
+  // ── MICRO: pedir permiso automáticamente al abrir el Modo Coche ──
+  // Así el prompt sale nada más entrar (una sola vez) y al pulsar el
+  // botón de voz el micro ya está activado.
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    void warmUpMic().then(w => setMicState(w.ok ? "ok" : "blocked"));
   }, [status]);
 
   // Reloj (tick cada 20 s)
@@ -188,6 +197,20 @@ function CarScreen() {
             <p className="text-[9px] sm:text-[11px] text-slate-500 font-bold mt-1 max-w-xs mx-auto">
               🛡️ Único método disponible al conducir por seguridad
             </p>
+            {micState === "ok" && (
+              <p className="text-[10px] sm:text-xs font-black text-[#6BBE7A] mt-1 tracking-wide">
+                🎙️ MICRÓFONO ACTIVADO — PULSA Y HABLA
+              </p>
+            )}
+            {micState === "blocked" && (
+              <button
+                onClick={() => { void warmUpMic().then(w => setMicState(w.ok ? "ok" : "blocked")); }}
+                className="block mx-auto mt-1 text-[10px] sm:text-xs font-black text-red-400 underline"
+                title="Permite el micrófono en el navegador (candado 🔒 en la barra de dirección)"
+              >
+                🎙️ MICRO BLOQUEADO — TOCA AQUÍ Y PERMITE EL MICRÓFONO
+              </button>
+            )}
           </div>
         </section>
 

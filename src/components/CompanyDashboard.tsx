@@ -12,6 +12,7 @@ import CompanyProfileTab from "@/components/CompanyProfileTab";
 import ConfigTab from "@/components/ConfigTab";
 import { VoiceAvisoModal } from "@/components/VoiceAvisoButton";
 import HandsFreeOverlay from "@/components/HandsFreeOverlay";
+import { warmUpMic } from "@/lib/mic";
 
 type MainTab = "empresa" | "diario" | "config";
 type DiarioSubTab = "sedes" | "pros" | "cal" | "diario" | "mensual" | "datos";
@@ -30,6 +31,14 @@ export default function CompanyDashboard() {
   const [pros, setPros] = useState<ProLike[]>([]);
   const [voiceCarOpen, setVoiceCarOpen] = useState(false);
   const [voicePcOpen, setVoicePcOpen] = useState(false);
+
+  // ── MICRO: pedir permiso automáticamente AL ABRIR la app (una vez) ──
+  // En Android, si se deja para el primer uso de voz, el reconocimiento
+  // falla con "not-allowed" sin llegar a pedir permiso. Al cargar la app
+  // se dispara el prompt y, aceptado una vez, la voz funciona siempre.
+  useEffect(() => {
+    void warmUpMic();
+  }, []);
 
   useEffect(() => {
     let alive = true;

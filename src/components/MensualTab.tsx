@@ -41,7 +41,7 @@ export default function MensualTab() {
   const [showSedeDD, setShowSedeDD] = useState(false);
   const [showProDD, setShowProDD] = useState(false);
   const [cardFilter, setCardFilter] = useState<CardFilter>("todas");
-  const [showVac, setShowVac] = useState(true);
+  const [filtersOpen, setFiltersOpen] = useState(false); // móvil: menú desplegable
   const [loaded, setLoaded] = useState(false);
 
   // Note editor modal: open when a card is clicked
@@ -92,59 +92,6 @@ export default function MensualTab() {
     // Solo si el gesto es claramente horizontal (no interfiere con el scroll vertical).
     if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
     goMonth(dx < 0 ? 1 : -1);
-  };
-
-  // ── Exportar a Excel (.xlsx): matriz sedes × días + hoja de avisos ──
-  const exportExcel = async () => {
-    const XLSX = await import("xlsx");
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const DOWX = ["D", "L", "M", "X", "J", "V", "S"];
-
-    const head: (string | number)[] = ["SEDE", "TAREA"];
-    for (let d = 1; d <= daysInMonth; d++) {
-      const wd = new Date(year, month, d).getDay();
-      head.push(`${d} ${DOWX[wd]}`);
-    }
-
-    const visible = sedes.filter((s: any) => selectedSedes.size === 0 || selectedSedes.has(s.id));
-    const rows: (string | number)[][] = [head];
-    for (const s of visible) {
-      const row: (string | number)[] = [s.name, s.task || ""];
-      for (let d = 1; d <= daysInMonth; d++) {
-        const f = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-        const pM = plans.find((p: any) => p.sedeId === s.id && p.date === f && p.turn === "MANANA");
-        const pT = plans.find((p: any) => p.sedeId === s.id && p.date === f && p.turn === "TARDE");
-        const aM = avisos.find((a: any) => a.sedeId === s.id && a.date === f && a.turn === "M");
-        const aT = avisos.find((a: any) => a.sedeId === s.id && a.date === f && a.turn === "T");
-        const m = aM ? `⚠${aM.professional?.alias || "SEDE"}` : pM?.professionalAlias || "";
-        const t = aT ? `⚠${aT.professional?.alias || "SEDE"}` : pT?.professionalAlias || "";
-        row.push([m, t].filter(Boolean).join(" / "));
-      }
-      rows.push(row);
-    }
-
-    const avisoRows: (string | number)[][] = [
-      ["FECHA", "TURNO", "SEDE", "PROFESIONAL", "MOTIVO", "NOTA"],
-      ...avisos
-        .filter((a: any) => parseInt(a.date.slice(5, 7), 10) - 1 === month && parseInt(a.date.slice(0, 4), 10) === year)
-        .map((a: any) => [
-          a.date,
-          a.turn === "M" ? "Mañana" : "Tarde",
-          a.sede?.name || "",
-          a.professional ? a.professional.alias : "Toda la sede",
-          (a.reason || "AUSENCIA").toUpperCase(),
-          a.note || "",
-        ]),
-    ];
-
-    const wb = XLSX.utils.book_new();
-    const ws1 = XLSX.utils.aoa_to_sheet(rows);
-    ws1["!cols"] = [{ wch: 18 }, { wch: 14 }, ...Array(daysInMonth).fill({ wch: 9 })];
-    XLSX.utils.book_append_sheet(wb, ws1, `Turnos ${month + 1}/${year}`);
-    const ws2 = XLSX.utils.aoa_to_sheet(avisoRows);
-    ws2["!cols"] = [{ wch: 12 }, { wch: 9 }, { wch: 18 }, { wch: 12 }, { wch: 12 }, { wch: 30 }];
-    XLSX.utils.book_append_sheet(wb, ws2, "Avisos");
-    XLSX.writeFile(wb, `mural-${year}-${String(month + 1).padStart(2, "0")}.xlsx`);
   };
 
   async function load() {
@@ -417,8 +364,8 @@ export default function MensualTab() {
       });
     });
 
-    // ── Vacation / absence cards (avisos) ──
-    if (showVac) {
+    // ── Vacation / absence cards (avisos) — siempre visibles ──
+    {
       const dayAvisos = avisos.filter(a => a.date === f && selectedSedes.has(a.sedeId));
       dayAvisos.forEach(a => {
         // Pro filter: sede-level avisos (no professional) always show; pro-level only if selected
@@ -492,7 +439,19 @@ export default function MensualTab() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
-      <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-2 sm:p-3 mb-2 sm:mb-3 flex gap-2 sm:gap-3 items-end flex-wrap shrink-0 no-print">
+      <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-2 sm:p-3 mb-2 sm:mb-3 shrink-0 no-print">
+        {/* Barra compacta (móvil): mes + filtros desplegables — deja ver las tarjetas */}
+        <div className="sm:hidden flex items-center gap-2">
+          <button onClick={() => goMonth(-1)} className="h-9 w-9 shrink-0 rounded-full bg-slate-900 border border-slate-600 text-white text-lg font-black flex items-center justify-center active:scale-90 transition" title="Mes anterior">‹</button>
+          <div className="flex-1 text-center font-black text-white text-sm truncate">{MESES[month].toUpperCase()} {year}</div>
+          <button onClick={() => goMonth(1)} className="h-9 w-9 shrink-0 rounded-full bg-slate-900 border border-slate-600 text-white text-lg font-black flex items-center justify-center active:scale-90 transition" title="Mes siguiente">›</button>
+          <button onClick={() => setFiltersOpen(o => !o)} className="shrink-0 bg-slate-700 hover:bg-slate-600 text-white font-black px-3 py-2 rounded-lg text-xs transition">
+            {filtersOpen ? "✕ CERRAR" : "⚙️ FILTROS"}
+          </button>
+        </div>
+
+        {/* Filtros: ocultos en móvil hasta pulsar ⚙️ FILTROS; siempre visibles en PC */}
+        <div className={`${filtersOpen ? "flex" : "hidden"} sm:flex gap-2 sm:gap-3 items-end flex-wrap ${filtersOpen ? "mt-3" : ""}`}>
         <div>
           <label className="block text-xs font-extrabold text-blue-400 uppercase mb-1">AÑO</label>
           <select value={year} onChange={e => setYear(parseInt(e.target.value))} className="w-20 sm:w-24 px-2 py-1.5 sm:py-2 bg-slate-900 border border-slate-600 rounded text-white text-xs">
@@ -569,20 +528,9 @@ export default function MensualTab() {
             <option value="sin">Sin nota</option>
           </select>
         </div>
-        {/* Vacaciones / ausencias toggle */}
-        <div>
-          <label className="block text-xs font-extrabold text-blue-400 uppercase mb-1">VACACIONES</label>
-          <button
-            onClick={() => setShowVac(!showVac)}
-            className={`px-3 py-2 rounded-lg text-xs font-bold transition ${showVac ? "bg-red-500 text-white" : "bg-slate-700 text-slate-400 hover:bg-slate-600"}`}
-            title="Mostrar u ocultar las tarjetas de vacaciones y ausencias"
-          >
-            {showVac ? "🏖 Mostrando" : "Ocultas"}
-          </button>
-        </div>
         <button onClick={() => { setSlideDir(""); setYear(new Date().getFullYear()); setMonth(new Date().getMonth()); }} className="bg-amber-500 hover:bg-amber-400 text-black font-black px-3 py-2 rounded-lg text-xs transition">HOY</button>
         <button onClick={() => window.print()} className="bg-slate-700 hover:bg-slate-600 text-white font-bold px-3 py-2 rounded-lg text-xs transition">🖨️ PDF</button>
-        <button onClick={exportExcel} className="bg-[#2E5D3A] hover:bg-[#3a7a4c] text-white font-bold px-3 py-2 rounded-lg text-xs transition" title="Descargar Excel con turnos y avisos del mes">⤓ Excel</button>
+      </div>
       </div>
 
       <div

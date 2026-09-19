@@ -1185,3 +1185,40 @@ Stage Summary:
 - Mensajes de error claros y accionables + botón REINTENTAR (tras activar el micro en ajustes no hace falta cerrar y reabrir).
 - Aplica a los 3 puntos de entrada de voz: /coche (botón grande), Modo Coche en toolbar Diario y Modo PC.
 - Pendiente (petición anterior): (a) día libre sin lista numerada — ya funciona por voz, falta decidir si se quita la lista visual; (b) las 12 mejoras.
+
+---
+Task ID: 34
+Agent: main
+Task: V.Mensual — poder meter entradas (turnos) y tarjetas (avisos) + renombrar menú interno a V.DIARIO / V.MENSUAL
+
+Work Log:
+- CompanyDashboard.tsx: labels de sub-tabs "Diario"→"V.DIARIO" y "Mensual"→"V.MENSUAL" (evita confundirse con la pestaña principal DIARIO).
+- MensualTab.tsx: botón "+" en cada celda de día (versión táctil móvil 24px + desktop 20px) → diálogo "Añadir · {fecha}" con 2 opciones:
+  * 👷 PROGRAMAR TURNO: sede + turno (Mañana/Tarde) + profesional → POST /api/company/plan {sedeId, date, turn MANANA|TARDE, professionalAlias} (upsert).
+  * 🏖 AVISO / AUSENCIA: sede + turno + profesional opcional (vacío = cierre de sede) + motivo (BAJA/FORMACION/PERMISO/VACACIONES) + fechas multi-día (chips, +1 día, +7 días) + nota → POST /api/company/avisos por fecha.
+- Tras guardar: load() refresca el mes. Pista de cabecera actualizada: "+ en cada día: añadir turno o aviso · click en tarjeta: nota".
+- E2E producción (commit c98fd63, deploy verificado con "PROGRAMAR TURNO" en bundle):
+  * Menú: V.DIARIO y V.MENSUAL presentes.
+  * + del día 27 → diálogo OK (captura download/mensual-add-dialogo.png).
+  * Turno creado (27/9 MANANA pro AS, id cmu8ugkrk…, createdAt = ahora) y tarjeta visible → BORRADO (200) para dejar la BD como estaba.
+  * Aviso creado (27/9 TARDE PERMISO nota "prueba e2e", id cmu8uiugt…, tarjeta roja visible en la celda; captura download/mensual-aviso-form.png) → BORRADO (200). Outbox [] (no se envió ningún email).
+
+Stage Summary:
+- V.MENSUAL ya no es solo lectura: se pueden programar turnos y crear tarjetas de aviso desde cualquier día del calendario.
+- Menú interno renombrado V.DIARIO / V.MENSUAL.
+- BD de producción queda limpia tras las pruebas (plan y aviso de prueba eliminados).
+
+---
+Task ID: 35
+Agent: main
+Task: "el microfono en android sigue bloqueado, activalo de inicio la app sin preguntar" + "quita la mejora del excel, de las vacaciones" + "en el movil ocupa mucho los menus de arriba... hacer desplegable, oculta con opcion de abrir"
+
+Work Log:
+- Micro automático al abrir la app: CompanyDashboard.tsx llama void warmUpMic() en el mount (dispara el prompt de permisos al entrar, una sola vez; después ya nunca pregunta); /coche/page.tsx igual (en authenticated) + indicador de estado bajo el botón grande: "🎙️ MICRÓFONO ACTIVADO — PULSA Y HABLA" (verde) o "🎙️ MICRO BLOQUEADO — TOCA AQUÍ..." (rojo, reintenta).
+- MensualTab: eliminada la mejora de Excel (botón ⤓ Excel + función exportExcel + import dinámico xlsx); eliminado el toggle VACACIONES (estado showVac borrado; las tarjetas de ausencia ahora SIEMPRE se muestran).
+- Toolbar de V.MENSUAL desplegable en móvil: nueva barra compacta (‹ MES AÑO › + botón "⚙️ FILTROS") que ocupa una sola línea; los filtros (AÑO/MES/SEDES/PROFESIONALES/TARJETAS/HOY/PDF) quedan OCULTOS hasta pulsar ⚙️ FILTROS (botón pasa a "✕ CERRAR"). En PC (sm+) todo sigue visible como antes. Las tarjetas/mensajes del calendario ganan toda la pantalla.
+- npm run build limpio (sin refs a showVac/exportExcel).
+
+Stage Summary:
+- El micro se activa al abrir la app (prompt una única vez al inicio), no al pulsar el botón de voz; /coche muestra el estado del micro en pantalla.
+- V.MENSUAL en móvil: 1 sola línea de menú + tarjetas visibles; Excel y toggle VACACIONES fuera.
