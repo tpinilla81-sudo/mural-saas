@@ -34,7 +34,7 @@ export default function AppShell() {
   const role = (session.user as any)?.role;
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: "#0b1120", color: "#f1f5f9" }}>
+    <div className="h-dvh flex flex-col overflow-hidden" style={{ background: "#0b1120", color: "#f1f5f9" }}>
       {/* Navbar */}
       <nav className="bg-black px-3 sm:px-6 py-3 flex items-center gap-3 border-b-2 border-[#6BBE7A] shrink-0">
         <div className="flex items-center gap-2 sm:gap-3">
