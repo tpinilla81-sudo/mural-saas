@@ -1109,3 +1109,29 @@ Work Log:
 Stage Summary:
 - Modo Coche rápido y sin fricción: ver listas numeradas grandes, responder solo el número, nota opcional saltabile y encadenar avisos con "igual". La voz solo da instrucciones cortas.
 - Diario con cabeceras de días fijas al scroll vertical, columna de sedes fija al horizontal y barra de herramientas siempre visible (desktop y móvil).
+
+---
+Task ID: 32
+Agent: main
+Task: Modo Coche — eliminar la pregunta de MOTIVO; pasar directo a "¿Quieres poner nota?" (sí/no) y nota libre si sí
+
+Work Log:
+- Petición: "la pregunta que hace de motivo no existe, ya que la tarjeta se genera con las iniciales del profesional en la sede y día que se ha dicho; ese se quita y se pone 'quieres poner nota', tiene que decir sí o no; si es sí se dice la nota libre".
+- src/components/HandsFreeOverlay.tsx — flujo nuevo: día → sede → profesional → turno → ¿NOTA? → confirmación (de 7 pasos a 6):
+  * Step "reason" eliminado del tipo Step; Draft sin campo reason; reasonOptions() eliminada; imports parseReasonAnswer/REASON_OPTIONS quitados.
+  * Tras el turno → paso "note": "¿Quieres poner nota?" con lista táctil [1 SÍ · dictar una nota / 2 NO · guardar sin nota]; respuesta ESTRICTA sí/no (voz o número 1/2); nada de dictar en este paso.
+  * Si SÍ → paso "noteText" "Di la nota": nota libre en UN paso (atajo "sin nota" por si se arrepiente). Si NO → confirmación directa.
+  * Atajo IGUAL (repetir sede+pro+turno): tras el día ahora pregunta directamente "¿Quieres poner nota?" (antes motivo).
+  * Guardado envía reason: DEFAULT_REASON = "AUSENCIA" (fallback que la app ya usa en todas las vistas: Diario muestra iniciales del pro, Mensual/UserView muestran AUSENCIA).
+  * Renumeración: 1·DÍA, 2·SEDE, 3·PROFESIONAL, 4·TURNO, 5·¿NOTA?/5·NOTA, 6·CONFIRMAR. Borrador de pantalla sin celda Motivo (5 celdas).
+  * Resumen hablado/pantalla de confirmación sin motivo (solo día, sede, quién, turno, nota).
+- voice-dialog.ts intacto (parseReasonAnswer/REASON_OPTIONS siguen exportados y testeados; los usa el Modo PC).
+- Build ✓. Tests 63/0 (test-voice-dialog) + 6/0 (test-voice-parser). Commit df415c0 → Vercel READY (chunk producción contiene "Quieres poner nota").
+- E2E producción (/coche, login julio1974@, stub SpeechRecognition con cola de respuestas + descartador automático del botón ✕ NO):
+  * Flujo completo: 1·DÍA → 2·SEDE → 3·PROFESIONAL → 4·TURNO → 5·¿NOTA? ("¿Quieres poner nota?" con SÍ/NO) → [sí] 5·NOTA "Di la nota" → nota libre → 6·CONFIRMAR → ✕ NO → "Aviso descartado" → ¿IGUAL/NUEVO/TERMINAR? ✓
+  * Cero texto "motivo" en todo el flujo ✓; borrador 5 celdas sin Motivo ✓; chip "5 · ¿NOTA?" con echo "por la mañana" ✓.
+  * Sin escrituras en BD ("Sin avisos para hoy" tras todo el test) ✓.
+  * Capturas: download/coche-di-la-nota.png (paso nota con borrador de 5 celdas).
+
+Stage Summary:
+- El Modo Coche ya no pregunta el motivo: la tarjeta se identifica sola con profesional + sede + día. Un aviso se dicta en 4 respuestas (día, sede, pro, turno) + "¿nota? sí/no" opcional + "guarda" — y con IGUAL solo 3 (día, ¿nota?, guarda).
