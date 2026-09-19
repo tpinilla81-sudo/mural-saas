@@ -945,3 +945,76 @@ Stage Summary:
   nota → "¿Guardo?"; entiende números ("1", "dos"), nombres, alias, fechas relativas y
   comandos «cancela/repite/terminar». Bucle para dictar varios avisos seguidos sin tocar
   nada. Lógica validada con 53 tests; desplegado en producción.
+
+---
+Task ID: 28
+Agent: Super Z (main)
+Task: Extender Modo Coche a móvil/tablet/PC con dos botones (Modo Coche + Modo PC), y mejorar el Diario en PC con drag-to-scroll, scrollbar visible y atajos de teclado.
+
+Work Log:
+- Petición: el Modo Coche (manos libres con preguntas de audio) debe usarse también en
+  móvil, tablet y PC (no solo en el coche); debe haber dos botones de audio: "Modo Coche"
+  (preguntas encadenadas, sin mirar la pantalla) y "Modo PC" (dictado libre en una frase,
+  el que ya existía). Además, en el Diario de PC fijar todo excepto las tarjetas y permitir
+  arrastrar con el ratón (botón izquierdo presionado) para desplazar arriba/abajo/izq/dcha;
+  actualmente no se ve la barra de scroll y al bajar del todo se pierden las fechas.
+- src/components/VoiceAvisoButton.tsx: añadido `VoiceButtons` — dos botones juntos (🔊 Modo
+  Coche → abre HandsFreeOverlay; 🎙️ Modo PC → abre VoiceAvisoModal). El default export
+  `VoiceAvisoButton` se mantiene para compatibilidad con texto actualizado a "Audio Modo
+  PC". Import de HandsFreeOverlay dentro del mismo archivo para que todo se resuelva en
+  un solo módulo.
+- src/components/DiarioTab.tsx: sustituido `<VoiceAvisoButton>` por `<VoiceButtons>` en la
+  toolbar (mismas props: sedes/professionals/onSaved/contextYear/contextMonth).
+- src/components/MensualTab.tsx: idem, sustituido por `<VoiceButtons>` importando el named
+  export.
+- src/components/UserView.tsx: idem dentro del bloque `perms.can_voice_avisos`.
+- src/app/coche/page.tsx: etiquetas más claras — el botón mic gigante ahora reza "AUDIO
+  MODO PC" con subtexto "Dictado libre: pulsa y di …"; el botón secundario ahora reza
+  "🔊 AUDIO MODO COCHE" en ámbar (en lugar del verde anterior) para distinguirlo del
+  Modo PC.
+- src/components/DiarioTab.tsx (PC improvements):
+  * Drag-to-scroll: estado `dragging` + `dragRef` ({x,y,sx,sy,moved}); onMouseDown inicia
+    drag solo con botón izquierdo; window mousemove actualiza scrollLeft/scrollTop con
+    delta; mouseup limpia el flag con micro-retraso de 50ms para que el click siguiente
+    sea normal si no hubo arrastre real, o se suprima si lo hubo (suppressIfDragged en los
+    onClick de cada celda — no se asigna/borra un turno por error al soltar el botón tras
+    arrastrar).
+  * Scrollbar visible: clases `.diario-scroll` y `.diario-drag` añadidas a globals.css:
+    WebKit (::-webkit-scrollbar 12px, thumb #475569, track #1e293b, hover #64748b,
+    esquina) + Firefox (scrollbar-width:auto, scrollbar-color). Aplicadas al contenedor
+    flex-1 overflow-auto del grid del Diario.
+  * Cursor grab/grabbing: `.diario-drag` (cursor:grab, user-select:none) y `.dragging`
+    (cursor:grabbing + pointer-events:none en hijos para que el click se suprima).
+  * Atajos de teclado: T=scrollToToday, ←↑↓→=scrollBy 120px smooth, PageUp/PageDown=90%
+    del cliente. No interferir si el foco está en input/textarea/select/contentEditable.
+  * Rueda + Shift = scroll horizontal (ya funciona en la mayoría de navegadores; lo
+    dejamos pasar sin preventDefault).
+  * Leyenda visible en toolbar (PC, sm:flex): kbd T / ←↑↓→ / Drag con sus textos.
+- src/app/globals.css: añadidas `.diario-scroll` (scrollbar visible multi-navegador) y
+  `.diario-drag`/`.dragging` (cursor + supresión de selección de texto).
+- Build ✓ (8.0s, "Compiled successfully"). Commit 9055468 → push a main → deploy Vercel
+  READY (HTTP 200 en /, /coche).
+- Verificación E2E (agent-browser):
+  * Diario: botones "🔊 Modo Coche" y "🎙️ Modo PC" presentes; clic en Modo Coche abre
+    overlay "MANOS LIBRES" (paso 1·DÍA, luego mensaje de micrófono bloqueado por ser
+    navegador headless); clic en Modo PC abre modal "🎙️ Aviso por voz" con textarea y
+    "Analizar texto". Cierro overlay con botón PARAR.
+  * Mensual: idem — "🔊 Modo Coche" + "🎙️ Modo PC" presentes en toolbar.
+  * /coche: botón "🎙️" gigante con etiqueta "AUDIO MODO PC"; botón "🔊 AUDIO MODO
+    COCHE" en ámbar presente.
+  * Diario PC: clase `diario-scroll diario-drag` aplicada al contenedor; `overflow:auto`,
+    `scrollbarWidth:auto`; <kbd> presentes en leyenda (T, ←↑↓→, Drag).
+  * Capturas: download/diario-voz-dos-botones.png (full), download/coche-dos-botones.png.
+
+Stage Summary:
+- Modo Coche (manos libres con preguntas) y Modo PC (dictado libre con vista previa)
+  ahora disponibles juntos en Diario, Mensual, Permiso (UserView) y /coche. En móvil,
+  tablet y PC. El usuario elige según contexto: Modo Coche para conducir o cuando no
+  quiere mirar la pantalla; Modo PC para escribir una frase entera y revisar el resultado
+  antes de guardar.
+- Diario en PC: barra de scroll siempre visible (estilo dark), drag-to-scroll con ratón
+  (botón izquierdo + arrastrar, cursor grab/grabbing) sin clicks accidentales, atajos
+  T=Hoy, flechas=scroll, PageUp/Down, Shift+rueda=horizontal; leyenda visible en toolbar.
+  Las cabeceras (días arriba, sedes izquierda) ya eran sticky y se mantienen fijas al
+  desplazar — ahora combinadas con scrollbar visible y drag se ve claramente dónde se
+  está en el año y no se pierden las fechas al bajar del todo.
