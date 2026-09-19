@@ -493,7 +493,7 @@ export default function DiarioTab() {
         </div>
 
         {/* Color filter quick access (always visible) + Legend */}
-        <div className="flex gap-2 mt-2 items-center flex-wrap">
+        <div className="flex gap-2 mt-2 items-center flex-wrap shrink-0">
           <span className="text-[10px] text-slate-500 font-bold uppercase">Filtrar:</span>
           {uniqueColors.map(c => {
             const sedeNames = sedes.filter(s => s.color === c).map(s => s.name);

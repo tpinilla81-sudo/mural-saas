@@ -109,9 +109,9 @@ export default function CompanyDashboard() {
 
         {/* ═══════ DIARIO ═══════ */}
         {tab === "diario" && (
-          <div className="space-y-3">
+          <div className="h-full flex flex-col space-y-3 min-h-0">
             {/* Sub-tabs */}
-            <div className="flex gap-1.5 overflow-x-auto pb-1">
+            <div className="flex gap-1.5 overflow-x-auto pb-1 shrink-0">
               {diarioSubs.map(s => (
                 <button
                   key={s.key}
@@ -125,7 +125,7 @@ export default function CompanyDashboard() {
               ))}
             </div>
 
-            <div className="flex-1">
+            <div className={`flex-1 min-h-0 ${diarioSub === "diario" || diarioSub === "mensual" ? "" : "overflow-auto pr-1"}`}>
               {diarioSub === "sedes" && <SedesTab />}
               {diarioSub === "pros" && <ProfesionalTab />}
               {diarioSub === "cal" && <CalendariosTab />}
