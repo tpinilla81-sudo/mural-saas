@@ -2,11 +2,9 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 
-// Branding removed: title and description are intentionally generic so the app
-// does not leak its identity to anyone inspecting the HTML <head> or browser tab.
 export const metadata: Metadata = {
-  title: "Acceso",
-  description: "Plataforma de gestión",
+  title: "MURAL",
+  description: "Gestión de turnos y calendarios",
 };
 
 export const viewport: Viewport = {

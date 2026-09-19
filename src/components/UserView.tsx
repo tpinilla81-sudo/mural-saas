@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
+import VoiceAvisoButton from "@/components/VoiceAvisoButton";
 
 // Permission keys (mirrors server-side CSV in User.permissions)
 type Perms = {
@@ -15,6 +16,7 @@ type Perms = {
   view_assigned_sedes: boolean;
   can_print: boolean;
   can_send: boolean;
+  can_voice_avisos: boolean;
 };
 
 function parsePerms(csv?: string): Perms {
@@ -30,6 +32,7 @@ function parsePerms(csv?: string): Perms {
     view_assigned_sedes: set.has("view_assigned_sedes"),
     can_print: set.has("can_print"),
     can_send: set.has("can_send"),
+    can_voice_avisos: set.has("can_voice_avisos"),
   };
 }
 
@@ -47,6 +50,7 @@ export default function UserView() {
   const [sedes, setSedes] = useState<any[]>([]);
   const [holidays, setHolidays] = useState<any[]>([]);
   const [avisos, setAvisos] = useState<any[]>([]);
+  const [professionals, setProfessionals] = useState<any[]>([]);
   const [myPro, setMyPro] = useState<MyPro | null>(null);
   const [view, setView] = useState<"mensual" | "diario">("mensual");
 
@@ -62,27 +66,24 @@ export default function UserView() {
   const allowedProAliases = new Set(allowedProsCsv.split(",").map(s => s.trim()).filter(Boolean));
 
   async function load() {
-    const [plRes, sRes, hRes, aRes] = await Promise.all([
+    const [plRes, sRes, hRes, aRes, pRes] = await Promise.all([
       fetch(`/api/company/plan?year=${year}&month=${month}`),
       fetch("/api/company/sedes"),
       fetch("/api/company/holidays"),
       fetch("/api/company/avisos"),
+      fetch("/api/company/professionals"),
     ]);
     if (plRes.ok) setPlans(await plRes.json());
     if (sRes.ok) setSedes(await sRes.json());
     if (hRes.ok) setHolidays(await hRes.json());
     if (aRes.ok) setAvisos(await aRes.json());
+    const allPros = pRes.ok ? await pRes.json().catch(() => []) : [];
+    setProfessionals(allPros);
 
-    // If the user has a linked professional, fetch it to know alias + assigned sedes
+    // If the user has a linked professional, find it to know alias + assigned sedes
     if (professionalId) {
-      try {
-        const r = await fetch("/api/company/professionals");
-        if (r.ok) {
-          const all = await r.json();
-          const me = all.find((p: any) => p.id === professionalId);
-          if (me) setMyPro({ id: me.id, alias: me.alias, assignedSedes: me.assignedSedes || "" });
-        }
-      } catch { /* ignore */ }
+      const me = allPros.find((p: any) => p.id === professionalId);
+      if (me) setMyPro({ id: me.id, alias: me.alias, assignedSedes: me.assignedSedes || "" });
     }
   }
 
@@ -301,8 +302,17 @@ export default function UserView() {
           </div>
         )}
 
-        {/* Action buttons: Print / Send (gated by perms) */}
+        {/* Action buttons: Voice aviso (if permitted) / Print / Send (gated by perms) */}
         <div className="flex gap-2 ml-auto sm:ml-0">
+          {perms.can_voice_avisos && (
+            <VoiceAvisoButton
+              sedes={sedes}
+              professionals={professionals}
+              onSaved={load}
+              contextYear={year}
+              contextMonth={month}
+            />
+          )}
           {perms.can_print && (
             <button onClick={handlePrint}
               className="px-3 py-2 rounded-lg text-xs font-bold bg-slate-800 text-slate-200 hover:bg-slate-700 border border-slate-700 transition flex items-center gap-1.5"
@@ -337,7 +347,7 @@ export default function UserView() {
 
       {/* Mensual view */}
       {view === "mensual" && (
-        <div className="flex-1 overflow-auto bg-white text-gray-900 rounded-xl p-3 sm:p-5">
+        <div id="print-target" className="flex-1 overflow-auto bg-white text-gray-900 rounded-xl p-3 sm:p-5">
           <h1 className="text-lg sm:text-xl font-black mb-3 border-b-[3px] border-gray-900 pb-2">{MESES[month].toUpperCase()} {year}</h1>
           <table className="w-full border-collapse table-fixed">
             <thead>

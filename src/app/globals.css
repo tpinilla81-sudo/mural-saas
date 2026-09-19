@@ -120,3 +120,33 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* ── Mensual: animación al cambiar de mes (swipe o flechas) ── */
+@keyframes month-slide-next {
+  from { opacity: 0.35; transform: translateX(28px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes month-slide-prev {
+  from { opacity: 0.35; transform: translateX(-28px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.month-anim-next { animation: month-slide-next 0.22s ease-out; }
+.month-anim-prev { animation: month-slide-prev 0.22s ease-out; }
+
+/* ── Impresión / PDF: solo el calendario (#print-target) si existe ── */
+@media print {
+  .no-print { display: none !important; }
+  body:has(#print-target) * { visibility: hidden; }
+  body:has(#print-target) #print-target,
+  body:has(#print-target) #print-target * { visibility: visible; }
+  body:has(#print-target) #print-target {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    border-radius: 0 !important;
+  }
+}

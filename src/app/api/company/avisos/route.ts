@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireCompanyAdmin, requireCompanyUser } from "@/lib/api-auth";
+import { requireCompanyUser, getSessionUser } from "@/lib/api-auth";
 import { db } from "@/lib/db";
 
 export async function GET() {
@@ -19,10 +19,21 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const { error, status, user } = await requireCompanyAdmin();
-  if (error) return NextResponse.json({ error }, { status });
+  // Admins siempre pueden; los accesos restringidos (USER) solo si tienen el
+  // permiso elegible "can_voice_avisos" (Configuración de Accesos → Acciones).
+  const user = await getSessionUser();
+  if (!user) return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+  if (!user.companyId) return NextResponse.json({ error: "Sin empresa" }, { status: 403 });
 
-  const companyId = user!.companyId!;
+  const isAdmin = user.role === "COMPANY_ADMIN" || user.role === "SUPER_ADMIN";
+  if (!isAdmin) {
+    const perms = new Set((user.permissions || "").split(",").map(s => s.trim()).filter(Boolean));
+    if (!perms.has("can_voice_avisos")) {
+      return NextResponse.json({ error: "Sin permisos para crear avisos" }, { status: 403 });
+    }
+  }
+
+  const companyId = user.companyId!;
   const body = await req.json();
 
   if (!body.date || !body.sedeId || !body.turn) {

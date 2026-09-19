@@ -18,6 +18,7 @@ export const PERM_KEYS = [
   "view_assigned_sedes",
   "can_print",
   "can_send",
+  "can_voice_avisos",
 ] as const;
 export type PermKey = (typeof PERM_KEYS)[number];
 
@@ -109,7 +110,7 @@ export async function GET() {
 //   passwordCleared?: boolean, // true → reset to a random unknown hash (login impossible)
 //   view_diario, edit_diario, view_mensual, edit_mensual,
 //   view_sedes, edit_sedes, view_own_only, view_assigned_sedes,
-//   can_print, can_send,
+//   can_print, can_send, can_voice_avisos,
 //   allowedSedes?: string,   // CSV of sede names visible in Mensual ("" = all)
 //   allowedPros?: string,    // CSV of pro aliases visible in Mensual ("" = all)
 //   showNotes?: boolean,     // can see notes on cards
@@ -191,6 +192,7 @@ export async function PUT(req: Request) {
     view_assigned_sedes: !!body.view_assigned_sedes,
     can_print: !!body.can_print,
     can_send: !!body.can_send,
+    can_voice_avisos: !!body.can_voice_avisos,
   };
   const permsCsv = permsToCsv(perms);
 

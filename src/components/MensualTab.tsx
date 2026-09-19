@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import VoiceAvisoButton from "@/components/VoiceAvisoButton";
 
 interface PlanEntry {
@@ -49,6 +49,35 @@ export default function MensualTab() {
 
   // Aviso note editor modal (click on an aviso card)
   const [avisoNoteModal, setAvisoNoteModal] = useState<{ avisoId: string; sedeName: string; proName: string; date: string; turn: string; reason: string } | null>(null);
+
+  // ── Month navigation: swipe táctil + flechas ‹ › ──
+  const [slideDir, setSlideDir] = useState<"" | "next" | "prev">("");
+  const touchStart = useRef<{ x: number; y: number } | null>(null);
+
+  const goMonth = (dir: 1 | -1) => {
+    setSlideDir(dir === 1 ? "next" : "prev");
+    const m = month + dir;
+    if (m < 0) { setMonth(11); setYear(y => y - 1); }
+    else if (m > 11) { setMonth(0); setYear(y => y + 1); }
+    else setMonth(m);
+  };
+
+  const onTouchStartCal = (e: React.TouchEvent) => {
+    const t = e.touches[0];
+    touchStart.current = { x: t.clientX, y: t.clientY };
+  };
+
+  const onTouchEndCal = (e: React.TouchEvent) => {
+    if (!touchStart.current) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - touchStart.current.x;
+    const dy = t.clientY - touchStart.current.y;
+    touchStart.current = null;
+    // Deslizar a la izquierda → mes siguiente; a la derecha → mes anterior.
+    // Solo si el gesto es claramente horizontal (no interfiere con el scroll vertical).
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
+    goMonth(dx < 0 ? 1 : -1);
+  };
 
   async function load() {
     const [sRes, pRes, plRes, hRes, aRes] = await Promise.all([
@@ -399,7 +428,7 @@ export default function MensualTab() {
             {showVac ? "🏖 Mostrando" : "Ocultas"}
           </button>
         </div>
-        <button onClick={() => { setYear(new Date().getFullYear()); setMonth(new Date().getMonth()); }} className="bg-amber-500 hover:bg-amber-400 text-black font-black px-3 py-2 rounded-lg text-xs transition">HOY</button>
+        <button onClick={() => { setSlideDir(""); setYear(new Date().getFullYear()); setMonth(new Date().getMonth()); }} className="bg-amber-500 hover:bg-amber-400 text-black font-black px-3 py-2 rounded-lg text-xs transition">HOY</button>
         <VoiceAvisoButton
           sedes={sedes}
           professionals={professionals}
@@ -410,16 +439,34 @@ export default function MensualTab() {
         <button onClick={() => window.print()} className="bg-slate-700 hover:bg-slate-600 text-white font-bold px-3 py-2 rounded-lg text-xs transition">🖨️ PDF</button>
       </div>
 
-      <div className="flex-1 overflow-auto bg-white text-gray-900 rounded-xl p-2 sm:p-5" id="print-target">
-        <div className="flex justify-between items-end mb-3 border-b-[3px] border-gray-900 pb-2">
-          <div className="flex items-center gap-3">
-            <img src="/mural-logo.png" alt="MURAL" className="h-8 sm:h-10 w-auto" />
-            <h1 className="text-lg sm:text-xl font-black text-gray-900">{MESES[month].toUpperCase()} {year}</h1>
+      <div
+        className="flex-1 overflow-auto bg-white text-gray-900 rounded-xl p-2 sm:p-5"
+        id="print-target"
+        onTouchStart={onTouchStartCal}
+        onTouchEnd={onTouchEndCal}
+      >
+        <div className="flex justify-between items-end mb-2 border-b-[3px] border-gray-900 pb-2">
+          <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
+            <img src="/mural-logo.png" alt="MURAL" className="h-8 sm:h-10 w-auto shrink-0" />
+            <button
+              onClick={() => goMonth(-1)}
+              className="no-print h-8 w-8 sm:h-9 sm:w-9 shrink-0 rounded-full bg-gray-100 hover:bg-amber-500 hover:text-black text-gray-700 text-xl font-black flex items-center justify-center transition"
+              title="Mes anterior (desliza a la derecha)"
+            >‹</button>
+            <h1 className="text-base sm:text-xl font-black text-gray-900 whitespace-nowrap">{MESES[month].toUpperCase()} {year}</h1>
+            <button
+              onClick={() => goMonth(1)}
+              className="no-print h-8 w-8 sm:h-9 sm:w-9 shrink-0 rounded-full bg-gray-100 hover:bg-amber-500 hover:text-black text-gray-700 text-xl font-black flex items-center justify-center transition"
+              title="Mes siguiente (desliza a la izquierda)"
+            >›</button>
           </div>
           <span className="text-[10px] text-gray-500 font-bold hidden sm:block">Click en una tarjeta para añadir/editar nota</span>
         </div>
-        <div className="overflow-x-auto">
-        <table className="w-full border-collapse table-fixed min-w-[780px]">
+        <div className="sm:hidden text-center text-[10px] text-gray-400 font-bold mb-2 no-print">
+          Desliza el dedo ‹ › para cambiar de mes
+        </div>
+        <div key={`${year}-${month}`} className={slideDir === "next" ? "month-anim-next" : slideDir === "prev" ? "month-anim-prev" : ""}>
+        <table className="w-full border-collapse table-fixed">
           <thead>
             <tr>
               {DOW_HEADER.map((d, i) => (

@@ -1,0 +1,625 @@
+     1→"use client";
+     2→
+     3→import { useState, useEffect, useCallback } from "react";
+     4→import { useSession } from "next-auth/react";
+     5→
+     6→// ───────────────────────────────────────────────────────────
+     7→// Permission catalog (mirrors server-side PERM_KEYS in /api/company/permissions)
+     8→// ───────────────────────────────────────────────────────────
+     9→type PermKey =
+    10→  | "view_diario" | "edit_diario"
+    11→  | "view_mensual" | "edit_mensual"
+    12→  | "view_sedes" | "edit_sedes"
+    13→  | "view_own_only" | "view_assigned_sedes"
+    14→  | "can_print" | "can_send";
+    15→
+    16→type Perms = Record<PermKey, boolean>;
+    17→
+    18→const PERM_GROUPS: {
+    19→  title: string;
+    20→  perms: { key: PermKey; label: string; help: string }[];
+    21→}[] = [
+    22→  {
+    23→    title: "Diario",
+    24→    perms: [
+    25→      { key: "view_diario", label: "Ver diario", help: "Puede abrir la vista Diaria" },
+    26→      { key: "edit_diario", label: "Editar diario", help: "Puede asignar / modificar turnos en el diario" },
+    27→    ],
+    28→  },
+    29→  {
+    30→    title: "Mensual",
+    31→    perms: [
+    32→      { key: "view_mensual", label: "Ver mensual", help: "Puede abrir la vista Mensual" },
+    33→      { key: "edit_mensual", label: "Editar mensual", help: "Puede modificar el calendario mensual" },
+    34→    ],
+    35→  },
+    36→  {
+    37→    title: "Sedes",
+    38→    perms: [
+    39→      { key: "view_sedes", label: "Ver sedes", help: "Puede ver la lista de sedes" },
+    40→      { key: "edit_sedes", label: "Editar sedes", help: "Puede crear / editar / borrar sedes" },
+    41→    ],
+    42→  },
+    43→  {
+    44→    title: "Filtros",
+    45→    perms: [
+    46→      { key: "view_own_only", label: "Solo sus turnos", help: "Solo ve los turnos asignados a su alias" },
+    47→      { key: "view_assigned_sedes", label: "Solo sus sedes", help: "Solo ve las sedes que tiene asignadas" },
+    48→    ],
+    49→  },
+    50→  {
+    51→    title: "Acciones",
+    52→    perms: [
+    53→      { key: "can_print", label: "Imprimir", help: "Puede imprimir el diario / mensual" },
+    54→      { key: "can_send", label: "Enviar", help: "Puede enviar por email el diario / mensual" },
+    55→    ],
+    56→  },
+    57→];
+    58→
+    59→const ALL_PERM_KEYS: PermKey[] = PERM_GROUPS.flatMap(g => g.perms.map(p => p.key));
+    60→
+    61→function emptyPerms(): Perms {
+    62→  const o = {} as Perms;
+    63→  for (const k of ALL_PERM_KEYS) o[k] = false;
+    64→  return o;
+    65→}
+    66→
+    67→// ── Mensual view restrictions (per access) ──
+    68→type ViewRestrictions = {
+    69→  sedesAll: boolean;        // true = can see ALL sedes
+    70→  sedes: Set<string>;       // sede names (when !sedesAll)
+    71→  prosAll: boolean;         // true = can see ALL professionals
+    72→  pros: Set<string>;        // pro aliases (when !prosAll)
+    73→  showNotes: boolean;
+    74→  showVacaciones: boolean;
+    75→};
+    76→
+    77→function parseAllowed(csv: string): { all: boolean; set: Set<string> } {
+    78→  const items = (csv || "").split(",").map(s => s.trim()).filter(Boolean);
+    79→  return { all: items.length === 0, set: new Set(items) };
+    80→}
+    81→
+    82→type Row = {
+    83→  professional: {
+    84→    id: string; firstName: string; lastName: string; alias: string;
+    85→    email: string; phone: string; assignedSedes: string;
+    86→  };
+    87→  user: {
+    88→    id: string; email: string; name: string;
+    89→    isActive: boolean; hasPassword: boolean;
+    90→    permissions: Perms;
+    91→    allowedSedes: string;
+    92→    allowedPros: string;
+    93→    showNotes: boolean;
+    94→    showVacaciones: boolean;
+    95→  } | null;
+    96→  canLogin: boolean;
+    97→};
+    98→
+    99→type Draft = {
+   100→  email: string;
+   101→  canLogin: boolean;
+   102→  password: string;        // new password typed ("" = unchanged)
+   103→  passwordCleared: boolean;
+   104→  perms: Perms;
+   105→  vr: ViewRestrictions;
+   106→  dirty: boolean;
+   107→};
+   108→
+   109→export default function ConfigTab() {
+   110→  const { data: session } = useSession();
+   111→  const [rows, setRows] = useState<Row[]>([]);
+   112→  const [sedes, setSedes] = useState<any[]>([]);
+   113→  const [professionals, setProfessionals] = useState<any[]>([]);
+   114→  const [loading, setLoading] = useState(true);
+   115→  const [expandedId, setExpandedId] = useState<string | null>(null);
+   116→  const [drafts, setDrafts] = useState<Record<string, Draft>>({});
+   117→  const [savingId, setSavingId] = useState<string | null>(null);
+   118→  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+   119→
+   120→  const showToast = useCallback((message: string, type: "success" | "error" = "success") => {
+   121→    setToast({ message, type });
+   122→    setTimeout(() => setToast(null), 3500);
+   123→  }, []);
+   124→
+   125→  async function load() {
+   126→    setLoading(true);
+   127→    try {
+   128→      const [r, sRes, pRes] = await Promise.all([
+   129→        fetch("/api/company/permissions"),
+   130→        fetch("/api/company/sedes"),
+   131→        fetch("/api/company/professionals"),
+   132→      ]);
+   133→      if (!r.ok) { showToast("Error al cargar permisos", "error"); return; }
+   134→      const data: Row[] = await r.json();
+   135→      setRows(data);
+   136→      if (sRes.ok) setSedes(await sRes.json());
+   137→      if (pRes.ok) setProfessionals(await pRes.json());
+   138→      const next: Record<string, Draft> = {};
+   139→      for (const row of data) {
+   140→        const sedesAllowed = parseAllowed(row.user?.allowedSedes || "");
+   141→        const prosAllowed = parseAllowed(row.user?.allowedPros || "");
+   142→        next[row.professional.id] = {
+   143→          email: row.user?.email || row.professional.email || "",
+   144→          canLogin: !!row.canLogin,
+   145→          password: "",
+   146→          passwordCleared: false,
+   147→          perms: row.user?.permissions || emptyPerms(),
+   148→          vr: {
+   149→            sedesAll: sedesAllowed.all,
+   150→            sedes: sedesAllowed.set,
+   151→            prosAll: prosAllowed.all,
+   152→            pros: prosAllowed.set,
+   153→            showNotes: row.user?.showNotes !== false,
+   154→            showVacaciones: row.user?.showVacaciones !== false,
+   155→          },
+   156→          dirty: false,
+   157→        };
+   158→      }
+   159→      setDrafts(next);
+   160→    } catch {
+   161→      showToast("Error de conexión", "error");
+   162→    } finally {
+   163→      setLoading(false);
+   164→    }
+   165→  }
+   166→
+   167→  useEffect(() => { load(); }, []);
+   168→
+   169→  const updateDraft = (proId: string, patch: Partial<Draft>) => {
+   170→    setDrafts(prev => ({
+   171→      ...prev,
+   172→      [proId]: { ...prev[proId], ...patch, dirty: true },
+   173→    }));
+   174→  };
+   175→
+   176→  const togglePerm = (proId: string, key: PermKey, value: boolean) => {
+   177→    setDrafts(prev => {
+   178→      const d = prev[proId];
+   179→      if (!d) return prev;
+   180→      const perms = { ...d.perms, [key]: value };
+   181→      // Auto-cascade: enabling edit implies enabling view
+   182→      if (key.startsWith("edit_") && value) {
+   183→        const viewKey = ("view_" + key.slice(5)) as PermKey;
+   184→        perms[viewKey] = true;
+   185→      }
+   186→      // Disabling view forces disabling edit
+   187→      if (key.startsWith("view_") && !value) {
+   188→        const editKey = ("edit_" + key.slice(5)) as PermKey;
+   189→        perms[editKey] = false;
+   190→      }
+   191→      return { ...prev, [proId]: { ...d, perms, dirty: true } };
+   192→    });
+   193→  };
+   194→
+   195→  const toggleVrSede = (proId: string, sedeName: string) => {
+   196→    setDrafts(prev => {
+   197→      const d = prev[proId];
+   198→      if (!d) return prev;
+   199→      const n = new Set(d.vr.sedes);
+   200→      if (n.has(sedeName)) n.delete(sedeName); else n.add(sedeName);
+   201→      return { ...prev, [proId]: { ...d, vr: { ...d.vr, sedes: n, sedesAll: n.size === 0 }, dirty: true } };
+   202→    });
+   203→  };
+   204→
+   205→  const toggleVrPro = (proId: string, alias: string) => {
+   206→    setDrafts(prev => {
+   207→      const d = prev[proId];
+   208→      if (!d) return prev;
+   209→      const n = new Set(d.vr.pros);
+   210→      if (n.has(alias)) n.delete(alias); else n.add(alias);
+   211→      return { ...prev, [proId]: { ...d, vr: { ...d.vr, pros: n, prosAll: n.size === 0 }, dirty: true } };
+   212→    });
+   213→  };
+   214→
+   215→  const save = async (proId: string) => {
+   216→    const draft = drafts[proId];
+   217→    if (!draft) return;
+   218→    if (draft.canLogin && draft.email && !draft.email.includes("@")) {
+   219→      showToast("Email inválido", "error");
+   220→      return;
+   221→    }
+   222→    if (draft.password && draft.password.trim().length < 4) {
+   223→      showToast("La contraseña debe tener al menos 4 caracteres", "error");
+   224→      return;
+   225→    }
+   226→    setSavingId(proId);
+   227→    try {
+   228→      const body: Record<string, unknown> = {
+   229→        professionalId: proId,
+   230→        canLogin: draft.canLogin,
+   231→        email: draft.email,
+   232→        view_diario: draft.perms.view_diario,
+   233→        edit_diario: draft.perms.edit_diario,
+   234→        view_mensual: draft.perms.view_mensual,
+   235→        edit_mensual: draft.perms.edit_mensual,
+   236→        view_sedes: draft.perms.view_sedes,
+   237→        edit_sedes: draft.perms.edit_sedes,
+   238→        view_own_only: draft.perms.view_own_only,
+   239→        view_assigned_sedes: draft.perms.view_assigned_sedes,
+   240→        can_print: draft.perms.can_print,
+   241→        can_send: draft.perms.can_send,
+   242→        allowedSedes: draft.vr.sedesAll ? "" : [...draft.vr.sedes].join(","),
+   243→        allowedPros: draft.vr.prosAll ? "" : [...draft.vr.pros].join(","),
+   244→        showNotes: draft.vr.showNotes,
+   245→        showVacaciones: draft.vr.showVacaciones,
+   246→      };
+   247→      if (draft.password) {
+   248→        body.password = draft.password;
+   249→      } else if (draft.passwordCleared) {
+   250→        body.passwordCleared = true;
+   251→      }
+   252→
+   253→      const r = await fetch("/api/company/permissions", {
+   254→        method: "PUT",
+   255→        headers: { "Content-Type": "application/json" },
+   256→        body: JSON.stringify(body),
+   257→      });
+   258→      if (!r.ok) {
+   259→        const d = await r.json().catch(() => ({ error: "Error al guardar" }));
+   260→        showToast(d.error || "Error al guardar", "error");
+   261→        return;
+   262→      }
+   263→      showToast("Acceso y permisos guardados correctamente");
+   264→      setDrafts(prev => ({
+   265→        ...prev,
+   266→        [proId]: { ...prev[proId], password: "", passwordCleared: false, dirty: false },
+   267→      }));
+   268→      load();
+   269→    } catch {
+   270→      showToast("Error de conexión al guardar", "error");
+   271→    } finally {
+   272→      setSavingId(null);
+   273→    }
+   274→  };
+   275→
+   276→  return (
+   277→    <div className="space-y-4">
+   278→      {/* Toast */}
+   279→      {toast && (
+   280→        <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg text-sm font-bold transition-all ${
+   281→          toast.type === "success" ? "bg-emerald-600 text-white" : "bg-red-600 text-white"
+   282→        }`}>
+   283→          {toast.message}
+   284→        </div>
+   285→      )}
+   286→
+   287→      {/* Header */}
+   288→      <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4 sm:p-5">
+   289→        <div className="flex items-center gap-3">
+   290→          <div className="text-2xl">⚙️</div>
+   291→          <div className="flex-1 min-w-0">
+   292→            <h1 className="text-lg font-black text-white">Configuración de Accesos</h1>
+   293→            <p className="text-xs text-slate-400 mt-0.5">
+   294→              Crea contraseñas de entrada y define permisos específicos para cada profesional: qué pestañas ve, qué sedes y profesionales salen en el mensual, notas y vacaciones.
+   295→            </p>
+   296→          </div>
+   297→        </div>
+   298→        <div className="mt-3 flex flex-wrap gap-2 text-[10px] sm:text-xs">
+   299→          <span className="px-2 py-1 bg-slate-900 border border-slate-700 rounded text-slate-300 font-bold uppercase tracking-wider">
+   300→            {rows.filter(r => drafts[r.professional.id]?.canLogin).length} acceso(s) activo(s)
+   301→          </span>
+   302→          <span className="px-2 py-1 bg-slate-900 border border-slate-700 rounded text-slate-300 font-bold uppercase tracking-wider">
+   303→            {rows.length} profesionales
+   304→          </span>
+   305→        </div>
+   306→      </div>
+   307→
+   308→      {/* List */}
+   309→      {loading ? (
+   310→        <div className="flex items-center justify-center py-12 text-slate-400 text-sm">
+   311→          Cargando profesionales...
+   312→        </div>
+   313→      ) : rows.length === 0 ? (
+   314→        <div className="flex items-center justify-center py-12 text-slate-500 text-sm">
+   315→          No hay profesionales registrados. Crea profesionales primero en la pestaña Profesionales.
+   316→        </div>
+   317→      ) : (
+   318→        <div className="space-y-2">
+   319→          {rows.map(row => {
+   320→            const pro = row.professional;
+   321→            const draft = drafts[pro.id] || {
+   322→              email: "", canLogin: false, password: "", passwordCleared: false,
+   323→              perms: emptyPerms(), vr: { sedesAll: true, sedes: new Set(), prosAll: true, pros: new Set(), showNotes: true, showVacaciones: true }, dirty: false,
+   324→            };
+   325→            const expanded = expandedId === pro.id;
+   326→            const activePerms = ALL_PERM_KEYS.filter(k => draft.perms[k]).length;
+   327→
+   328→            return (
+   329→              <div key={pro.id} className="bg-slate-800/50 border border-slate-700 rounded-xl overflow-hidden">
+   330→                {/* Collapsed row */}
+   331→                <div
+   332→                  className="flex items-center gap-3 p-3 sm:p-4 cursor-pointer hover:bg-slate-700/30 transition"
+   333→                  onClick={() => setExpandedId(expanded ? null : pro.id)}
+   334→                >
+   335→                  <div className={`h-9 w-9 sm:h-10 sm:w-10 rounded-full flex items-center justify-center font-black text-sm shrink-0 ${
+   336→                    draft.canLogin ? "bg-emerald-600 text-white" : "bg-slate-700 text-slate-400"
+   337→                  }`}>
+   338→                    {(pro.firstName[0] || "?").toUpperCase()}{(pro.lastName[0] || "").toUpperCase()}
+   339→                  </div>
+   340→
+   341→                  <div className="flex-1 min-w-0">
+   342→                    <div className="flex items-center gap-2 flex-wrap">
+   343→                      <span className="font-bold text-white text-sm sm:text-base truncate">
+   344→                        {pro.firstName} {pro.lastName}
+   345→                      </span>
+   346→                      <span className="text-[10px] bg-slate-700 px-1.5 py-0.5 rounded font-bold text-slate-300">
+   347→                        {pro.alias}
+   348→                      </span>
+   349→                      {draft.canLogin ? (
+   350→                        <span className="text-[10px] bg-emerald-600/20 px-1.5 py-0.5 rounded font-bold text-emerald-400 border border-emerald-600/30">
+   351→                          ACCESO ACTIVO
+   352→                        </span>
+   353→                      ) : (
+   354→                        <span className="text-[10px] bg-slate-700/50 px-1.5 py-0.5 rounded font-bold text-slate-500 border border-slate-700">
+   355→                          SIN ACCESO
+   356→                        </span>
+   357→                      )}
+   358→                    </div>
+   359→                    <div className="text-xs text-slate-400 mt-0.5 truncate">
+   360→                      {draft.email || <span className="italic text-amber-400">Sin email</span>}
+   361→                      {row.user?.hasPassword && draft.canLogin && <span className="text-blue-400 ml-2">· contraseña activa</span>}
+   362→                      {activePerms > 0 && <span className="ml-2">· {activePerms} permiso(s)</span>}
+   363→                      {!draft.vr.sedesAll && <span className="ml-2 text-amber-400">· {draft.vr.sedes.size} sede(s)</span>}
+   364→                      {!draft.vr.prosAll && <span className="ml-2 text-amber-400">· {draft.vr.pros.size} pro(s)</span>}
+   365→                    </div>
+   366→                  </div>
+   367→
+   368→                  <div className="text-slate-400 text-xs shrink-0">
+   369→                    {expanded ? "▲" : "▼"}
+   370→                  </div>
+   371→                </div>
+   372→
+   373→                {/* Expanded panel */}
+   374→                {expanded && (
+   375→                  <div className="border-t border-slate-700 p-3 sm:p-5 space-y-4 bg-slate-900/40">
+   376→                    {/* Login enable + email + password */}
+   377→                    <div className="grid sm:grid-cols-12 gap-3">
+   378→                      <div className="sm:col-span-4">
+   379→                        <label className="flex items-center gap-2 cursor-pointer select-none">
+   380→                          <input
+   381→                            type="checkbox"
+   382→                            checked={draft.canLogin}
+   383→                            onChange={e => updateDraft(pro.id, { canLogin: e.target.checked })}
+   384→                            className="h-4 w-4 accent-emerald-500"
+   385→                          />
+   386→                          <span className="text-xs font-extrabold text-emerald-400 uppercase">Puede iniciar sesión</span>
+   387→                        </label>
+   388→                        <p className="text-[10px] text-slate-500 mt-1 leading-tight">
+   389→                          Si está activado, este profesional puede entrar tecleando su contraseña en el login.
+   390→                        </p>
+   391→                      </div>
+   392→
+   393→                      <div className="sm:col-span-4">
+   394→                        <label className="block text-xs font-extrabold text-blue-400 uppercase mb-1">Email (identificador)</label>
+   395→                        <input
+   396→                          type="email"
+   397→                          value={draft.email}
+   398→                          onChange={e => updateDraft(pro.id, { email: e.target.value })}
+   399→                          disabled={!draft.canLogin}
+   400→                          placeholder="profesional@clinica.com (opcional)"
+   401→                          className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white text-xs focus:outline-none focus:border-amber-500 transition disabled:opacity-40 disabled:cursor-not-allowed"
+   402→                        />
+   403→                      </div>
+   404→
+   405→                      <div className="sm:col-span-4">
+   406→                        <label className="block text-xs font-extrabold text-amber-400 uppercase mb-1">Contraseña de entrada</label>
+   407→                        <input
+   408→                          type="text"
+   409→                          value={draft.password}
+   410→                          onChange={e => updateDraft(pro.id, { password: e.target.value, passwordCleared: false })}
+   411→                          disabled={!draft.canLogin}
+   412→                          placeholder={row.user?.hasPassword ? "•••••• (escribir nueva para cambiar)" : "Contraseña (mín. 4 caracteres)"}
+   413→                          className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white text-xs focus:outline-none focus:border-amber-500 transition disabled:opacity-40 disabled:cursor-not-allowed"
+   414→                        />
+   415→                        {row.user?.hasPassword && !draft.password && !draft.passwordCleared && (
+   416→                          <div className="text-[10px] text-blue-400 mt-1 font-bold">Contraseña activa configurada</div>
+   417→                        )}
+   418→                        {draft.password && (
+   419→                          <div className="text-[10px] text-amber-400 mt-1 font-bold">Se establecerá esta contraseña al guardar</div>
+   420→                        )}
+   421→                      </div>
+   422→                    </div>
+   423→
+   424→                    {/* ── Vista Mensual restrictions ── */}
+   425→                    <div className="bg-slate-800/60 border border-amber-600/30 rounded-lg p-3">
+   426→                      <h4 className="text-xs font-extrabold text-amber-400 uppercase tracking-wider mb-1">
+   427→                        Vista Mensual — qué puede ver este acceso
+   428→                      </h4>
+   429→                      <p className="text-[10px] text-slate-500 mb-3 leading-tight">
+   430→                        Elige de qué sedes y de qué profesionales se ven las tarjetas en el calendario mensual, y si se muestran las notas y las vacaciones/ausencias. Si no marcas nada en una lista, las verá todas.
+   431→                      </p>
+   432→
+   433→                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+   434→                        {/* Sedes visibility */}
+   435→                        <div>
+   436→                          <div className="flex items-center justify-between mb-1.5">
+   437→                            <span className="text-[11px] font-extrabold text-slate-300 uppercase">Sedes visibles</span>
+   438→                            <span className="text-[10px] text-amber-400 font-bold">
+   439→                              {draft.vr.sedesAll ? "TODAS" : `${draft.vr.sedes.size} seleccionada(s)`}
+   440→                            </span>
+   441→                          </div>
+   442→                          <div className="max-h-[140px] overflow-y-auto bg-slate-900/60 border border-slate-700 rounded p-2 space-y-1">
+   443→                            {sedes.map(s => (
+   444→                              <label key={s.id} className="flex items-center gap-2 px-1.5 py-1 cursor-pointer hover:bg-slate-800 rounded">
+   445→                                <input
+   446→                                  type="checkbox"
+   447→                                  checked={draft.vr.sedesAll || draft.vr.sedes.has(s.name)}
+   448→                                  disabled={draft.vr.sedesAll || !draft.canLogin}
+   449→                                  onChange={() => toggleVrSede(pro.id, s.name)}
+   450→                                  className="accent-amber-500 w-3.5 h-3.5"
+   451→                                />
+   452→                                <div className="w-3 h-3 rounded-sm shrink-0" style={{ background: s.color }} />
+   453→                                <span className="text-[11px] font-bold text-white truncate">{s.name}</span>
+   454→                                <span className="text-[9px] text-slate-500 truncate">{s.task}</span>
+   455→                              </label>
+   456→                            ))}
+   457→                          </div>
+   458→                          <div className="flex gap-1 mt-1.5">
+   459→                            <button
+   460→                              type="button"
+   461→                              disabled={!draft.canLogin}
+   462→                              onClick={() => updateDraft(pro.id, { vr: { ...draft.vr, sedesAll: true, sedes: new Set() } })}
+   463→                              className="flex-1 bg-slate-800 hover:bg-amber-500 hover:text-black disabled:opacity-40 text-[10px] px-2 py-1 rounded font-bold transition"
+   464→                            >TODAS LAS SEDES</button>
+   465→                            <button
+   466→                              type="button"
+   467→                              disabled={!draft.canLogin}
+   468→                              onClick={() => updateDraft(pro.id, { vr: { ...draft.vr, sedesAll: false } })}
+   469→                              className="flex-1 bg-slate-800 hover:bg-amber-500 hover:text-black disabled:opacity-40 text-[10px] px-2 py-1 rounded font-bold transition"
+   470→                            >ELEGIR…</button>
+   471→                          </div>
+   472→                        </div>
+   473→
+   474→                        {/* Professionals visibility */}
+   475→                        <div>
+   476→                          <div className="flex items-center justify-between mb-1.5">
+   477→                            <span className="text-[11px] font-extrabold text-slate-300 uppercase">Profesionales visibles</span>
+   478→                            <span className="text-[10px] text-amber-400 font-bold">
+   479→                              {draft.vr.prosAll ? "TODOS" : `${draft.vr.pros.size} seleccionado(s)`}
+   480→                            </span>
+   481→                          </div>
+   482→                          <div className="max-h-[140px] overflow-y-auto bg-slate-900/60 border border-slate-700 rounded p-2 space-y-1">
+   483→                            {professionals.map(p => (
+   484→                              <label key={p.id} className="flex items-center gap-2 px-1.5 py-1 cursor-pointer hover:bg-slate-800 rounded">
+   485→                                <input
+   486→                                  type="checkbox"
+   487→                                  checked={draft.vr.prosAll || draft.vr.pros.has(p.alias)}
+   488→                                  disabled={draft.vr.prosAll || !draft.canLogin}
+   489→                                  onChange={() => toggleVrPro(pro.id, p.alias)}
+   490→                                  className="accent-amber-500 w-3.5 h-3.5"
+   491→                                />
+   492→                                <span className="text-[11px] font-bold text-white">{p.alias}</span>
+   493→                                <span className="text-[9px] text-slate-500 truncate">{p.firstName} {p.lastName}</span>
+   494→                              </label>
+   495→                            ))}
+   496→                          </div>
+   497→                          <div className="flex gap-1 mt-1.5">
+   498→                            <button
+   499→                              type="button"
+   500→                              disabled={!draft.canLogin}
+   501→                              onClick={() => updateDraft(pro.id, { vr: { ...draft.vr, prosAll: true, pros: new Set() } })}
+   502→                              className="flex-1 bg-slate-800 hover:bg-amber-500 hover:text-black disabled:opacity-40 text-[10px] px-2 py-1 rounded font-bold transition"
+   503→                            >TODOS LOS PROFESIONALES</button>
+   504→                            <button
+   505→                              type="button"
+   506→                              disabled={!draft.canLogin}
+   507→                              onClick={() => updateDraft(pro.id, { vr: { ...draft.vr, prosAll: false } })}
+   508→                              className="flex-1 bg-slate-800 hover:bg-amber-500 hover:text-black disabled:opacity-40 text-[10px] px-2 py-1 rounded font-bold transition"
+   509→                            >ELEGIR…</button>
+   510→                          </div>
+   511→                        </div>
+   512→                      </div>
+   513→
+   514→                      {/* Notes / vacaciones toggles */}
+   515→                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3">
+   516→                        <label className={`flex items-center gap-2 px-3 py-2 rounded border cursor-pointer select-none transition ${draft.vr.showNotes ? "bg-amber-500/10 border-amber-500/40" : "bg-slate-900/60 border-slate-700"} ${!draft.canLogin ? "opacity-40 pointer-events-none" : ""}`}>
+   517→                          <input
+   518→                            type="checkbox"
+   519→                            checked={draft.vr.showNotes}
+   520→                            onChange={e => updateDraft(pro.id, { vr: { ...draft.vr, showNotes: e.target.checked } })}
+   521→                            className="h-4 w-4 accent-amber-500"
+   522→                          />
+   523→                          <div>
+   524→                            <div className="text-[11px] font-extrabold text-white">📝 Ver notas</div>
+   525→                            <div className="text-[9px] text-slate-400">Muestra los indicadores y el texto de las notas de las tarjetas</div>
+   526→                          </div>
+   527→                        </label>
+   528→                        <label className={`flex items-center gap-2 px-3 py-2 rounded border cursor-pointer select-none transition ${draft.vr.showVacaciones ? "bg-amber-500/10 border-amber-500/40" : "bg-slate-900/60 border-slate-700"} ${!draft.canLogin ? "opacity-40 pointer-events-none" : ""}`}>
+   529→                          <input
+   530→                            type="checkbox"
+   531→                            checked={draft.vr.showVacaciones}
+   532→                            onChange={e => updateDraft(pro.id, { vr: { ...draft.vr, showVacaciones: e.target.checked } })}
+   533→                            className="h-4 w-4 accent-amber-500"
+   534→                          />
+   535→                          <div>
+   536→                            <div className="text-[11px] font-extrabold text-white">🏖️ Ver vacaciones/ausencias</div>
+   537→                            <div className="text-[9px] text-slate-400">Muestra las tarjetas de vacaciones, bajas y permisos en el mensual</div>
+   538→                          </div>
+   539→                        </label>
+   540→                      </div>
+   541→                    </div>
+   542→
+   543→                    {/* Permissions grid */}
+   544→                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+   545→                      {PERM_GROUPS.map(group => (
+   546→                        <div key={group.title} className="bg-slate-800/60 border border-slate-700 rounded-lg p-3">
+   547→                          <h4 className="text-xs font-extrabold text-amber-400 uppercase tracking-wider mb-2">
+   548→                            {group.title}
+   549→                          </h4>
+   550→                          <div className="space-y-2">
+   551→                            {group.perms.map(p => {
+   552→                              const checked = draft.perms[p.key];
+   553→                              const disabled = !draft.canLogin;
+   554→                              return (
+   555→                                <label
+   556→                                  key={p.key}
+   557→                                  className={`flex items-start gap-2 cursor-pointer select-none ${disabled ? "opacity-40 cursor-not-allowed" : ""}`}
+   558→                                  title={p.help}
+   559→                                >
+   560→                                  <input
+   561→                                    type="checkbox"
+   562→                                    checked={checked}
+   563→                                    disabled={disabled}
+   564→                                    onChange={e => togglePerm(pro.id, p.key, e.target.checked)}
+   565→                                    className="h-4 w-4 mt-0.5 accent-emerald-500"
+   566→                                  />
+   567→                                  <div className="flex-1 min-w-0">
+   568→                                    <div className="text-xs font-bold text-white">{p.label}</div>
+   569→                                    <div className="text-[10px] text-slate-400 leading-tight">{p.help}</div>
+   570→                                  </div>
+   571→                                </label>
+   572→                              );
+   573→                            })}
+   574→                          </div>
+   575→                        </div>
+   576→                      ))}
+   577→                    </div>
+   578→
+   579→                    {/* Action buttons */}
+   580→                    <div className="flex items-center justify-between gap-3 pt-1">
+   581→                      <div className="text-[10px] text-slate-500">
+   582→                        {draft.dirty
+   583→                          ? <span className="text-amber-400 font-bold">● Cambios sin guardar</span>
+   584→                          : <span className="text-slate-600">Sin cambios</span>}
+   585→                      </div>
+   586→                      <div className="flex gap-2">
+   587→                        <button
+   588→                          onClick={() => setExpandedId(null)}
+   589→                          className="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg text-xs font-bold transition"
+   590→                        >
+   591→                          Cerrar
+   592→                        </button>
+   593→                        <button
+   594→                          onClick={() => save(pro.id)}
+   595→                          disabled={!draft.dirty || savingId === pro.id}
+   596→                          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-xs font-bold transition flex items-center gap-2"
+   597→                        >
+   598→                          {savingId === pro.id && (
+   599→                            <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24">
+   600→                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+   601→                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+   602→                            </svg>
+   603→                          )}
+   604→                          {savingId === pro.id ? "Guardando..." : "Guardar"}
+   605→                        </button>
+   606→                      </div>
+   607→                    </div>
+   608→                  </div>
+   609→                )}
+   610→              </div>
+   611→            );
+   612→          })}
+   613→        </div>
+   614→      )}
+   615→
+   616→      {/* Footer info */}
+   617→      {!loading && rows.length > 0 && (
+   618→        <div className="text-[11px] text-slate-500 px-1 pt-1">
+   619→          {rows.filter(r => (drafts[r.professional.id]?.canLogin)).length} de {rows.length} profesionales con acceso activo. Cada acceso entra con su propia contraseña desde el login principal.
+   620→        </div>
+   621→      )}
+   622→    </div>
+   623→  );
+   624→}
+   625→

@@ -11,7 +11,8 @@ type PermKey =
   | "view_mensual" | "edit_mensual"
   | "view_sedes" | "edit_sedes"
   | "view_own_only" | "view_assigned_sedes"
-  | "can_print" | "can_send";
+  | "can_print" | "can_send"
+  | "can_voice_avisos";
 
 type Perms = Record<PermKey, boolean>;
 
@@ -52,6 +53,7 @@ const PERM_GROUPS: {
     perms: [
       { key: "can_print", label: "Imprimir", help: "Puede imprimir el diario / mensual" },
       { key: "can_send", label: "Enviar", help: "Puede enviar por email el diario / mensual" },
+      { key: "can_voice_avisos", label: "🎙️ Avisos por voz", help: "Puede añadir avisos de vacaciones/ausencias dictando por voz o escribiéndolos" },
     ],
   },
 ];
@@ -239,6 +241,7 @@ export default function ConfigTab() {
         view_assigned_sedes: draft.perms.view_assigned_sedes,
         can_print: draft.perms.can_print,
         can_send: draft.perms.can_send,
+        can_voice_avisos: draft.perms.can_voice_avisos,
         allowedSedes: draft.vr.sedesAll ? "" : [...draft.vr.sedes].join(","),
         allowedPros: draft.vr.prosAll ? "" : [...draft.vr.pros].join(","),
         showNotes: draft.vr.showNotes,
