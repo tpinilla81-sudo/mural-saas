@@ -190,13 +190,17 @@ export function matchProAnswer(
   return hit;
 }
 
-// ── TURNO ──
+// ── TURNO: palabras o número de lista 1 mañana / 2 tarde / 3 todo el día ──
 export function parseTurnAnswer(raw: string): "M" | "T" | "ALL" | null {
   const t = norm(raw);
   if (/\bmananas?\b/.test(t) && /\btardes?\b/.test(t)) return "ALL";
   if (/\b(todo el dia|los dos|ambos|ambas|completo|entero|dia completo|jornada completa)\b/.test(t)) return "ALL";
   if (/\btardes?\b/.test(t)) return "T";
   if (/\bmananas?\b/.test(t)) return "M";
+  const n = parseListNumber(t, 3);
+  if (n === 1) return "M";
+  if (n === 2) return "T";
+  if (n === 3) return "ALL";
   return null;
 }
 
@@ -255,6 +259,28 @@ export function dateLabel(dateStr: string): string {
   const [y, m, d] = dateStr.split("-").map(Number);
   const dt = new Date(y, (m || 1) - 1, d || 1);
   return dt.toLocaleDateString("es-ES", { weekday: "long", day: "numeric", month: "long" });
+}
+
+const DOW_SHORT = ["DOM", "LUN", "MAR", "MIÉ", "JUE", "VIE", "SÁB"];
+
+// Etiqueta corta para listas en pantalla: "VIE 19/9"
+export function shortDateLabel(dateStr: string): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dt = new Date(y, (m || 1) - 1, d || 1);
+  return `${DOW_SHORT[dt.getDay()]} ${dt.getDate()}/${dt.getMonth() + 1}`;
+}
+
+// Próximos N días desde hoy (formato ISO) — lista numerada del modo coche
+export function upcomingDays(count: number): string[] {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const out: string[] = [];
+  for (let i = 0; i < count; i++) {
+    const d = new Date(today);
+    d.setDate(d.getDate() + i);
+    out.push(fmt(d));
+  }
+  return out;
 }
 
 export function turnPhrase(turn: "M" | "T" | "ALL"): string {

@@ -7,13 +7,15 @@ import {
   matchSedeAnswer,
   norm,
   parseDateAnswer,
+  parseListNumber,
   parseReasonAnswer,
   parseTurnAnswer,
   parseYesNo,
   proLabel,
   REASON_OPTIONS,
-  speechList,
+  shortDateLabel,
   turnPhrase,
+  upcomingDays,
   wantsAnother,
   wantsCancel,
   wantsRepeat,
@@ -23,11 +25,12 @@ import {
 } from "@/lib/voice-dialog";
 
 // ═══════════════════════════════════════════════════════════════
-// MANOS LIBRES — diálogo 100% por voz para usar mientras se conduce.
-// Una pulsación para arrancar (gesto requerido por el navegador);
-// a partir de ahí la app pregunta por altavoz y escucha las
-// respuestas: día → sede → profesional → turno → motivo → nota →
-// confirmación "¿Guardo?". Bucle hasta decir "terminar".
+// MANOS LIBRES — estilo CarPlay: cada paso muestra una LISTA
+// NUMERADA EN PANTALLA y la app solo dice "elige número".
+// El conductor responde con el número ("dos", "el 3") — rápido,
+// fiable y sin escuchar listas largas por altavoz.
+// Flujo: día → sede → profesional → turno → motivo → nota →
+// confirmación. Tras guardar: "¿Igual, nuevo o terminar?"
 // ═══════════════════════════════════════════════════════════════
 
 // Web Speech API — typings mínimos
@@ -44,6 +47,15 @@ interface SRInstance {
 type SRConstructor = new () => SRInstance;
 
 type Step = "date" | "sede" | "pro" | "turn" | "reason" | "note" | "noteText" | "confirm" | "saving" | "again";
+
+interface ListItem { n: number; label: string; sub?: string }
+
+interface AskPayload {
+  title: string;      // pregunta grande en pantalla
+  say: string;        // lo que se lee por altavoz (corto)
+  items?: ListItem[]; // lista numerada en pantalla (si aplica)
+  echo?: string;      // confirmación en pantalla de la elección anterior
+}
 
 interface Draft {
   date: string;
@@ -67,11 +79,15 @@ const emptyDraft = (): Draft => ({
   date: "", sedeId: "", professionalId: "", turn: "ALL", reason: "VACACIONES", note: "",
 });
 
+const DATE_LIST_SIZE = 10;
+
 export default function HandsFreeOverlay({
   onClose, onSaved, sedes, professionals, contextYear, contextMonth,
 }: HandsFreeOverlayProps) {
   const [step, setStep] = useState<Step>("date");
-  const [question, setQuestion] = useState("Preparando manos libres…");
+  const [title, setTitle] = useState("Preparando manos libres…");
+  const [items, setItems] = useState<ListItem[]>([]);
+  const [echo, setEcho] = useState("");
   const [heard, setHeard] = useState("");
   const [draft, setDraft] = useState<Draft>(emptyDraft());
   const [listening, setListening] = useState(false);
@@ -83,20 +99,23 @@ export default function HandsFreeOverlay({
   const recRef = useRef<SRInstance | null>(null);
   const abortRef = useRef(false);
   const failRef = useRef(0);
-  const lastQuestionRef = useRef("");
-  const askRef = useRef<(step: Step, text: string, echo?: string) => void>(() => {});
+  const lastAskRef = useRef<AskPayload>({ title: "", say: "" });
+  // Memoria del último aviso guardado — para el atajo "igual"
+  const lastRef = useRef<{ sedeId: string; professionalId: string; turn: "M" | "T" | "ALL" } | null>(null);
+  const skipSedeProTurnRef = useRef(false);
+  const askRef = useRef<(payload: AskPayload) => void>(() => {});
   const handlerRef = useRef<(raw: string) => void>(() => {});
   const closeRef = useRef<(msg?: string) => void>(() => {});
 
   const addLog = (line: string) =>
-    setLog(prev => [...prev.slice(-7), line]);
+    setLog(prev => [...prev.slice(-6), line]);
 
   const setDraftField = (patch: Partial<Draft>) => {
     draftRef.current = { ...draftRef.current, ...patch };
     setDraft(draftRef.current);
   };
 
-  // ── Texto a voz (con fallback por si onend nunca dispara) ──
+  // ── Texto a voz (rate alto: frases cortas, menos espera) ──
   const speak = (text: string) =>
     new Promise<void>(resolve => {
       try {
@@ -105,14 +124,14 @@ export default function HandsFreeOverlay({
         synth.cancel();
         const u = new SpeechSynthesisUtterance(text);
         u.lang = "es-ES";
-        u.rate = 1.02;
+        u.rate = 1.15;
         const v = synth.getVoices().find(x => (x.lang || "").toLowerCase().startsWith("es"));
         if (v) u.voice = v;
         let done = false;
         const finish = () => { if (!done) { done = true; clearTimeout(timer); resolve(); } };
         u.onend = finish;
         u.onerror = finish;
-        const timer = setTimeout(finish, Math.max(2200, text.length * 85));
+        const timer = setTimeout(finish, Math.max(1800, text.length * 70));
         synth.speak(u);
       } catch {
         resolve();
@@ -173,7 +192,7 @@ export default function HandsFreeOverlay({
             setFatal("No te oigo. Manos libres detenido — acércate al móvil o pulsa el botón otra vez.");
             return;
           }
-          askRef.current(stepRef.current, `No te oigo bien. ${lastQuestionRef.current}`);
+          askRef.current(stepRef.current, { ...lastAskRef.current, say: `No te oigo. ${lastAskRef.current.say}` });
         }
       };
       setHeard("");
@@ -184,38 +203,88 @@ export default function HandsFreeOverlay({
     }
   };
 
-  // ── Hacer una pregunta (echo = confirmación de lo anterior) ──
-  const ask = (step: Step, text: string, echo = "") => {
+  // ── Hacer una pregunta: paso + título + lista en pantalla + frase corta por voz ──
+  const ask = (step: Step, payload: AskPayload) => {
     if (abortRef.current) return;
     stepRef.current = step;
-    setStep(step);
-    lastQuestionRef.current = text;
-    const full = echo ? `${echo}. ${text}` : text;
-    setQuestion(full);
+    lastAskRef.current = payload;
+    setTitle(payload.title);
+    setItems(payload.items || []);
+    if (payload.echo !== undefined) setEcho(payload.echo);
     setHeard("");
-    addLog(`🔊 ${full}`);
-    void speak(full).then(() => {
+    addLog(`🔊 ${payload.say}`);
+    void speak(payload.say).then(() => {
       if (!abortRef.current) listen();
     });
   };
   askRef.current = ask;
+  const gotoRef = useRef<(step: Step, payload: AskPayload) => void>(ask);
+  gotoRef.current = ask;
+
+  // ── Listas numeradas en pantalla ──
+  const dateOptions = (): ListItem[] => {
+    const days = upcomingDays(DATE_LIST_SIZE);
+    return days.map((ds, i) => {
+      const d = new Date(ds + "T00:00:00");
+      const dow = ["DOM", "LUN", "MAR", "MIÉ", "JUE", "VIE", "SÁB"][d.getDay()];
+      const label = i === 0 ? "HOY" : i === 1 ? "MAÑANA" : dow;
+      return { n: i + 1, label, sub: shortDateLabel(ds) };
+    });
+  };
+  const sedeOptions = (): ListItem[] =>
+    sedes.map((s, i) => ({ n: i + 1, label: s.name, sub: s.city || s.task || "" }));
+  const proOptions = (): ListItem[] => [
+    ...professionals.map((p, i) => ({ n: i + 1, label: p.alias, sub: proLabel(p) })),
+    { n: professionals.length + 1, label: "TODA LA SEDE", sub: "aviso sin profesional" },
+  ];
+  const turnOptions = (): ListItem[] => [
+    { n: 1, label: "MAÑANA", sub: "turno M" },
+    { n: 2, label: "TARDE", sub: "turno T" },
+    { n: 3, label: "TODO EL DÍA", sub: "mañana + tarde" },
+  ];
+  const reasonOptions = (): ListItem[] =>
+    REASON_OPTIONS.map((r, i) => ({ n: i + 1, label: r }));
+  const againOptions = (): ListItem[] => [
+    { n: 1, label: "IGUAL", sub: "misma sede y profesional" },
+    { n: 2, label: "NUEVO", sub: "empezar de cero" },
+    { n: 3, label: "TERMINAR", sub: "salir del modo coche" },
+  ];
 
   // ── Confirmación y guardado ──
-  const askConfirm = () => {
+  const confirmSummary = () => {
     const d = draftRef.current;
     const sedeName = sedes.find(s => s.id === d.sedeId)?.name || "";
     const proName = d.professionalId
       ? (() => { const p = professionals.find(x => x.id === d.professionalId); return p ? proLabel(p) : ""; })()
       : "toda la sede";
-    const parts = [
-      `El ${dateLabel(d.date)}`,
-      `en ${sedeName}`,
-      `para ${proName}`,
-      turnPhrase(d.turn),
-      d.reason.toLowerCase(),
-      d.note ? `nota: ${d.note}` : "",
-    ].filter(Boolean);
-    ask("confirm", `${parts.join(", ")}. ¿Guardo? Di sí o no.`);
+    return {
+      spoken: [
+        `El ${dateLabel(d.date)}`,
+        `en ${sedeName}`,
+        `para ${proName}`,
+        turnPhrase(d.turn),
+        d.reason.toLowerCase(),
+        d.note ? `nota: ${d.note}` : "",
+      ].filter(Boolean).join(", "),
+      parts: [
+        d.date ? dateLabel(d.date) : "",
+        sedeName,
+        proName,
+        turnPhrase(d.turn),
+        d.reason,
+        d.note ? `📝 ${d.note}` : "",
+      ].filter(Boolean),
+    };
+  };
+
+  const askConfirm = () => {
+    const { spoken, parts } = confirmSummary();
+    setDraftField({}); // refresco visual
+    gotoRef.current("confirm", {
+      title: parts.join(" · "),
+      say: `${spoken}. ¿Guardo? Di sí o no.`,
+      echo: "",
+    });
   };
 
   const save = async () => {
@@ -247,121 +316,263 @@ export default function HandsFreeOverlay({
     } catch {
       errMsg = "Error de red";
     }
-    if (errMsg) {
-      onSaved();
-      ask("again", `No se pudo guardar: ${errMsg}. ¿Otro aviso? Di aviso o terminar.`, "Atención");
-      return;
+    if (!errMsg) {
+      lastRef.current = { sedeId: d.sedeId, professionalId: d.professionalId, turn: d.turn };
     }
     onSaved();
-    ask("again", "Aviso guardado. ¿Otro aviso? Di aviso para continuar, o terminar para salir.");
+    gotoRef.current("again", {
+      title: errMsg ? `⚠️ No se pudo guardar: ${errMsg}` : "✅ Aviso guardado",
+      say: errMsg ? `Atención: ${errMsg}. ¿Igual, nuevo, o terminar?` : "Guardado. ¿Igual, nuevo, o terminar?",
+      items: againOptions(),
+    });
   };
 
   // ── Reparto de respuestas por paso ──
   const handleAnswer = (raw: string) => {
     addLog(`🧑 ${raw}`);
     if (wantsStop(raw)) { void close("Modo manos libres terminado. ¡Hasta luego!"); return; }
-    if (wantsRepeat(raw)) { ask(stepRef.current, lastQuestionRef.current); return; }
-    if (wantsCancel(raw) && stepRef.current !== "again") {
+    if (wantsRepeat(raw)) { askRef.current(stepRef.current, lastAskRef.current); return; }
+    if (wantsCancel(raw) && stepRef.current !== "again" && stepRef.current !== "confirm") {
       draftRef.current = emptyDraft();
       setDraft(draftRef.current);
-      ask("again", "Aviso cancelado. ¿Otro aviso? Di aviso para continuar, o terminar para salir.");
+      skipSedeProTurnRef.current = false;
+      gotoRef.current("again", {
+        title: "Aviso cancelado",
+        say: "Cancelado. ¿Igual, nuevo, o terminar?",
+        items: againOptions(),
+      });
       return;
     }
 
-    const sedeQuestion = () =>
-      `¿En qué sede? Di el número: ${speechList(sedes.map(s => s.name))}.`;
-    const proQuestion = () =>
-      `¿Para quién? Di el número: ${speechList(professionals.map(p => `${p.alias}, ${p.firstName}`))}. O di: toda la sede.`;
-
     switch (stepRef.current) {
       case "date": {
-        const date = parseDateAnswer(raw, contextYear, contextMonth);
+        // Si dice "día 15" o "15 de octubre" va directo al parser de fechas;
+        // si dice un número suelto, es la opción de la lista en pantalla.
+        const t = norm(raw);
+        const wantsExplicitDate = /\b(dia|de)\b/.test(t);
+        let date: string | null = null;
+        if (!wantsExplicitDate) {
+          const n = parseListNumber(raw, DATE_LIST_SIZE);
+          if (n) date = upcomingDays(DATE_LIST_SIZE)[n - 1];
+        }
+        if (!date) date = parseDateAnswer(raw, contextYear, contextMonth);
         if (!date) {
-          ask("date", "No he entendido el día. Dime: hoy, mañana, el día quince, o un día de la semana.");
+          gotoRef.current("date", {
+            title: "¿Qué día?",
+            say: "No lo he pillado. Día: elige número de la lista, o di el día.",
+            items: dateOptions(),
+          });
           return;
         }
         setDraftField({ date });
-        if (sedes.length === 1) {
-          setDraftField({ sedeId: sedes[0].id });
-          ask("pro", proQuestion(), `El ${dateLabel(date)}, en ${sedes[0].name}`);
-        } else {
-          ask("sede", sedeQuestion(), `El ${dateLabel(date)}`);
+        const keep = skipSedeProTurnRef.current && draftRef.current.sedeId;
+        skipSedeProTurnRef.current = false;
+        if (keep) {
+          gotoRef.current("reason", {
+            title: "¿Motivo?",
+            say: "Motivo. Elige número.",
+            items: reasonOptions(),
+            echo: `El ${dateLabel(date)} · igual que antes`,
+          });
+          return;
         }
+        if (draftRef.current.sedeId || sedes.length === 1) {
+          if (sedes.length === 1 && !draftRef.current.sedeId) setDraftField({ sedeId: sedes[0].id });
+          gotoPro(`El ${dateLabel(date)}`);
+          return;
+        }
+        gotoRef.current("sede", {
+          title: "¿Qué sede?",
+          say: "Sede. Elige número.",
+          items: sedeOptions(),
+          echo: `El ${dateLabel(date)}`,
+        });
         return;
       }
       case "sede": {
-        const id = matchSedeAnswer(raw, sedes);
-        if (!id) { ask("sede", sedeQuestion(), "No he entendido la sede."); return; }
+        const n = parseListNumber(raw, sedes.length);
+        const id = n ? sedes[n - 1].id : matchSedeAnswer(raw, sedes);
+        if (!id) {
+          gotoRef.current("sede", {
+            title: "¿Qué sede?",
+            say: "No he entendido. Sede: elige número.",
+            items: sedeOptions(),
+          });
+          return;
+        }
         setDraftField({ sedeId: id });
         const name = sedes.find(s => s.id === id)?.name || "";
-        ask("pro", proQuestion(), `En ${name}`);
+        gotoPro(`En ${name}`);
         return;
       }
       case "pro": {
-        const hit = matchProAnswer(raw, professionals);
-        if (!hit) { ask("pro", proQuestion(), "No he entendido. Di el número o el nombre."); return; }
+        const maxN = professionals.length + 1;
+        const n = parseListNumber(raw, maxN);
+        let hit: { id: string; label: string } | null = null;
+        if (n === maxN) hit = { id: "", label: "toda la sede" };
+        else if (n) { const p = professionals[n - 1]; hit = { id: p.id, label: proLabel(p) }; }
+        else hit = matchProAnswer(raw, professionals);
+        if (!hit) {
+          gotoRef.current("pro", {
+            title: "¿Para quién?",
+            say: "No he entendido. Profesional: elige número.",
+            items: proOptions(),
+          });
+          return;
+        }
         setDraftField({ professionalId: hit.id });
-        ask("turn", "¿Qué turno? Di: mañana, tarde, o todo el día.", hit.id ? hit.label : "Para toda la sede");
+        gotoRef.current("turn", {
+          title: "¿Qué turno?",
+          say: "Turno: uno mañana, dos tarde, tres todo el día.",
+          items: turnOptions(),
+          echo: hit.id ? hit.label : "Toda la sede",
+        });
         return;
       }
       case "turn": {
         const turn = parseTurnAnswer(raw);
-        if (!turn) { ask("turn", "¿Qué turno? Di: mañana, tarde, o todo el día.", "No he entendido el turno."); return; }
+        if (!turn) {
+          gotoRef.current("turn", {
+            title: "¿Qué turno?",
+            say: "No he entendido. Uno mañana, dos tarde, tres todo el día.",
+            items: turnOptions(),
+          });
+          return;
+        }
         setDraftField({ turn });
-        ask("reason", `¿Y el motivo? Di el número: ${speechList(REASON_OPTIONS.map(r => r.toLowerCase()))}.`, turnPhrase(turn));
+        gotoRef.current("reason", {
+          title: "¿Motivo?",
+          say: "Motivo. Elige número.",
+          items: reasonOptions(),
+          echo: turnPhrase(turn),
+        });
         return;
       }
       case "reason": {
         const reason = parseReasonAnswer(raw);
         if (!reason) {
-          ask("reason", `No he entendido. Di el número: ${speechList(REASON_OPTIONS.map(r => r.toLowerCase()))}.`);
+          gotoRef.current("reason", {
+            title: "¿Motivo?",
+            say: "No he entendido. Motivo: elige número.",
+            items: reasonOptions(),
+          });
           return;
         }
         setDraftField({ reason });
-        ask("note", "¿Añado una nota? Di la nota ahora, o di no.");
+        gotoRef.current("note", {
+          title: "¿Alguna nota?",
+          say: "Nota: di la nota ahora, o di: sin nota.",
+          echo: reason,
+        });
         return;
       }
       case "note": {
-        const yn = parseYesNo(raw);
-        if (yn === false) { setDraftField({ note: "" }); askConfirm(); return; }
-        if (yn === true) { ask("noteText", "Dime la nota."); return; }
-        setDraftField({ note: raw.trim() });
+        const t = norm(raw);
+        if (parseYesNo(raw) === false || /\b(sin nota|salta|saltear|ninguna|sin)\b/.test(t)) {
+          setDraftField({ note: "" });
+          askConfirm();
+          return;
+        }
+        if (parseYesNo(raw) === true) {
+          gotoRef.current("noteText", { title: "Di la nota", say: "Dime la nota." });
+          return;
+        }
+        setDraftField({ note: raw.replace(/^nota[:\s]+/i, "").trim() });
         askConfirm();
         return;
       }
       case "noteText": {
-        setDraftField({ note: raw.trim() });
+        setDraftField({ note: raw.replace(/^nota[:\s]+/i, "").trim() });
         askConfirm();
         return;
       }
       case "confirm": {
-        const yn = parseYesNo(raw);
+        let yn = parseYesNo(raw);
+        if (yn === null) {
+          const n = parseListNumber(raw, 2);
+          yn = n === 1 ? true : n === 2 ? false : null;
+        }
         if (yn === true) { void save(); return; }
         if (yn === false) {
           draftRef.current = emptyDraft();
           setDraft(draftRef.current);
-          ask("again", "Aviso descartado. ¿Otro aviso? Di aviso para continuar, o terminar para salir.");
+          gotoRef.current("again", {
+            title: "Aviso descartado",
+            say: "Descartado. ¿Igual, nuevo, o terminar?",
+            items: againOptions(),
+          });
           return;
         }
-        ask("confirm", "¿Guardo el aviso? Di sí o no.", "No he entendido");
+        askConfirm();
         return;
       }
       case "saving":
         return;
       case "again": {
-        if (wantsAnother(raw)) {
+        const t = norm(raw);
+        const n = parseListNumber(raw, 3);
+        if (n === 3) { void close("Hasta luego."); return; }
+        if (n === 1 || /\b(igual|lo mismo|mismo)\b/.test(t)) {
+          const last = lastRef.current;
+          if (last) {
+            draftRef.current = { ...emptyDraft(), sedeId: last.sedeId, professionalId: last.professionalId, turn: last.turn };
+            setDraft(draftRef.current);
+            skipSedeProTurnRef.current = true;
+            const sName = sedes.find(s => s.id === last.sedeId)?.name || "";
+            const pLabel = last.professionalId
+              ? (() => { const p = professionals.find(x => x.id === last.professionalId); return p ? proLabel(p) : ""; })()
+              : "toda la sede";
+            gotoRef.current("date", {
+              title: "¿Qué día?",
+              say: "Igual que antes. Día: elige número.",
+              items: dateOptions(),
+              echo: `${sName} · ${pLabel} · ${turnPhrase(last.turn)}`,
+            });
+            return;
+          }
+          // sin aviso previo → flujo normal
           draftRef.current = emptyDraft();
           setDraft(draftRef.current);
-          ask("date", "Vamos de otro. Dime el día del aviso.");
+          gotoRef.current("date", { title: "¿Qué día?", say: "Día: elige número.", items: dateOptions() });
           return;
         }
-        if (parseYesNo(raw) === false) { void close("Hasta luego."); return; }
-        ask("again", "Di aviso para otro, o terminar para salir.");
+        if (n === 2 || wantsAnother(raw) || parseYesNo(raw) === true) {
+          draftRef.current = emptyDraft();
+          setDraft(draftRef.current);
+          skipSedeProTurnRef.current = false;
+          gotoRef.current("date", { title: "¿Qué día?", say: "Día: elige número.", items: dateOptions() });
+          return;
+        }
+        gotoRef.current("again", {
+          title: "¿Otro aviso?",
+          say: "Di: igual, nuevo, o terminar.",
+          items: againOptions(),
+        });
         return;
       }
     }
   };
   handlerRef.current = handleAnswer;
+
+  // Salto directo al paso profesional (con echo de la sede)
+  function gotoPro(echo: string) {
+    if (professionals.length === 0) {
+      setDraftField({ professionalId: "" });
+      gotoRef.current("turn", {
+        title: "¿Qué turno?",
+        say: "Turno: uno mañana, dos tarde, tres todo el día.",
+        items: turnOptions(),
+        echo,
+      });
+      return;
+    }
+    gotoRef.current("pro", {
+      title: "¿Para quién?",
+      say: "Profesional. Elige número.",
+      items: proOptions(),
+      echo,
+    });
+  }
 
   // ── Arranque ──
   useEffect(() => {
@@ -381,7 +592,11 @@ export default function HandsFreeOverlay({
     abortRef.current = false;
     failRef.current = 0;
     const t = setTimeout(() => {
-      askRef.current("date", "Manos libres activado. Dime el día del aviso. Por ejemplo: hoy, mañana, o el día quince.");
+      gotoRef.current("date", {
+        title: "¿Qué día?",
+        say: "Manos libres activado. Día: elige número de la lista.",
+        items: dateOptions(),
+      });
     }, 400);
     return () => {
       abortRef.current = true;
@@ -404,6 +619,8 @@ export default function HandsFreeOverlay({
     saving: "GUARDANDO…",
     again: "¿OTRO AVISO?",
   };
+
+  const showList = items.length > 0 && !fatal;
 
   return (
     <div
@@ -431,13 +648,16 @@ export default function HandsFreeOverlay({
       </header>
 
       {/* Punto de estado */}
-      <div className="flex items-center justify-center gap-2 py-2 shrink-0">
+      <div className="flex items-center justify-center gap-2 py-1.5 shrink-0">
         <span
           className={`h-3.5 w-3.5 rounded-full ${fatal ? "bg-red-500" : listening ? "bg-[#6BBE7A] animate-pulse" : "bg-amber-400"}`}
         />
         <span className="text-xs sm:text-sm font-black uppercase tracking-[3px] text-slate-400">
           {stepLabel[step]}
         </span>
+        {echo && (
+          <span className="ml-2 text-[10px] sm:text-xs font-bold text-[#6BBE7A] truncate max-w-[45vw]">{echo}</span>
+        )}
       </div>
 
       {fatal ? (
@@ -452,28 +672,81 @@ export default function HandsFreeOverlay({
           </button>
         </div>
       ) : (
-        <div className="flex-1 flex flex-col min-h-0 px-4 sm:px-8 gap-3 max-w-3xl w-full mx-auto">
-          {/* Pregunta actual */}
-          <div className="bg-slate-900/70 border-2 border-[#6BBE7A]/40 rounded-2xl p-4 sm:p-6 text-center">
-            <p className="text-xl sm:text-3xl font-black leading-snug text-white">{question}</p>
+        <div className="flex-1 flex flex-col min-h-0 px-3 sm:px-8 gap-2 max-w-3xl w-full mx-auto">
+          {/* Pregunta / resumen actual */}
+          <div className="bg-slate-900/70 border-2 border-[#6BBE7A]/40 rounded-2xl px-4 py-3 sm:py-4 text-center shrink-0">
+            <p className={`font-black leading-snug text-white ${step === "confirm" ? "text-sm sm:text-lg" : "text-xl sm:text-3xl"}`}>
+              {title}
+            </p>
           </div>
 
           {/* Lo que se oye */}
-          <div className="min-h-[3.5rem] flex items-center justify-center">
-            <p className={`text-lg sm:text-2xl font-bold text-center ${heard ? "text-amber-300 italic" : "text-slate-600"}`}>
+          <div className="min-h-[2.2rem] flex items-center justify-center shrink-0">
+            <p className={`text-base sm:text-xl font-bold text-center ${heard ? "text-amber-300 italic" : "text-slate-600"}`}>
               {heard ? `“${heard}”` : "…"}
             </p>
           </div>
 
+          {/* Lista numerada en pantalla — el conductor solo dice el número */}
+          {showList && (
+            <div className="flex-1 min-h-0 overflow-y-auto">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {items.map(it => (
+                  <button
+                    key={it.n}
+                    onClick={() => handlerRef.current(String(it.n))}
+                    className="flex items-center gap-3 bg-slate-800/80 hover:bg-slate-700 border border-slate-600 hover:border-[#6BBE7A] rounded-xl px-3 py-2.5 text-left active:scale-[0.98] transition"
+                  >
+                    <span className="shrink-0 h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-amber-500 text-black font-black text-lg sm:text-xl flex items-center justify-center shadow-[0_0_10px_rgba(245,158,11,0.4)]">
+                      {it.n}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block font-black text-base sm:text-xl text-white truncate">{it.label}</span>
+                      {it.sub && <span className="block text-[10px] sm:text-xs font-bold text-slate-400 truncate">{it.sub}</span>}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Confirmación: botones táctiles de apoyo */}
+          {step === "confirm" && (
+            <div className="flex gap-3 shrink-0 pt-1">
+              <button
+                onClick={() => handlerRef.current("sí")}
+                className="flex-1 bg-[#2E5D3A] hover:bg-[#3a7a4c] border-2 border-[#6BBE7A] text-white font-black py-4 rounded-2xl text-lg shadow-[0_0_16px_rgba(107,190,122,0.35)] active:scale-95 transition"
+              >
+                ✔ GUARDAR
+              </button>
+              <button
+                onClick={() => handlerRef.current("no")}
+                className="flex-1 bg-red-600/70 hover:bg-red-600 border-2 border-red-400/60 text-white font-black py-4 rounded-2xl text-lg active:scale-95 transition"
+              >
+                ✕ NO
+              </button>
+            </div>
+          )}
+
+          {/* Nota: atajo táctil para saltar */}
+          {(step === "note") && (
+            <button
+              onClick={() => handlerRef.current("sin nota")}
+              className="shrink-0 bg-slate-800 hover:bg-slate-700 border border-slate-600 text-slate-300 font-black py-3 rounded-2xl text-base active:scale-95 transition"
+            >
+              ⤵ SIN NOTA (saltar)
+            </button>
+          )}
+
           {/* Borrador en curso */}
-          <div className="bg-slate-900/50 border border-slate-700 rounded-2xl px-4 py-3 grid grid-cols-2 sm:grid-cols-3 gap-2 text-center">
-            <DraftCell label="Día" value={draft.date ? dateLabel(draft.date) : ""} />
+          <div className="bg-slate-900/50 border border-slate-700 rounded-2xl px-4 py-2.5 grid grid-cols-3 sm:grid-cols-6 gap-2 text-center shrink-0">
+            <DraftCell label="Día" value={draft.date ? shortDateLabel(draft.date) : ""} />
             <DraftCell label="Sede" value={sedes.find(s => s.id === draft.sedeId)?.name || ""} />
             <DraftCell
               label="Quién"
               value={
                 draft.professionalId
-                  ? (() => { const p = professionals.find(x => x.id === draft.professionalId); return p ? proLabel(p) : ""; })()
+                  ? (() => { const p = professionals.find(x => x.id === draft.professionalId); return p ? p.alias : ""; })()
                   : draft.sedeId ? "Toda la sede" : ""
               }
             />
@@ -482,15 +755,19 @@ export default function HandsFreeOverlay({
             <DraftCell label="Nota" value={draft.note} />
           </div>
 
+          {!showList && step !== "confirm" && step !== "saving" && (
+            <div className="flex-1" />
+          )}
+
           {/* Registro de la conversación */}
-          <div className="flex-1 min-h-0 overflow-y-auto text-[11px] sm:text-sm text-slate-400 font-semibold space-y-1 pb-1">
+          <div className="h-14 sm:h-16 overflow-y-auto text-[10px] sm:text-xs text-slate-400 font-semibold space-y-0.5 shrink-0">
             {log.map((l, i) => (
               <p key={i} className={l.startsWith("🧑") ? "text-amber-300/90" : "text-slate-400"}>{l}</p>
             ))}
           </div>
 
-          <p className="text-center text-[10px] sm:text-xs text-slate-500 font-bold shrink-0">
-            Di «cancela» para empezar el aviso de nuevo · «repite» para oír la pregunta otra vez · «terminar» para salir
+          <p className="text-center text-[10px] sm:text-xs text-slate-500 font-bold shrink-0 pb-1">
+            Di el <span className="text-amber-400">número</span> de la lista · «repite» reescucha · «cancela» reinicia · «terminar» sale
           </p>
         </div>
       )}
@@ -502,7 +779,7 @@ function DraftCell({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <div className="text-[9px] font-black uppercase tracking-widest text-slate-500">{label}</div>
-      <div className="text-xs sm:text-sm font-black text-slate-200 capitalize truncate">{value || "—"}</div>
+      <div className="text-[11px] sm:text-sm font-black text-slate-200 capitalize truncate">{value || "—"}</div>
     </div>
   );
 }
