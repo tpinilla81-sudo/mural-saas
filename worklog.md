@@ -1222,3 +1222,32 @@ Work Log:
 Stage Summary:
 - El micro se activa al abrir la app (prompt una única vez al inicio), no al pulsar el botón de voz; /coche muestra el estado del micro en pantalla.
 - V.MENSUAL en móvil: 1 sola línea de menú + tarjetas visibles; Excel y toggle VACACIONES fuera.
+
+---
+Task ID: 36
+Agent: main
+Task: "quitar mejora de ausencias, datos, modo noche, modo coche (ya sale en Android Auto/CarPlay) y modo sol" + "en configuración crear sección de avisos programados (palabra en notas + días antes → notificación al móvil, tantos como se quiera)" + "quitar aviso/ausencia al meter tarjetas en mensual; recuperar borrar tarjetas con mensaje; mover tarjetas; letras auto-ajustables; filtros que no se desplieguen al girar el móvil"
+
+Work Log:
+- QUITAS: ⧉ Duplicar en DiarioTab (botón + duplicarUltimo + lastAvisoMem); sub-pestaña 📊 Datos (StatsTab.tsx borrado; API stats se conserva); toggle tema ☀️/🌙 en AppShell (estado + localStorage + data-theme; el tema queda oscuro fijo); MODO COCHE completo: página /coche borrada, enlaces 🚗 del navbar y menú móvil quitados, botón 🔊 MODO COCHE en barra principal quitado, HandsFreeOverlay.tsx borrado, VoiceButtons (UserView) queda solo con 🎙️ MODO PC. Se mantiene warmUpMic al abrir (lo usa el Modo PC).
+- 🔔 AVISOS PROGRAMADOS (nueva sección en CONFIGURACIÓN, AlertRulesPanel):
+  * Prisma: modelos AlertRule (companyId, keyword, daysBefore, enabled), PushSub (endpoint unique, p256dh, auth), AlertSent (dedupe unique source+sourceId+ruleId+targetDate), VapidKey (singleton; claves VAPID autogeneradas en BD — no requiere variables de entorno en Vercel). db push OK en Neon.
+  * APIs: /api/company/alert-rules (GET/POST), /api/company/alert-rules/[id] (PATCH/DELETE), /api/company/push/public-key (GET), /api/company/push/subscribe (POST upsert), /api/company/push/test (POST), /api/cron/alerts (GET job diario, idempotente).
+  * lib/push.ts: getVapid() + sendPushToAll() (web-push; limpia suscripciones 404/410).
+  * Cron Vercel: vercel.json crons → /api/cron/alerts "0 8 * * *" (10:00 Madrid). Lógica: para cada regla activa busca Plan.notes y Aviso.note que contengan la palabra (insensible a mayúsculas) con fecha entre hoy y hoy+daysBefore → push a todos los dispositivos + registro AlertSent (un aviso por tarjeta y regla).
+  * sw.js: handlers push (showNotification con vibrate/tag) y notificationclick (abre/focus la app).
+  * UI ConfigTab: panel desplegable "🔔 Avisos programados": 1) estado de notificaciones en este dispositivo + ACTIVAR AQUÍ (requestPermission + subscribe + guardado) + ENVIAR PRUEBA; 2) formulario PALABRA/TEXTO + DÍAS ANTES + ➕ AÑADIR; 3) lista de reglas con PAUSAR/ACTIVAR y 🗑. Pista para iPhone (requiere PWA en inicio).
+- MENSUAL:
+  * El "+" del día abre DIRECTO "👷 Programar turno" (quitado el botón 🏖 AVISO / AUSENCIA y todo su formulario: motivo, multi-fechas, nota; estados addKind/addAvisoPro/addReason/addDates/addNote/chipExtra/saveAvisoAdd eliminados). Las tarjetas de aviso EXISTENTES siguen visibles y editables.
+  * BORRAR tarjetas restaurado: modal de nota de turno y de aviso con botón 🗑 BORRAR + confirm() (mensaje de borrado). APIs DELETE ya existentes.
+  * MOVER tarjetas: fila "MOVER A OTRO DÍA" (input date + → MOVER) en ambos modales + drag & drop en PC (cards draggable, celdas onDrop; PUT plan/[id] y avisos/[id] ampliados con campo date validado YYYY-MM-DD).
+  * Filtros: barra compacta ahora por JS (matchMedia max-width:959px) en vez del breakpoint sm:640px → al girar el móvil a horizontal (640-959px) los filtros NO se despliegan solos.
+  * Tipografía auto: clases CSS .auto-text/.auto-dow (clamp) en la tabla; cabecera de semana con letras L M X J V S D en móvil; celdas h-auto min-h (crecen, sin solapes); chip FESTIVO con max-width.
+- npm i web-push. Build limpio (12s). Tests: 68/0 (voice-dialog) + 6/0 (parser). Commit 43853fa → push → Vercel.
+- Nota: para recibir en iPhone hay que añadir la app a pantalla de inicio (Safari lo exige para push); en Android Chrome funciona directo tras ACTIVAR AQUÍ.
+
+Stage Summary:
+- La app queda sin Modo Coche (se usa desde Android Auto/CarPlay), sin tema claro/oscuro, sin Duplicar y sin pestaña Datos.
+- CONFIGURACIÓN → 🔔 Avisos programados: reglas palabra+ días antes → notificación push diaria (cron 10:00 Madrid) a todos los móviles activados; tantos avisos como se quieran; botón de prueba.
+- V.MENSUAL: + directo a programar turno; click en tarjeta → nota, MOVER a otro día o 🗑 BORRAR con confirmación; arrastrar para mover en PC; letras que escalan solas y filtros que ya no se despliegan al girar el móvil.
+- E2E producción (43853fa, viewport 412×915, login julio1974@): barra principal solo 🎙️ PC (sin MODO COCHE/🚗); sub-tabs sin 📊 Datos; sin toggle ☀️/🌙. V.MENSUAL: 60 botones "+" con title "Programar turno este día"; el + abre DIRECTO "👷 Programar turno" (sin AVISO/AUSENCIA en toda la página); click en tarjeta → "Nota del turno" con → MOVER + 🗑 BORRAR + Cancelar + Guardar; 57 tarjetas draggable. CONFIGURACIÓN → 🔔 Avisos programados: panel con ACTIVAR AQUÍ / ENVIAR PRUEBA / crear regla; ciclo completo crear "PRUEBAE2E" → listada ("Avisa 1 día(s) antes · activo") → 🗑 borrada con confirm; BD queda limpia (rules:0 verificado también por /api/cron/alerts). /coche → 404. Capturas: download/config-avisos-programados.png, download/mensual-final.png.
