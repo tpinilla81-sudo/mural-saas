@@ -56,8 +56,8 @@ export default function AppShell() {
           </div>
           <a
             href="/coche"
-            className="bg-[#2E5D3A] hover:bg-[#3a7a4c] text-white px-3 py-2 rounded-lg text-sm font-bold transition"
-            title="Modo coche: pantalla gigante para el móvil en el soporte del coche"
+            className="bg-amber-500 hover:bg-amber-400 text-black px-3 py-2 rounded-lg text-sm font-black transition shadow-[0_0_14px_rgba(245,158,11,0.45)]"
+            title="Modo Coche: solo manos libres por seguridad (la app pregunta por voz y tú respondes)"
           >
             🚗
           </a>

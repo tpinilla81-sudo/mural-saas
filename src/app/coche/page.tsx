@@ -2,7 +2,6 @@
 
 import { SessionProvider, useSession } from "next-auth/react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { VoiceAvisoModal } from "@/components/VoiceAvisoButton";
 import HandsFreeOverlay from "@/components/HandsFreeOverlay";
 
 // ═══════════════════════════════════════════════════════════════
@@ -10,6 +9,9 @@ import HandsFreeOverlay from "@/components/HandsFreeOverlay";
 // Gigante, contraste alto, manejo por voz. (CarPlay/Android Auto
 // no admiten apps de gestión, pero esta pantalla instalada como
 // app cumple la misma función con el móvil en el salpicadero.)
+// SEGURIDAD: aquí SOLO está disponible el método Coche (manos
+// libres con preguntas de audio). El dictado libre (Modo PC) exige
+// mirar la pantalla para revisar/editar y está deshabilitado.
 // ═══════════════════════════════════════════════════════════════
 
 interface AvisoRow {
@@ -36,7 +38,6 @@ function CarScreen() {
   const [sedes, setSedes] = useState<{ id: string; name: string }[]>([]);
   const [pros, setPros] = useState<{ id: string; alias: string; firstName: string; lastName: string }[]>([]);
   const [loaded, setLoaded] = useState(false);
-  const [voiceOpen, setVoiceOpen] = useState(false);
   const [handsFreeOpen, setHandsFreeOpen] = useState(false);
   const [now, setNow] = useState<Date | null>(null);
 
@@ -162,34 +163,22 @@ function CarScreen() {
           </div>
 
           <button
-            onClick={() => setVoiceOpen(true)}
+            onClick={() => setHandsFreeOpen(true)}
             disabled={!loaded || sedes.length === 0}
-            className="w-32 h-32 sm:w-40 sm:h-40 rounded-full bg-gradient-to-b from-[#3a7a4c] to-[#2E5D3A] ring-8 ring-[#6BBE7A]/25 active:scale-95 disabled:opacity-40 flex items-center justify-center text-6xl sm:text-7xl shadow-2xl transition-transform select-none"
-            title="Audio Modo PC: dictado libre en una frase"
+            className="w-36 h-36 sm:w-44 sm:h-44 rounded-full bg-gradient-to-b from-amber-500 to-amber-600 ring-8 ring-amber-500/30 active:scale-95 disabled:opacity-40 flex items-center justify-center text-6xl sm:text-7xl shadow-[0_0_40px_rgba(245,158,11,0.4)] transition-transform select-none"
+            title="Modo Coche: la app pregunta por voz y tú respondes sin tocar la pantalla"
           >
-            🎙️
+            🔊
           </button>
           <div className="text-center -mt-1">
-            <div className="text-lg sm:text-2xl font-black text-white tracking-wide">
-              {loaded && sedes.length === 0 ? "SIN SEDES CARGADAS" : "AUDIO MODO PC"}
+            <div className="text-lg sm:text-2xl font-black text-amber-400 tracking-wide">
+              {loaded && sedes.length === 0 ? "SIN SEDES CARGADAS" : "AUDIO MODO COCHE"}
             </div>
             <p className="text-[11px] sm:text-sm text-slate-400 font-bold mt-1 max-w-xs mx-auto">
-              Dictado libre: pulsa y di «el día 15 en Vitoria, Julio, vacaciones, nota: se va de viaje»
+              La app pregunta por voz y tú respondes hablando — 100% manos libres
             </p>
-          </div>
-
-          {/* Manos libres: diálogo 100% por voz, sin tocar la pantalla */}
-          <div className="flex flex-col items-center gap-1">
-            <button
-              onClick={() => setHandsFreeOpen(true)}
-              disabled={!loaded || sedes.length === 0}
-              className="w-64 max-w-full bg-slate-900/70 border-2 border-amber-500 text-amber-400 hover:bg-amber-600/30 hover:text-white active:scale-[0.98] disabled:opacity-40 font-black py-3 rounded-2xl text-lg shadow-lg transition"
-              title="Audio Modo Coche: la app pregunta por voz y tú respondes sin mirar"
-            >
-              🔊 AUDIO MODO COCHE
-            </button>
-            <p className="text-[10px] sm:text-xs text-slate-500 font-bold text-center max-w-[16rem]">
-              Para conducir: la app pregunta por voz y tú solo hablas — 100% manos libres
+            <p className="text-[9px] sm:text-[11px] text-slate-500 font-bold mt-1 max-w-xs mx-auto">
+              🛡️ Único método disponible al conducir por seguridad
             </p>
           </div>
         </section>
@@ -263,17 +252,6 @@ function CarScreen() {
           </div>
         </section>
       </div>
-
-      {voiceOpen && (
-        <VoiceAvisoModal
-          onClose={() => setVoiceOpen(false)}
-          onSaved={load}
-          sedes={sedes}
-          professionals={pros}
-          contextYear={current.getFullYear()}
-          contextMonth={current.getMonth()}
-        />
-      )}
 
       {handsFreeOpen && (
         <HandsFreeOverlay
