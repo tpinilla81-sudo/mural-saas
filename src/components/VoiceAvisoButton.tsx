@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import HandsFreeOverlay from "@/components/HandsFreeOverlay";
+import { warmUpMic, warmUpMicWithTimeout } from "@/lib/mic";
 
 // ═══════════════════════════════════════════════════════════
 // Web Speech API — minimal typings
@@ -289,12 +290,20 @@ export function VoiceAvisoModal({ onClose, onSaved, sedes, professionals, contex
     return () => { try { recRef.current?.abort(); } catch { } };
   }, []);
 
-  const startListening = () => {
+  const startListening = async () => {
     const SR: SRConstructor | undefined =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) { setSupport("no"); return; }
     setMicError("");
     finalRef.current = "";
+    // ANDROID: activar el permiso del micro ANTES del reconocimiento
+    // (el gesto fue el tap en el botón 🎙️; sin esto Chrome falla con
+    // not-allowed y a veces ni muestra el prompt).
+    const w = await warmUpMicWithTimeout(2500);
+    if (w && !w.ok && (w.code === "denied" || w.code === "insecure" || w.code === "unsupported")) {
+      setMicError(w.hint + " También puedes escribir el aviso abajo.");
+      return;
+    }
     try {
       const rec = new SR();
       rec.lang = "es-ES";
@@ -312,9 +321,13 @@ export function VoiceAvisoModal({ onClose, onSaved, sedes, professionals, contex
       };
       rec.onerror = (e: { error: string }) => {
         if (e.error === "not-allowed" || e.error === "service-not-allowed") {
-          setMicError("Permiso de micrófono denegado. Actívalo en el navegador o escribe el aviso.");
+          setMicError("Micrófono bloqueado. Toca el candado 🔒 de la barra de dirección → Permisos → Micrófono → Permitir, o escribe el aviso.");
         } else if (e.error === "no-speech") {
           setMicError("No se ha oído nada. Pulsa de nuevo y habla.");
+        } else if (e.error === "audio-capture") {
+          setMicError("No se detecta micrófono en este dispositivo.");
+        } else if (e.error === "network") {
+          setMicError("El reconocimiento por voz necesita internet. Revisa la conexión.");
         } else {
           setMicError("Error del micrófono: " + e.error);
         }
@@ -402,7 +415,7 @@ export function VoiceAvisoModal({ onClose, onSaved, sedes, professionals, contex
         {support !== "no" && (
           <div className="flex flex-col items-center gap-2 py-1">
             <button
-              onClick={listening ? stopListening : startListening}
+              onClick={listening ? stopListening : () => { void warmUpMic(); startListening(); }}
               className={`w-16 h-16 sm:w-20 sm:h-20 rounded-full flex items-center justify-center text-3xl transition-all ${listening
                 ? "bg-red-600 text-white animate-pulse ring-4 ring-red-500/40"
                 : "bg-[#2E5D3A] hover:bg-[#3a7a4c] text-white ring-4 ring-[#6BBE7A]/20"}`}
@@ -555,7 +568,7 @@ export default function VoiceAvisoButton({ sedes, professionals, onSaved, contex
   return (
     <>
       <button
-        onClick={() => setOpen(true)}
+        onClick={() => { void warmUpMic(); setOpen(true); }}
         className="bg-[#2E5D3A] hover:bg-[#3a7a4c] text-white font-black px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm transition shrink-0"
         title="Dictado libre: dices la frase entera y la app la analiza"
       >
@@ -597,9 +610,11 @@ export function VoiceButtons({ sedes, professionals, onSaved, contextYear, conte
   return (
     <>
       <div className="flex gap-1.5 shrink-0">
-        {/* Modo Coche: manos libres, la app pregunta y tú respondes */}
+        {/* Modo Coche: manos libres, la app pregunta y tú respondes.
+            Al pulsar se activa el micro (permiso) — imprescindible en
+            Android, donde SpeechRecognition sin permiso previo falla. */}
         <button
-          onClick={() => setCarOpen(true)}
+          onClick={() => { void warmUpMic(); setCarOpen(true); }}
           disabled={carDisabled}
           className="bg-amber-600/90 hover:bg-amber-500 disabled:opacity-40 text-white font-black px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm transition shrink-0 flex items-center gap-1.5"
           title="Modo Coche: la app pregunta por voz y tú respondes sin mirar la pantalla"
@@ -608,7 +623,7 @@ export function VoiceButtons({ sedes, professionals, onSaved, contextYear, conte
         </button>
         {/* Modo PC: dictado libre con vista previa editable */}
         <button
-          onClick={() => setPcOpen(true)}
+          onClick={() => { void warmUpMic(); setPcOpen(true); }}
           disabled={carDisabled}
           className="bg-[#2E5D3A] hover:bg-[#3a7a4c] disabled:opacity-40 text-white font-black px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm transition shrink-0 flex items-center gap-1.5"
           title="Modo PC: dices la frase entera en una vez y la app la analiza"

@@ -3,6 +3,7 @@
 import { SessionProvider, useSession } from "next-auth/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import HandsFreeOverlay from "@/components/HandsFreeOverlay";
+import { warmUpMic } from "@/lib/mic";
 
 // ═══════════════════════════════════════════════════════════════
 // MODO COCHE — pantalla para móvil/tablet en el soporte del coche
@@ -163,7 +164,14 @@ function CarScreen() {
           </div>
 
           <button
-            onClick={() => setHandsFreeOpen(true)}
+            onClick={() => {
+              // Activar el micro AQUÍ, dentro del gesto del botón: en
+              // Android el permiso hay que pedirlo con el tap directo;
+              // si se dejara al primer SpeechRecognition, fallaría con
+              // "not-allowed" sin llegar a mostrar el prompt.
+              void warmUpMic();
+              setHandsFreeOpen(true);
+            }}
             disabled={!loaded || sedes.length === 0}
             className="w-36 h-36 sm:w-44 sm:h-44 rounded-full bg-gradient-to-b from-amber-500 to-amber-600 ring-8 ring-amber-500/30 active:scale-95 disabled:opacity-40 flex items-center justify-center text-6xl sm:text-7xl shadow-[0_0_40px_rgba(245,158,11,0.4)] transition-transform select-none"
             title="Modo Coche: la app pregunta por voz y tú respondes sin tocar la pantalla"

@@ -21,6 +21,7 @@ import {
   type ProLike,
   type SedeLike,
 } from "@/lib/voice-dialog";
+import { warmUpMicWithTimeout } from "@/lib/mic";
 
 // ═══════════════════════════════════════════════════════════════
 // MANOS LIBRES — estilo CarPlay: listas numeradas EN PANTALLA para
@@ -100,6 +101,7 @@ export default function HandsFreeOverlay({
   const recRef = useRef<SRInstance | null>(null);
   const abortRef = useRef(false);
   const failRef = useRef(0);
+  const micOkRef = useRef(false); // permiso de micro ya activado
   const lastAskRef = useRef<AskPayload>({ title: "", say: "" });
   // Memoria del último aviso guardado — para el atajo "igual"
   const lastRef = useRef<{ sedeId: string; professionalId: string; turn: "M" | "T" | "ALL" } | null>(null);
@@ -150,6 +152,11 @@ export default function HandsFreeOverlay({
   closeRef.current = close;
 
   // ── Escuchar una respuesta ──
+  // ANDROID: antes de arrancar el reconocimiento hay que tener el
+  // permiso del micro activado (getUserMedia). El gesto fue el tap en
+  // el botón de voz; si aún no está concedido, warmUpMic lo pide y
+  // con un tope de espera para no colgar la app si el prompt queda
+  // abierto sin responder.
   const listen = () => {
     if (abortRef.current) return;
     const SR: SRConstructor | undefined =
@@ -158,6 +165,14 @@ export default function HandsFreeOverlay({
       setFatal("Tu navegador no soporta reconocimiento de voz. Usa el botón 🎙️ normal.");
       return;
     }
+    void warmUpMicWithTimeout(3000).then(w => {
+      if (abortRef.current) return;
+      if (w?.ok) micOkRef.current = true;
+      startRec(SR);
+    });
+  };
+
+  const startRec = (SR: SRConstructor) => {
     try {
       const rec = new SR();
       recRef.current = rec;
@@ -178,8 +193,15 @@ export default function HandsFreeOverlay({
       rec.onerror = (e: { error: string }) => {
         if (e.error === "not-allowed" || e.error === "service-not-allowed") {
           abortRef.current = true;
-          setFatal("Micrófono bloqueado. Cierra y vuelve a pulsar MANOS LIBRES permitiendo el micrófono.");
+          setFatal("Micrófono bloqueado. Toca el candado 🔒 en la barra de dirección → Permisos → Micrófono → Permitir, y vuelve a pulsar el botón de voz.");
+        } else if (e.error === "audio-capture") {
+          abortRef.current = true;
+          setFatal("No se detecta micrófono en este dispositivo.");
+        } else if (e.error === "network") {
+          abortRef.current = true;
+          setFatal("La voz necesita internet (servicio de Google). Revisa la conexión y vuelve a pulsar.");
         }
+        // "no-speech" / "aborted": se gestionan en onend (reintento)
       };
       rec.onend = () => {
         setListening(false);
@@ -203,6 +225,21 @@ export default function HandsFreeOverlay({
     } catch {
       setFatal("No se pudo iniciar el micrófono.");
     }
+  };
+
+  // Reintentar tras un fatal (p.ej. usuario activó el micro en ajustes)
+  const retry = () => {
+    abortRef.current = false;
+    failRef.current = 0;
+    micOkRef.current = false;
+    setFatal("");
+    setListening(false);
+    const step: Step = stepRef.current === "saving" ? "date" : stepRef.current;
+    askRef.current(step, lastAskRef.current.title ? lastAskRef.current : {
+      title: "¿Qué día?",
+      say: "¿Qué día?",
+      items: dateOptions(),
+    });
   };
 
   // ── Hacer una pregunta: paso + título + lista en pantalla + frase corta por voz ──
@@ -683,12 +720,20 @@ export default function HandsFreeOverlay({
         <div className="flex-1 flex flex-col items-center justify-center gap-5 px-6 text-center">
           <span className="text-6xl">⚠️</span>
           <p className="text-lg sm:text-2xl font-bold text-amber-300 max-w-md">{fatal}</p>
-          <button
-            onClick={onClose}
-            className="bg-slate-800 border border-slate-600 hover:bg-slate-700 text-white font-black px-8 py-3 rounded-2xl text-lg transition"
-          >
-            CERRAR
-          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={retry}
+              className="bg-[#2E5D3A] hover:bg-[#3a7a4c] border-2 border-[#6BBE7A] text-white font-black px-8 py-3 rounded-2xl text-lg shadow-[0_0_16px_rgba(107,190,122,0.35)] active:scale-95 transition"
+            >
+              ↻ REINTENTAR
+            </button>
+            <button
+              onClick={onClose}
+              className="bg-slate-800 border border-slate-600 hover:bg-slate-700 text-white font-black px-8 py-3 rounded-2xl text-lg transition"
+            >
+              CERRAR
+            </button>
+          </div>
         </div>
       ) : (
         <div className="flex-1 flex flex-col min-h-0 px-3 sm:px-8 gap-2 max-w-3xl w-full mx-auto">
