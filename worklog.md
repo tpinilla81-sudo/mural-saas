@@ -1164,3 +1164,24 @@ Work Log:
 Stage Summary:
 - El Modo Coche deja elegir el día hablando libremente ("mañana", "viernes", "día 15", "23") sin depender de listas; el resto de pasos siguen con número/tap.
 - Implementadas las 12 mejoras: duplicar, guardado optimista, multi-día, PWA campana, estadísticas, Excel, tema claro + animaciones, swipe visto, paridad móvil (ya existente), branding corporativo, email automático con cola, auditoría.
+
+---
+Task ID: 33
+Agent: main
+Task: "en un movil android me sale que no esta activo el micro, activarlo cuando se pulse en boton directamente" — activación del micrófono en el gesto del botón de voz
+
+Work Log:
+- Diagnóstico: nunca se llamaba a getUserMedia; solo rec.start(). En Android Chrome, SpeechRecognition falla con "not-allowed" si el permiso no está concedido y a menudo ni muestra el prompt (start() ocurre fuera del gesto, tras el TTS).
+- Creado src/lib/mic.ts: warmUpMic() (getUserMedia dentro del gesto, fast-path via navigator.permissions si ya está granted, dedupe de llamadas concurrentes, pistas se sueltan al instante) + warmUpMicWithTimeout(ms) (Promise.race para no colgar si el prompt queda abierto). Hints accionables por código: denied/insecure/unsupported/nodevice/busy/error.
+- HandsFreeOverlay.tsx: listen() dividido en listen()+startRec(); listen() llama warmUpMicWithTimeout(3000) antes de arrancar; onerror con mensajes claros (not-allowed → "candado 🔒 → Permisos → Micrófono → Permitir", audio-capture, network); nuevo botón "↻ REINTENTAR" junto a CERRAR en la pantalla fatal (retry resetea abort/fail/micOk y re-pregunta el paso actual).
+- VoiceAvisoButton.tsx (Modo PC): startListening() await warmUpMicWithTimeout(2500) antes de rec.start(); botones de VoiceButtons (🔊 Coche y 🎙️ PC) y VoiceAvisoButton disparan void warmUpMic() en el click (prompt aparece al pulsar, petición literal del usuario).
+- /coche/page.tsx: botón grande 🔊 dispara void warmUpMic() dentro del gesto antes de abrir el overlay.
+- npm run build limpio; tests 68/0 y 6/0; commit 533b87f + push; deploy Vercel verificado (chunk e434afcf con "REINTENTAR"/"candado"/"Permisos").
+- E2E producción /coche (viewport 412x915, gate julio1974@): stub SR con cola + auto-descartador. 4 runs: fecha libre "hoy" y "el viernes" interpretadas (parseDateAnswer soporta días de semana, línea 110-113), flujo completo día→sede→pro→turno→nota→confirmar→✕NO→"¿Otro aviso?"→"terminar" cierra limpio. 0 escrituras BD ("Sin avisos para hoy", contador 0) en todos los runs.
+- Captura: download/coche-paso-dia-micro-ok.png (overlay activo, eco "El sábado, 19 de septiembre", log conversacional).
+
+Stage Summary:
+- El micro ahora se activa AL PULSAR el botón (getUserMedia en el gesto): en Android aparece el prompt de permisos en el primer tap y el reconocimiento arranca con el permiso ya concedido.
+- Mensajes de error claros y accionables + botón REINTENTAR (tras activar el micro en ajustes no hace falta cerrar y reabrir).
+- Aplica a los 3 puntos de entrada de voz: /coche (botón grande), Modo Coche en toolbar Diario y Modo PC.
+- Pendiente (petición anterior): (a) día libre sin lista numerada — ya funciona por voz, falta decidir si se quita la lista visual; (b) las 12 mejoras.
