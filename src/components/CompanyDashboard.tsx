@@ -54,8 +54,8 @@ export default function CompanyDashboard() {
     { key: "sedes", label: "Sedes" },
     { key: "pros", label: "Profesionales" },
     { key: "cal", label: "Calendarios" },
-    { key: "diario", label: "Diario" },
-    { key: "mensual", label: "Mensual" },
+    { key: "diario", label: "V.DIARIO" },
+    { key: "mensual", label: "V.MENSUAL" },
     { key: "datos", label: "📊 Datos" },
   ];
 
