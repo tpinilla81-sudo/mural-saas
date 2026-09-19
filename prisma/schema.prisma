@@ -44,6 +44,7 @@ model Company {
   billFacturaSeq BillFacturaSeq?
   auditLogs      AuditLog[]
   outbox         OutboxNotification[]
+  alertRules     AlertRule[]
 }
 
 model User {
@@ -453,4 +454,55 @@ model OutboxNotification {
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId, createdAt])
+}
+
+// ═══════════════════════════════════════════
+// AVISOS PROGRAMADOS — cuando en las NOTAS de una tarjeta/aviso aparece
+// una palabra y faltan X días para su fecha → notificación push al móvil
+// ═══════════════════════════════════════════
+
+model AlertRule {
+  id         String   @id @default(cuid())
+  companyId  String
+  keyword    String   // palabra o texto a buscar dentro de las notas
+  daysBefore Int      @default(1) // avisar X días antes de la fecha de la tarjeta
+  enabled    Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+}
+
+// Suscripción push de un dispositivo (móvil/PC) para recibir las notificaciones
+model PushSub {
+  id        String   @id @default(cuid())
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  companyId String?  // empresa desde la que se activó (informativo)
+  userAgent String   @default("")
+  createdAt DateTime @default(now())
+}
+
+// Dedupe: un (entrada, regla, fecha objetivo) notifica una sola vez
+model AlertSent {
+  id         String   @id @default(cuid())
+  source     String   // plan | aviso
+  sourceId   String
+  ruleId     String
+  targetDate String   // YYYY-MM-DD de la tarjeta que disparó el aviso
+  sentAt     DateTime @default(now())
+
+  @@unique([source, sourceId, ruleId, targetDate])
+  @@index([ruleId])
+}
+
+// Claves VAPID para Web Push (generadas una vez y guardadas en BD;
+// así no hace falta configurar variables de entorno en Vercel)
+model VapidKey {
+  id         String @id @default("singleton")
+  publicKey  String
+  privateKey String
 }

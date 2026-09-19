@@ -5,17 +5,6 @@ import { useState, useEffect, useRef, useCallback } from "react";
 const AVISO_REASONS = ["BAJA", "FORMACION", "PERMISO", "VACACIONES"] as const;
 type AvisoReason = (typeof AVISO_REASONS)[number];
 
-// Memoria del último aviso guardado en esta sesión (para el botón DUPLICAR).
-// Sobrevive a cambios de pestaña; se reinicia al recargar.
-let lastAvisoMem: {
-  professionalId: string | null;
-  proAlias: string;
-  sedeId: string;
-  turn: "M" | "T";
-  reason: string;
-  note: string;
-} | null = null;
-
 interface Sede {
   id: string;
   name: string;
@@ -362,22 +351,6 @@ export default function DiarioTab() {
     setModalPro("");
   };
 
-  // ── Botón DUPLICAR: reabre el modal con el último aviso guardado ──
-  const duplicarUltimo = () => {
-    if (!lastAvisoMem) return;
-    const today = fmt(new Date());
-    setAvisoModal({
-      sedeId: lastAvisoMem.sedeId,
-      date: today,
-      turn: lastAvisoMem.turn === "M" ? "MANANA" : "TARDE",
-    });
-    setAvisoReason((lastAvisoMem.reason as AvisoReason) || "VACACIONES");
-    setAvisoDates([today]);
-    setAvisoExtraDate("");
-    setAvisoNote(lastAvisoMem.note || "");
-    setModalPro(lastAvisoMem.proAlias || "");
-  };
-
   const addExtraDate = (d: string) => {
     if (!d || avisoDates.includes(d)) return;
     setAvisoDates(ds => [...ds, d].sort());
@@ -428,14 +401,6 @@ export default function DiarioTab() {
         });
         if (!res.ok) { failed++; continue; }
         const created = await res.json();
-        lastAvisoMem = {
-          professionalId: pro?.id || null,
-          proAlias: pro?.alias || "",
-          sedeId: avisoModal.sedeId,
-          turn: t as "M" | "T",
-          reason: avisoReason,
-          note: avisoNote,
-        };
         setAvisos(prev => prev.map(a => (a.id === `tmp-${d}-${t}` ? created : a)));
       } catch {
         failed++;
@@ -572,13 +537,6 @@ export default function DiarioTab() {
           <button onClick={scrollToToday}
             className="bg-amber-500 hover:bg-amber-400 text-black font-black px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm transition shrink-0">
             HOY
-          </button>
-
-          {/* Duplicar último aviso */}
-          <button onClick={duplicarUltimo} disabled={!lastAvisoMem}
-            className="bg-slate-700 hover:bg-slate-600 disabled:opacity-30 disabled:cursor-not-allowed text-white font-bold px-3 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm transition shrink-0"
-            title={lastAvisoMem ? `Duplicar: ${lastAvisoMem.proAlias || "sede"} · ${lastAvisoMem.reason} · ${lastAvisoMem.turn === "M" ? "Mañana" : "Tarde"}` : "Guarda un aviso para habilitar el duplicado"}>
-            ⧉ <span className="hidden sm:inline">Duplicar</span>
           </button>
 
           {/* View mode toggle */}

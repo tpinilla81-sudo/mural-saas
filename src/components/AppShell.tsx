@@ -11,32 +11,17 @@ export default function AppShell() {
   const { data: session, status } = useSession();
   const [loading, setLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
-  // Tema claro/oscuro (persistido) + branding corporativo
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  // Branding corporativo (logo + color)
   const [brand, setBrand] = useState<{ name?: string; logoUrl?: string; brandColor?: string }>({});
 
   useEffect(() => {
     if (status !== "loading") setLoading(false);
   }, [status]);
 
-  // Tema guardado + branding de la empresa (cuando hay sesión)
-  useEffect(() => {
-    const saved = (localStorage.getItem("mural-theme") as "dark" | "light") || "dark";
-    setTheme(saved);
-    document.documentElement.setAttribute("data-theme", saved);
-  }, []);
-
   useEffect(() => {
     if (!session) return;
     fetch("/api/company/branding").then(r => (r.ok ? r.json() : {})).then(setBrand).catch(() => {});
   }, [session]);
-
-  const toggleTheme = () => {
-    const next = theme === "dark" ? "light" : "dark";
-    setTheme(next);
-    localStorage.setItem("mural-theme", next);
-    document.documentElement.setAttribute("data-theme", next);
-  };
 
   // Color corporativo → variables CSS que sobrescriben los verdes del panel
   useEffect(() => {
@@ -86,25 +71,12 @@ export default function AppShell() {
 
         {/* Desktop: show user + logout */}
         <div className="ml-auto hidden sm:flex items-center gap-3">
-          {/* Tema claro/oscuro */}
-          <button onClick={toggleTheme}
-            className="bg-slate-700 hover:bg-slate-600 text-white h-9 w-9 rounded-lg text-base transition"
-            title={theme === "dark" ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}>
-            {theme === "dark" ? "☀️" : "🌙"}
-          </button>
           <div className="text-right">
             <div className="text-sm font-bold">{session.user?.name}</div>
             <div className="text-xs text-slate-400">
               {role === "SUPER_ADMIN" ? "Super Admin" : role === "COMPANY_ADMIN" ? (session.user as any)?.companyName : "Usuario"}
             </div>
           </div>
-          <a
-            href="/coche"
-            className="bg-amber-500 hover:bg-amber-400 text-black px-3 py-2 rounded-lg text-sm font-black transition shadow-[0_0_14px_rgba(245,158,11,0.45)]"
-            title="Modo Coche: solo manos libres por seguridad (la app pregunta por voz y tú respondes)"
-          >
-            🚗
-          </a>
           <button
             onClick={() => signOut()}
             className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-sm font-bold transition"
@@ -115,9 +87,6 @@ export default function AppShell() {
 
         {/* Mobile: hamburger */}
         <div className="ml-auto sm:hidden flex items-center gap-1">
-          <button onClick={toggleTheme} className="text-white p-2 text-lg" title="Tema claro/oscuro">
-            {theme === "dark" ? "☀️" : "🌙"}
-          </button>
           <button onClick={() => setMenuOpen(!menuOpen)} className="text-white p-2">
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               {menuOpen ? (
@@ -139,13 +108,6 @@ export default function AppShell() {
               {role === "SUPER_ADMIN" ? "Super Admin" : role === "COMPANY_ADMIN" ? (session.user as any)?.companyName : "Usuario"}
             </div>
           </div>
-          <a
-            href="/coche"
-            onClick={() => setMenuOpen(false)}
-            className="block text-center w-full bg-[#2E5D3A]/30 border border-[#6BBE7A]/50 hover:bg-[#2E5D3A] text-[#6BBE7A] hover:text-white font-bold py-2 rounded-lg text-sm transition"
-          >
-            🚗 Modo coche
-          </a>
           <button
             onClick={() => { signOut(); setMenuOpen(false); }}
             className="w-full bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white font-bold py-2 rounded-lg text-sm transition"
