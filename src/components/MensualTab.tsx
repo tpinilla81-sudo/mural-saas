@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import VoiceAvisoButton from "@/components/VoiceAvisoButton";
 
 interface PlanEntry {
   id: string;
@@ -18,6 +19,7 @@ interface AvisoEntry {
   turn: string; // M | T
   professionalId: string | null;
   reason: string;
+  note?: string;
   professional?: { alias: string; firstName: string; lastName: string } | null;
   sede?: { name: string } | null;
 }
@@ -44,6 +46,9 @@ export default function MensualTab() {
   const [noteModal, setNoteModal] = useState<{ planId: string; sedeName: string; sedeTask: string; proName: string; date: string; turn: string } | null>(null);
   const [noteText, setNoteText] = useState("");
   const [noteSaving, setNoteSaving] = useState(false);
+
+  // Aviso note editor modal (click on an aviso card)
+  const [avisoNoteModal, setAvisoNoteModal] = useState<{ avisoId: string; sedeName: string; proName: string; date: string; turn: string; reason: string } | null>(null);
 
   async function load() {
     const [sRes, pRes, plRes, hRes, aRes] = await Promise.all([
@@ -136,6 +141,47 @@ export default function MensualTab() {
     }
   };
 
+  // ── Aviso note editor ──
+  const openAvisoNoteEditor = (a: AvisoEntry) => {
+    const sede = sedes.find(x => x.id === a.sedeId);
+    const proName = a.professional
+      ? `${a.professional.firstName || ""} ${a.professional.lastName || ""}`.trim() || a.professional.alias
+      : "";
+    setAvisoNoteModal({
+      avisoId: a.id,
+      sedeName: sede?.name || "",
+      proName,
+      date: a.date,
+      turn: a.turn,
+      reason: (a.reason || "AUSENCIA").toUpperCase(),
+    });
+    setNoteText(a.note || "");
+  };
+
+  const saveAvisoNote = async () => {
+    if (!avisoNoteModal) return;
+    setNoteSaving(true);
+    try {
+      const res = await fetch(`/api/company/avisos/${avisoNoteModal.avisoId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ note: noteText }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setAvisos(prev => prev.map(a => a.id === avisoNoteModal.avisoId ? { ...a, note: updated.note } : a));
+        setAvisoNoteModal(null);
+        setNoteText("");
+      } else {
+        alert("No se pudo guardar la nota del aviso.");
+      }
+    } catch {
+      alert("Error de red al guardar la nota del aviso.");
+    } finally {
+      setNoteSaving(false);
+    }
+  };
+
   // Format date label for the modal
   const formatDateLabel = (dateStr: string) => {
     const [y, m, d] = dateStr.split("-").map(Number);
@@ -215,20 +261,32 @@ export default function MensualTab() {
           : "";
         const reason = (a.reason || "AUSENCIA").toUpperCase();
         const turnLabel = a.turn === "M" ? "M" : a.turn === "T" ? "T" : "";
+        const hasNote = !!(a.note && a.note.trim());
+        const notePreview = hasNote ? a.note!.trim() : "";
         assigns.push(
           <div
             key={`av-${a.id}`}
-            className="text-[9px] px-1 py-0.5 rounded font-bold leading-tight border border-red-900/40 break-words"
+            onClick={(e) => { e.stopPropagation(); openAvisoNoteEditor(a); }}
+            className="text-[9px] px-1 py-0.5 rounded font-bold leading-tight border border-red-900/40 break-words cursor-pointer hover:ring-2 hover:ring-red-500 hover:ring-offset-0 transition relative"
             style={{
               background: "repeating-linear-gradient(45deg, #fee2e2, #fee2e2 5px, #fecaca 5px, #fecaca 10px)",
               color: "#7f1d1d",
             }}
-            title={`${reason}${proName ? ` · ${proName}` : ""}${sede ? ` · ${sede.name}` : ""}${a.turn ? ` · ${a.turn === "M" ? "Mañana" : "Tarde"}` : ""}`}
+            title={[
+              `${reason}${proName ? ` · ${proName}` : ""}${sede ? ` · ${sede.name}` : ""}${a.turn ? ` · ${a.turn === "M" ? "Mañana" : "Tarde"}` : ""}`,
+              hasNote ? `📝 ${notePreview.length > 200 ? notePreview.slice(0, 200) + "…" : notePreview}` : "Click para añadir nota al aviso",
+            ].join("\n")}
           >
             {turnLabel && <span className="inline-block font-black px-0.5 mr-0.5 bg-red-900 text-white rounded-[2px]">{turnLabel}</span>}
             <span className="font-black">🏖 {reason}</span>
             {proName ? ` - ${avisoProAlias || proName}` : ""}
             {sede ? ` (${sede.name})` : ""}
+            {hasNote && (
+              <span
+                className="absolute top-0 right-0 -mt-1 -mr-1 text-[10px] bg-amber-400 text-black rounded-full w-3.5 h-3.5 flex items-center justify-center font-bold border border-black/60 leading-none"
+                title="Tiene nota"
+              >•</span>
+            )}
           </div>
         );
       });
@@ -342,18 +400,26 @@ export default function MensualTab() {
           </button>
         </div>
         <button onClick={() => { setYear(new Date().getFullYear()); setMonth(new Date().getMonth()); }} className="bg-amber-500 hover:bg-amber-400 text-black font-black px-3 py-2 rounded-lg text-xs transition">HOY</button>
-        <button onClick={() => window.print()} className="bg-slate-700 hover:bg-slate-600 text-white font-bold px-3 py-2 rounded-lg text-xs transition hidden sm:block">🖨️ PDF</button>
+        <VoiceAvisoButton
+          sedes={sedes}
+          professionals={professionals}
+          onSaved={load}
+          contextYear={year}
+          contextMonth={month}
+        />
+        <button onClick={() => window.print()} className="bg-slate-700 hover:bg-slate-600 text-white font-bold px-3 py-2 rounded-lg text-xs transition">🖨️ PDF</button>
       </div>
 
-      <div className="flex-1 overflow-auto bg-white text-gray-900 rounded-xl p-5" id="print-target">
+      <div className="flex-1 overflow-auto bg-white text-gray-900 rounded-xl p-2 sm:p-5" id="print-target">
         <div className="flex justify-between items-end mb-3 border-b-[3px] border-gray-900 pb-2">
           <div className="flex items-center gap-3">
-            <img src="/mural-logo.png" alt="MURAL" className="h-10 w-auto" />
-            <h1 className="text-xl font-black text-gray-900">{MESES[month].toUpperCase()} {year}</h1>
+            <img src="/mural-logo.png" alt="MURAL" className="h-8 sm:h-10 w-auto" />
+            <h1 className="text-lg sm:text-xl font-black text-gray-900">{MESES[month].toUpperCase()} {year}</h1>
           </div>
           <span className="text-[10px] text-gray-500 font-bold hidden sm:block">Click en una tarjeta para añadir/editar nota</span>
         </div>
-        <table className="w-full border-collapse table-fixed">
+        <div className="overflow-x-auto">
+        <table className="w-full border-collapse table-fixed min-w-[780px]">
           <thead>
             <tr>
               {DOW_HEADER.map((d, i) => (
@@ -363,7 +429,63 @@ export default function MensualTab() {
           </thead>
           <tbody>{rows}</tbody>
         </table>
+        </div>
       </div>
+
+      {/* ═══ Aviso note editor modal ═══ */}
+      {avisoNoteModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => { setAvisoNoteModal(null); setNoteText(""); }}
+        >
+          <div
+            className="bg-white border-2 border-red-900 rounded-xl p-4 sm:p-6 w-full max-w-md space-y-4 shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="border-b-2 border-red-900 pb-2">
+              <h3 className="text-gray-900 font-black text-lg">🏖 Nota del aviso</h3>
+              <p className="text-[11px] text-gray-600 font-bold uppercase tracking-wide">
+                {formatDateLabel(avisoNoteModal.date)} · {avisoNoteModal.turn === "M" ? "Mañana" : "Tarde"} · {avisoNoteModal.reason}
+              </p>
+              <p className="text-xs text-gray-800 font-bold mt-0.5">
+                {avisoNoteModal.sedeName}{avisoNoteModal.proName ? ` · ${avisoNoteModal.proName}` : ""}
+              </p>
+            </div>
+            <div>
+              <label className="block text-[11px] font-extrabold text-gray-700 uppercase mb-1.5">NOTA DEL AVISO</label>
+              <textarea
+                value={noteText}
+                onChange={e => setNoteText(e.target.value)}
+                maxLength={2000}
+                rows={5}
+                placeholder="Escribe aquí la nota del aviso…"
+                className="w-full px-3 py-2 bg-gray-50 border-2 border-gray-300 focus:border-amber-500 focus:bg-white rounded-lg text-sm text-gray-900 font-medium resize-none outline-none transition"
+              />
+              <div className="flex justify-between items-center mt-1">
+                <span className="text-[10px] text-gray-500 font-bold">{noteText.length}/2000</span>
+                {noteText.trim().length > 0 && (
+                  <button
+                    onClick={() => setNoteText("")}
+                    className="text-[10px] text-red-600 hover:text-red-800 font-bold uppercase"
+                  >Borrar nota</button>
+                )}
+              </div>
+            </div>
+            <div className="flex gap-2 pt-2">
+              <button
+                onClick={() => { setAvisoNoteModal(null); setNoteText(""); }}
+                disabled={noteSaving}
+                className="flex-1 py-2 px-4 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg font-bold text-sm transition disabled:opacity-50"
+              >Cancelar</button>
+              <button
+                onClick={saveAvisoNote}
+                disabled={noteSaving}
+                className="flex-1 py-2 px-4 bg-red-900 hover:bg-red-800 text-white rounded-lg font-bold text-sm transition disabled:opacity-50"
+              >{noteSaving ? "Guardando…" : "Guardar"}</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ═══ Note editor modal ═══ */}
       {noteModal && (

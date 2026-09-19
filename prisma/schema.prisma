@@ -214,6 +214,7 @@ model Aviso {
   sedeId          String
   turn            String   // M | T
   reason          String   @default("") // BAJA | FORMACION | PERMISO | VACACIONES | custom
+  note            String   @default("") // free-form note (e.g. added by voice)
   createdAt       DateTime @default(now())
 
   company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)

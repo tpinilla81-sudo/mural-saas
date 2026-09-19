@@ -37,6 +37,7 @@ export async function POST(req: Request) {
       sedeId: body.sedeId,
       turn: body.turn, // M or T
       reason: body.reason || "",
+      note: typeof body.note === "string" ? body.note : "",
     },
   });
 

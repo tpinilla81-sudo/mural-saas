@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
+import VoiceAvisoButton from "@/components/VoiceAvisoButton";
 
 const AVISO_REASONS = ["BAJA", "FORMACION", "PERMISO", "VACACIONES"] as const;
 type AvisoReason = (typeof AVISO_REASONS)[number];
@@ -45,6 +46,7 @@ interface AvisoEntry {
   sedeId: string;
   turn: string;
   reason: string;
+  note?: string;
   professional?: Professional | null;
 }
 
@@ -341,6 +343,15 @@ export default function DiarioTab() {
             HOY
           </button>
 
+          {/* Voice aviso capture */}
+          <VoiceAvisoButton
+            sedes={sedes}
+            professionals={professionals}
+            onSaved={load}
+            contextYear={year}
+            contextMonth={new Date().getMonth()}
+          />
+
           {/* View mode toggle */}
           <button onClick={() => setViewMode(v => v === "full" ? "compact" : "full")}
             className="bg-slate-700 hover:bg-slate-600 text-white font-bold px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg text-[10px] sm:text-xs transition shrink-0">
@@ -451,7 +462,7 @@ export default function DiarioTab() {
                                 background: avisoM ? undefined : (planM ? sede.color : "transparent"),
                                 borderLeft: (avisoM || planM) ? undefined : "2px solid #3b82f6"
                               }}
-                              title={avisoM ? `${avisoM.reason || "Aviso"}${avisoM.professionalId ? " - " + (professionals.find(p => p.id === avisoM.professionalId)?.alias || "") : " (sede)"}` : planM ? `${planM.professionalAlias} - ${proNameM}` : "Mañana (sin asignar)"}
+                              title={avisoM ? `${avisoM.reason || "Aviso"}${avisoM.professionalId ? " - " + (professionals.find(p => p.id === avisoM.professionalId)?.alias || "") : " (sede)"}${avisoM.note ? `\n📝 ${avisoM.note}` : ""}` : planM ? `${planM.professionalAlias} - ${proNameM}` : "Mañana (sin asignar)"}
                             >
                               {avisoM ? getAvisoLabel(avisoM.reason) : (planM?.professionalAlias || "M")}
                             </div>
@@ -467,7 +478,7 @@ export default function DiarioTab() {
                                 background: avisoT ? undefined : (planT ? sede.color : "transparent"),
                                 borderLeft: (avisoT || planT) ? undefined : "2px solid #f59e0b"
                               }}
-                              title={avisoT ? `${avisoT.reason || "Aviso"}${avisoT.professionalId ? " - " + (professionals.find(p => p.id === avisoT.professionalId)?.alias || "") : " (sede)"}` : planT ? `${planT.professionalAlias} - ${proNameT}` : "Tarde (sin asignar)"}
+                              title={avisoT ? `${avisoT.reason || "Aviso"}${avisoT.professionalId ? " - " + (professionals.find(p => p.id === avisoT.professionalId)?.alias || "") : " (sede)"}${avisoT.note ? `\n📝 ${avisoT.note}` : ""}` : planT ? `${planT.professionalAlias} - ${proNameT}` : "Tarde (sin asignar)"}
                             >
                               {avisoT ? getAvisoLabel(avisoT.reason) : (planT?.professionalAlias || "T")}
                             </div>
