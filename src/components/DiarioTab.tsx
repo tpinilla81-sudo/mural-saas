@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import VoiceAvisoButton, { VoiceButtons } from "@/components/VoiceAvisoButton";
 
 const AVISO_REASONS = ["BAJA", "FORMACION", "PERMISO", "VACACIONES"] as const;
 type AvisoReason = (typeof AVISO_REASONS)[number];
@@ -485,15 +484,6 @@ export default function DiarioTab() {
             className="bg-amber-500 hover:bg-amber-400 text-black font-black px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm transition shrink-0">
             HOY
           </button>
-
-          {/* Voice aviso capture — dos botones: Modo Coche (manos libres) + Modo PC (dictado libre) */}
-          <VoiceButtons
-            sedes={sedes}
-            professionals={professionals}
-            onSaved={load}
-            contextYear={year}
-            contextMonth={new Date().getMonth()}
-          />
 
           {/* View mode toggle */}
           <button onClick={() => setViewMode(v => v === "full" ? "compact" : "full")}

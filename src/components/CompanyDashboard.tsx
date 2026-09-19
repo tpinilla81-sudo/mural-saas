@@ -77,7 +77,8 @@ export default function CompanyDashboard() {
           </button>
         ))}
 
-        {/* ── Botones de voz globales: a la derecha, resaltados ── */}
+        {/* ── Botones de voz globales: a la derecha, resaltados — SOLO en la pestaña DIARIO ── */}
+        {tab === "diario" && (
         <div className="ml-auto flex gap-2 shrink-0 pl-2">
           <button
             onClick={() => setVoiceCarOpen(true)}
@@ -96,6 +97,7 @@ export default function CompanyDashboard() {
             🎙️<span className="hidden sm:inline"> MODO PC</span><span className="sm:hidden"> PC</span>
           </button>
         </div>
+        )}
       </div>
 
       <div className="flex-1 overflow-auto">
