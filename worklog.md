@@ -1079,3 +1079,33 @@ Stage Summary:
 - Los avisos por voz viven SOLO en la línea superior (grandes, a la derecha, resaltados) y únicamente cuando la pestaña activa es DIARIO (incluye sus sub-tabs Diario/Mensual/Sedes/Pros/Calendarios).
 - Sin duplicados en las barras de herramientas del Diario y Mensual.
 - /coche mantiene su restricción de seguridad: único método manos libres.
+
+---
+Task ID: 31
+Agent: main
+Task: Modo Coche con listas numeradas estilo CarPlay + cabeceras fijas del Diario al hacer scroll
+
+Work Log:
+- Petición: "las preguntas del modo coche son un coñazo... que diga elige número de la lista, muestre la lista en la pantalla del coche y decir el número, igual con el profesional, la nota libre" + "los días no se quedan fijos al subir y bajar scroll, fijar sedes y días de arriba".
+- src/lib/voice-dialog.ts: parseTurnAnswer acepta números (1 mañana/2 tarde/3 todo); nuevos helpers upcomingDays(count) y shortDateLabel ("VIE 19/9"). Tests ampliados: 63 OK / 0 fallos (scripts/test-voice-dialog.mjs) + test-voice-parser 6 OK.
+- src/components/HandsFreeOverlay.tsx — rediseño completo estilo CarPlay:
+  * Cada paso muestra LISTA NUMERADA EN PANTALLA (día: 10 próximos días con HOY/MAÑANA; sede; profesional + "TODA LA SEDE" como última opción; turno 1/2/3; motivo 1-5; ¿otro? IGUAL/NUEVO/TERMINAR).
+  * El TTS solo dice frases cortas ("Sede. Elige número.") — ya no lee las listas por altavoz. rate 1.02→1.15.
+  * Respuesta por número: "dos", "el 3", "2"... (parseListNumber) con fallback a nombres. Nota en UN paso ("di la nota o di sin nota", atajo táctil SIN NOTA).
+  * Tras guardar: "¿Igual, nuevo o terminar?" — IGUAL repite sede+pro+turno y solo pregunta día y motivo (memoria lastRef).
+  * Botones táctiles de apoyo: GUARDAR/✕ NO en confirmación, filas de lista clicables.
+  * Fix: ask() no actualizaba el estado step (chip congelado en 1·DÍA, botones de confirmación no salían) → setStep(step) añadido.
+- Fix cabeceras fijas (3 causas encadenadas):
+  1) sticky top-0 estaba en <thead> (Chrome lo ignora) → movido a cada <th>; esquina sticky left+top z-30; días z-20; sedes z-10. Tabla border-collapse → border-separate border-spacing-0 (requisito sticky cross-browser).
+  2) Cadena de alturas sin acotar: CompanyDashboard rama diario → h-full flex flex-col min-h-0; wrapper de sub-tabs flex-1 min-h-0 (overflow-auto para Sedes/Pros/Cal).
+  3) AppShell root min-h-screen → h-dvh overflow-hidden (los 3 dashboards ya eran h-full overflow-hidden; ahora el grid scrollea DENTRO y el toolbar/sub-tabs quedan fijos).
+- Builds ✓ (3 deploys). Commits: e2f54d4, e9668ec, 10c104d, 6b3b74b → Vercel READY.
+- Verificación E2E producción (agent-browser + stub de SpeechRecognition para ver la UI sin micro):
+  * /coche: lista de 10 días numerados ✓; tap 2=MAÑANA → 2·SEDE ✓; tap 1=VIT → 3·PROFESIONAL ✓ (10 pros + TODA LA SEDE) ✓; 4·TURNO ✓; 5·MOTIVO ✓; 6·NOTA con SIN NOTA ✓; 7·CONFIRMAR con GUARDAR/✕NO ✓; ✕NO → IGUAL/NUEVO/TERMINAR ✓; TERMINAR cierra limpio ✓ (sin escrituras en BD).
+  * Diario desktop: scrollTop=400 → dayTop constante (días fijos) ✓; scrollLeft=500 → sedeLeft constante (sedes fijas) ✓; grid scrollea dentro (clientH 383 < scrollH 1245) ✓.
+  * Diario móvil (390×844): grid scrollea dentro y días fijos ✓. Mensual y Configuración renderizan ✓. /coche sin Modo PC ✓.
+  * Capturas: download/diario-cabeceras-fijas.png.
+
+Stage Summary:
+- Modo Coche rápido y sin fricción: ver listas numeradas grandes, responder solo el número, nota opcional saltabile y encadenar avisos con "igual". La voz solo da instrucciones cortas.
+- Diario con cabeceras de días fijas al scroll vertical, columna de sedes fija al horizontal y barra de herramientas siempre visible (desktop y móvil).
