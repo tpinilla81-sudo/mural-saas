@@ -165,16 +165,16 @@ function CarScreen() {
             onClick={() => setVoiceOpen(true)}
             disabled={!loaded || sedes.length === 0}
             className="w-32 h-32 sm:w-40 sm:h-40 rounded-full bg-gradient-to-b from-[#3a7a4c] to-[#2E5D3A] ring-8 ring-[#6BBE7A]/25 active:scale-95 disabled:opacity-40 flex items-center justify-center text-6xl sm:text-7xl shadow-2xl transition-transform select-none"
-            title="Dictar aviso por voz"
+            title="Audio Modo PC: dictado libre en una frase"
           >
             🎙️
           </button>
           <div className="text-center -mt-1">
             <div className="text-lg sm:text-2xl font-black text-white tracking-wide">
-              {loaded && sedes.length === 0 ? "SIN SEDES CARGADAS" : "DICTAR AVISO"}
+              {loaded && sedes.length === 0 ? "SIN SEDES CARGADAS" : "AUDIO MODO PC"}
             </div>
             <p className="text-[11px] sm:text-sm text-slate-400 font-bold mt-1 max-w-xs mx-auto">
-              Pulsa y di: «el día 15 en Vitoria, Julio, vacaciones, nota: se va de viaje»
+              Dictado libre: pulsa y di «el día 15 en Vitoria, Julio, vacaciones, nota: se va de viaje»
             </p>
           </div>
 
@@ -183,13 +183,13 @@ function CarScreen() {
             <button
               onClick={() => setHandsFreeOpen(true)}
               disabled={!loaded || sedes.length === 0}
-              className="w-64 max-w-full bg-slate-900/70 border-2 border-[#6BBE7A] text-[#6BBE7A] hover:bg-[#2E5D3A]/40 active:scale-[0.98] disabled:opacity-40 font-black py-3 rounded-2xl text-lg shadow-lg transition"
-              title="Diálogo por voz: la app pregunta y tú contestas hablando"
+              className="w-64 max-w-full bg-slate-900/70 border-2 border-amber-500 text-amber-400 hover:bg-amber-600/30 hover:text-white active:scale-[0.98] disabled:opacity-40 font-black py-3 rounded-2xl text-lg shadow-lg transition"
+              title="Audio Modo Coche: la app pregunta por voz y tú respondes sin mirar"
             >
-              🔊 MANOS LIBRES
+              🔊 AUDIO MODO COCHE
             </button>
             <p className="text-[10px] sm:text-xs text-slate-500 font-bold text-center max-w-[16rem]">
-              Para conducir: la app pregunta por voz y tú solo hablas
+              Para conducir: la app pregunta por voz y tú solo hablas — 100% manos libres
             </p>
           </div>
         </section>

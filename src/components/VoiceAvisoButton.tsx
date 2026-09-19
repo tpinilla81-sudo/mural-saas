@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import HandsFreeOverlay from "@/components/HandsFreeOverlay";
 
 // ═══════════════════════════════════════════════════════════
 // Web Speech API — minimal typings
@@ -556,13 +557,80 @@ export default function VoiceAvisoButton({ sedes, professionals, onSaved, contex
       <button
         onClick={() => setOpen(true)}
         className="bg-[#2E5D3A] hover:bg-[#3a7a4c] text-white font-black px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm transition shrink-0"
-        title="Añadir aviso dictando por voz"
+        title="Dictado libre: dices la frase entera y la app la analiza"
       >
-        🎙️<span className="hidden sm:inline"> Aviso por voz</span><span className="sm:hidden"> Voz</span>
+        🎙️<span className="hidden sm:inline"> Audio Modo PC</span><span className="sm:hidden"> PC</span>
       </button>
       {open && (
         <VoiceAvisoModal
           onClose={() => setOpen(false)}
+          onSaved={onSaved}
+          sedes={sedes}
+          professionals={professionals}
+          contextYear={contextYear}
+          contextMonth={contextMonth}
+        />
+      )}
+    </>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// VoiceButtons — dos botones: Modo Coche (manos libres) + Modo PC
+// Para insertar en toolbars de Diario / Mensual / Permiso.
+// Funciona en móvil, tablet y PC (los dos modos disponibles).
+// ═══════════════════════════════════════════════════════════
+interface VoiceButtonsProps {
+  sedes: SedeLike[];
+  professionals: ProLike[];
+  onSaved: () => void;
+  contextYear: number;
+  contextMonth: number;
+}
+
+export function VoiceButtons({ sedes, professionals, onSaved, contextYear, contextMonth }: VoiceButtonsProps) {
+  const [pcOpen, setPcOpen] = useState(false);
+  const [carOpen, setCarOpen] = useState(false);
+
+  const carDisabled = sedes.length === 0;
+
+  return (
+    <>
+      <div className="flex gap-1.5 shrink-0">
+        {/* Modo Coche: manos libres, la app pregunta y tú respondes */}
+        <button
+          onClick={() => setCarOpen(true)}
+          disabled={carDisabled}
+          className="bg-amber-600/90 hover:bg-amber-500 disabled:opacity-40 text-white font-black px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm transition shrink-0 flex items-center gap-1.5"
+          title="Modo Coche: la app pregunta por voz y tú respondes sin mirar la pantalla"
+        >
+          🔊<span className="hidden sm:inline"> Modo Coche</span><span className="sm:hidden"> Coche</span>
+        </button>
+        {/* Modo PC: dictado libre con vista previa editable */}
+        <button
+          onClick={() => setPcOpen(true)}
+          disabled={carDisabled}
+          className="bg-[#2E5D3A] hover:bg-[#3a7a4c] disabled:opacity-40 text-white font-black px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm transition shrink-0 flex items-center gap-1.5"
+          title="Modo PC: dices la frase entera en una vez y la app la analiza"
+        >
+          🎙️<span className="hidden sm:inline"> Modo PC</span><span className="sm:hidden"> PC</span>
+        </button>
+      </div>
+
+      {pcOpen && (
+        <VoiceAvisoModal
+          onClose={() => setPcOpen(false)}
+          onSaved={onSaved}
+          sedes={sedes}
+          professionals={professionals}
+          contextYear={contextYear}
+          contextMonth={contextMonth}
+        />
+      )}
+
+      {carOpen && (
+        <HandsFreeOverlay
+          onClose={() => setCarOpen(false)}
           onSaved={onSaved}
           sedes={sedes}
           professionals={professionals}

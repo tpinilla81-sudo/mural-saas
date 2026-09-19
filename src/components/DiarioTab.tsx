@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import VoiceAvisoButton from "@/components/VoiceAvisoButton";
+import VoiceAvisoButton, { VoiceButtons } from "@/components/VoiceAvisoButton";
 
 const AVISO_REASONS = ["BAJA", "FORMACION", "PERMISO", "VACACIONES"] as const;
 type AvisoReason = (typeof AVISO_REASONS)[number];
@@ -93,6 +93,11 @@ export default function DiarioTab() {
   // View mode
   const [viewMode, setViewMode] = useState<"full" | "compact">("full");
 
+  // Drag-to-scroll (PC): botón izquierdo del ratón presionado para
+  // desplazar el grid arriba/abajo/izquierda/derecha sin usar la barra.
+  const [dragging, setDragging] = useState(false);
+  const dragRef = useRef<{ x: number; y: number; sx: number; sy: number; moved: boolean } | null>(null);
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const todayRef = useRef<HTMLTableCellElement>(null);
 
@@ -170,6 +175,110 @@ export default function DiarioTab() {
       const cell = todayRef.current;
       const left = cell.offsetLeft - container.clientWidth / 3;
       container.scrollTo({ left: Math.max(0, left), behavior: "smooth" });
+    }
+  };
+
+  // ── Drag-to-scroll con ratón (PC): botón izquierdo presionado + arrastrar ──
+  // Mientras se arrastra, los clicks en celdas se suprimen para no asignar
+  // profesionales por error al mover la vista.
+  const onDragStart = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;              // solo botón izquierdo
+    const el = scrollRef.current;
+    if (!el) return;
+    dragRef.current = {
+      x: e.clientX, y: e.clientY,
+      sx: el.scrollLeft, sy: el.scrollTop,
+      moved: false,
+    };
+    setDragging(true);
+  };
+
+  useEffect(() => {
+    if (!dragging) return;
+    const onMove = (e: MouseEvent) => {
+      const d = dragRef.current;
+      const el = scrollRef.current;
+      if (!d || !el) return;
+      const dx = e.clientX - d.x;
+      const dy = e.clientY - d.y;
+      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) d.moved = true;
+      el.scrollLeft = d.sx - dx;
+      el.scrollTop = d.sy - dy;
+    };
+    const onUp = () => {
+      // Si no se movió, no es drag — restauramos cursor para permitir click normal
+      setDragging(false);
+      // Limpia el flag con un micro-retraso para que el click siguiente
+      // (si lo hay tras soltar sin mover) sea interpretado como click,
+      // pero si hubo arrastre real, los clicks que vengan en los próximos
+      // ~50ms son suprimidos.
+      setTimeout(() => { dragRef.current = null; }, 50);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [dragging]);
+
+  // Si el drag movió la vista, el siguiente click en una celda NO debe
+  // asignar/borrar — se cancela.
+  const suppressIfDragged = (e: React.MouseEvent): boolean => {
+    if (dragRef.current?.moved) {
+      e.preventDefault();
+      e.stopPropagation();
+      return true;
+    }
+    return false;
+  };
+
+  // ── Atajos de teclado: T = Hoy, flechas = scroll del grid ──
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      // No interferir cuando se está escribiendo en un input/textarea/select
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || (e.target as HTMLElement)?.isContentEditable) return;
+      const el = scrollRef.current;
+      if (!el) return;
+      const step = 120;
+      if (e.key === "t" || e.key === "T") {
+        e.preventDefault();
+        scrollToToday();
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        el.scrollBy({ left: step, behavior: "smooth" });
+      } else if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        el.scrollBy({ left: -step, behavior: "smooth" });
+      } else if (e.key === "ArrowDown") {
+        e.preventDefault();
+        el.scrollBy({ top: step, behavior: "smooth" });
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        el.scrollBy({ top: -step, behavior: "smooth" });
+      } else if (e.key === "PageDown") {
+        e.preventDefault();
+        el.scrollBy({ top: el.clientHeight * 0.9, behavior: "smooth" });
+      } else if (e.key === "PageUp") {
+        e.preventDefault();
+        el.scrollBy({ top: -el.clientHeight * 0.9, behavior: "smooth" });
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [year]);
+
+  // ── Rueda con Shift = scroll horizontal (para ratones sin rueda horizontal) ──
+  const onWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    if (e.shiftKey) {
+      const el = scrollRef.current;
+      if (el) {
+        el.scrollLeft += e.deltaY;
+        // No preventDefault aquí: React WheelEvent es passive; Shift+wheel
+        // ya hace scroll horizontal en la mayoría de navegadores.
+      }
     }
   };
 
@@ -377,8 +486,8 @@ export default function DiarioTab() {
             HOY
           </button>
 
-          {/* Voice aviso capture */}
-          <VoiceAvisoButton
+          {/* Voice aviso capture — dos botones: Modo Coche (manos libres) + Modo PC (dictado libre) */}
+          <VoiceButtons
             sedes={sedes}
             professionals={professionals}
             onSaved={load}
@@ -413,6 +522,14 @@ export default function DiarioTab() {
           <div className="hidden sm:flex text-[10px] text-slate-400 items-center gap-3 ml-auto">
             <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-purple-500/15 border border-purple-400 inline-block" /> Finde</span>
             <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-500/20 border border-red-400 inline-block" /> Festivo</span>
+            <span className="flex items-center gap-1 text-slate-500" title="Atajos de teclado">
+              <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-600 text-[9px] font-bold text-slate-300">T</kbd>
+              <span>Hoy</span>
+              <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-600 text-[9px] font-bold text-slate-300">←↑↓→</kbd>
+              <span>Mover</span>
+              <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-600 text-[9px] font-bold text-slate-300">Drag</kbd>
+              <span>Arrastrar</span>
+            </span>
           </div>
         </div>
 
@@ -424,7 +541,12 @@ export default function DiarioTab() {
       </div>
 
       {/* ═══ Calendar grid ═══ */}
-      <div className="flex-1 overflow-auto relative" ref={scrollRef}>
+      <div
+        className={`flex-1 overflow-auto relative diario-scroll diario-drag ${dragging ? "dragging" : ""}`}
+        ref={scrollRef}
+        onMouseDown={onDragStart}
+        onWheel={onWheel}
+      >
         <table className="border-collapse">
           <thead className="sticky top-0 z-10">
             <tr>
@@ -487,7 +609,7 @@ export default function DiarioTab() {
                         <div className="flex flex-col gap-0.5 items-center justify-center">
                           {sede.morningEnabled && (
                             <div
-                              onClick={() => avisoM ? openAvisoModal(sede.id, f, "MANANA") : handleSlotClick(sede.id, f, "MANANA")}
+                              onClick={(e) => { if (suppressIfDragged(e)) return; avisoM ? openAvisoModal(sede.id, f, "MANANA") : handleSlotClick(sede.id, f, "MANANA"); }}
                               className={`${viewMode === "compact" ? "h-4 sm:h-5" : "h-5 sm:h-6"} w-[85%] rounded flex items-center justify-center ${textSize} font-bold cursor-pointer transition ${
                                 avisoM ? getAvisoColor(avisoM.reason) :
                                 planM ? "text-black border border-white" : "text-white/20 border border-white/5"
@@ -503,7 +625,7 @@ export default function DiarioTab() {
                           )}
                           {sede.afternoonEnabled && (
                             <div
-                              onClick={() => avisoT ? openAvisoModal(sede.id, f, "TARDE") : handleSlotClick(sede.id, f, "TARDE")}
+                              onClick={(e) => { if (suppressIfDragged(e)) return; avisoT ? openAvisoModal(sede.id, f, "TARDE") : handleSlotClick(sede.id, f, "TARDE"); }}
                               className={`${viewMode === "compact" ? "h-4 sm:h-5" : "h-5 sm:h-6"} w-[85%] rounded flex items-center justify-center ${textSize} font-bold cursor-pointer transition ${
                                 avisoT ? getAvisoColor(avisoT.reason) :
                                 planT ? "text-black border border-white" : "text-white/20 border border-white/5"

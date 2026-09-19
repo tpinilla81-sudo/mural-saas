@@ -150,3 +150,45 @@
     border-radius: 0 !important;
   }
 }
+
+/* ── Scrollbars visibles para el Diario / grids con scroll largo.
+   WebKit + Firefox. Estilo discreto pero siempre visible. ── */
+.diario-scroll {
+  scrollbar-width: auto;            /* Firefox: visible por defecto */
+  scrollbar-color: #475569 #1e293b;
+}
+.diario-scroll::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+.diario-scroll::-webkit-scrollbar-track {
+  background: #1e293b;
+  border-left: 1px solid #334155;
+}
+.diario-scroll::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 8px;
+  border: 2px solid #1e293b;
+}
+.diario-scroll::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+.diario-scroll::-webkit-scrollbar-corner {
+  background: #1e293b;
+}
+
+/* ── Drag-to-scroll (cursor grab/grabbing) en el grid del Diario ── */
+.diario-drag {
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.diario-drag.dragging {
+  cursor: grabbing;
+}
+.diario-drag.dragging * {
+  cursor: grabbing !important;
+  user-select: none !important;
+  -webkit-user-select: none !important;
+  pointer-events: none;
+}

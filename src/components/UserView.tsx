@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
-import VoiceAvisoButton from "@/components/VoiceAvisoButton";
+import { VoiceButtons } from "@/components/VoiceAvisoButton";
 
 // Permission keys (mirrors server-side CSV in User.permissions)
 type Perms = {
@@ -305,7 +305,7 @@ export default function UserView() {
         {/* Action buttons: Voice aviso (if permitted) / Print / Send (gated by perms) */}
         <div className="flex gap-2 ml-auto sm:ml-0">
           {perms.can_voice_avisos && (
-            <VoiceAvisoButton
+            <VoiceButtons
               sedes={sedes}
               professionals={professionals}
               onSaved={load}

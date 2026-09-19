@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import VoiceAvisoButton from "@/components/VoiceAvisoButton";
+import { VoiceButtons } from "@/components/VoiceAvisoButton";
 
 interface PlanEntry {
   id: string;
@@ -429,7 +429,7 @@ export default function MensualTab() {
           </button>
         </div>
         <button onClick={() => { setSlideDir(""); setYear(new Date().getFullYear()); setMonth(new Date().getMonth()); }} className="bg-amber-500 hover:bg-amber-400 text-black font-black px-3 py-2 rounded-lg text-xs transition">HOY</button>
-        <VoiceAvisoButton
+        <VoiceButtons
           sedes={sedes}
           professionals={professionals}
           onSaved={load}
