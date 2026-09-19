@@ -79,6 +79,17 @@ export default function DiarioTab() {
   const [avisoModal, setAvisoModal] = useState<{ sedeId: string; date: string; turn: string } | null>(null);
   const [avisoReason, setAvisoReason] = useState<AvisoReason>("VACACIONES");
 
+  // Slot action dialog (touch-friendly: shows cell details before acting)
+  const [slotDialog, setSlotDialog] = useState<{
+    kind: "plan" | "aviso";
+    sedeName: string;
+    date: string;
+    turn: string;
+    main: string;
+    detail: string;
+    onConfirm: () => void;
+  } | null>(null);
+
   // View mode
   const [viewMode, setViewMode] = useState<"full" | "compact">("full");
 
@@ -166,10 +177,21 @@ export default function DiarioTab() {
   const handleSlotClick = async (sedeId: string, date: string, turn: string) => {
     const existing = getPlan(sedeId, date, turn);
     if (existing) {
-      if (confirm("¿Eliminar asignación?")) {
-        await fetch(`/api/company/plan/${existing.id}`, { method: "DELETE" });
-        load();
-      }
+      const sede = sedes.find(s => s.id === sedeId);
+      const pro = professionals.find(p => p.alias === existing.professionalAlias);
+      setSlotDialog({
+        kind: "plan",
+        sedeName: sede?.name || "",
+        date,
+        turn: turn === "MANANA" ? "Mañana" : "Tarde",
+        main: existing.professionalAlias,
+        detail: pro ? `${pro.firstName} ${pro.lastName}` : "",
+        onConfirm: async () => {
+          await fetch(`/api/company/plan/${existing.id}`, { method: "DELETE" });
+          setSlotDialog(null);
+          load();
+        },
+      });
       return;
     }
     if (!selectedPro) return;
@@ -189,9 +211,21 @@ export default function DiarioTab() {
   const openAvisoModal = (sedeId: string, date: string, turn: string) => {
     const existing = getAviso(sedeId, date, turn);
     if (existing) {
-      if (confirm(`¿Eliminar aviso${existing.reason ? ` (${existing.reason})` : ""}?`)) {
-        fetch(`/api/company/avisos/${existing.id}`, { method: "DELETE" }).then(load);
-      }
+      const sede = sedes.find(s => s.id === sedeId);
+      const pro = professionals.find(p => p.id === existing.professionalId);
+      setSlotDialog({
+        kind: "aviso",
+        sedeName: sede?.name || "",
+        date,
+        turn: turn === "MANANA" ? "Mañana" : "Tarde",
+        main: (existing.reason || "AUSENCIA").toUpperCase(),
+        detail: [pro ? `${pro.alias} - ${pro.firstName} ${pro.lastName}`.trim() : "Sin profesional (cierre de sede)", existing.note ? `📝 ${existing.note}` : ""].filter(Boolean).join(" · "),
+        onConfirm: async () => {
+          await fetch(`/api/company/avisos/${existing.id}`, { method: "DELETE" });
+          setSlotDialog(null);
+          load();
+        },
+      });
       return;
     }
     setAvisoModal({ sedeId, date, turn });
@@ -395,7 +429,7 @@ export default function DiarioTab() {
           <thead className="sticky top-0 z-10">
             <tr>
               {/* Sede label column - compact on mobile */}
-              <th className="sticky left-0 z-20 bg-black border-r-[3px] border-amber-500 px-0.5 sm:px-3 py-1 sm:py-2 text-[9px] sm:text-xs text-blue-400 font-bold text-left w-[50px] sm:w-[200px] min-w-[50px] sm:min-w-[200px]">
+              <th className="sticky left-0 z-20 bg-black border-r-[3px] border-amber-500 px-0.5 sm:px-3 py-1 sm:py-2 text-[9px] sm:text-xs text-blue-400 font-bold text-left w-[62px] sm:w-[200px] min-w-[62px] sm:min-w-[200px]">
                 SEDES
               </th>
               {daysArr.map((d, i) => {
@@ -418,7 +452,7 @@ export default function DiarioTab() {
                   <td className="sticky left-0 z-10 bg-black border-r-[3px] border-amber-500 px-0.5 sm:px-3 py-0.5 sm:py-2 border-b-2 border-white/90">
                     {/* Mobile: ultra-compact view */}
                     <div className="sm:hidden">
-                      <div className="font-bold text-[8px] leading-tight truncate max-w-[42px]" style={{ borderLeft: `3px solid ${sede.color}`, paddingLeft: 3 }}>
+                      <div className="font-bold text-[8px] leading-tight truncate max-w-[54px]" style={{ borderLeft: `3px solid ${sede.color}`, paddingLeft: 3 }}>
                         {sede.name}
                       </div>
                     </div>
@@ -493,6 +527,34 @@ export default function DiarioTab() {
           </tbody>
         </table>
       </div>
+
+      {/* ═══ Slot action dialog (details + confirm, touch friendly) ═══ */}
+      {slotDialog && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 p-3" onClick={() => setSlotDialog(null)}>
+          <div className="bg-slate-800 border border-slate-600 rounded-xl p-4 sm:p-6 w-full max-w-sm space-y-4 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <div className="border-b border-slate-600 pb-2">
+              <h3 className="text-white font-bold text-base">
+                {slotDialog.kind === "plan" ? "Asignación de turno" : "Aviso / Ausencia"}
+              </h3>
+              <p className="text-[11px] text-slate-400 font-bold uppercase tracking-wide">
+                {slotDialog.date} · {slotDialog.turn} · {slotDialog.sedeName}
+              </p>
+            </div>
+            <div>
+              <div className="text-white font-black text-lg">{slotDialog.main}</div>
+              {slotDialog.detail && <div className="text-xs text-slate-300 font-bold mt-0.5 break-words">{slotDialog.detail}</div>}
+            </div>
+            <div className="flex gap-3 pt-1">
+              <button onClick={() => setSlotDialog(null)} className="flex-1 py-2 px-4 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-bold text-sm transition">
+                Cerrar
+              </button>
+              <button onClick={slotDialog.onConfirm} className="flex-1 py-2 px-4 bg-red-600 hover:bg-red-500 text-white rounded-lg font-bold text-sm transition">
+                {slotDialog.kind === "plan" ? "Eliminar asignación" : "Eliminar aviso"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ═══ Aviso Modal ═══ */}
       {avisoModal && (
