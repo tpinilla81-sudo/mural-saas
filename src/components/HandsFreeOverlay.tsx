@@ -207,6 +207,7 @@ export default function HandsFreeOverlay({
   const ask = (step: Step, payload: AskPayload) => {
     if (abortRef.current) return;
     stepRef.current = step;
+    setStep(step);
     lastAskRef.current = payload;
     setTitle(payload.title);
     setItems(payload.items || []);
@@ -228,7 +229,8 @@ export default function HandsFreeOverlay({
       const d = new Date(ds + "T00:00:00");
       const dow = ["DOM", "LUN", "MAR", "MIÉ", "JUE", "VIE", "SÁB"][d.getDay()];
       const label = i === 0 ? "HOY" : i === 1 ? "MAÑANA" : dow;
-      return { n: i + 1, label, sub: shortDateLabel(ds) };
+      const sub = i <= 1 ? shortDateLabel(ds) : `${d.getDate()}/${d.getMonth() + 1}`;
+      return { n: i + 1, label, sub };
     });
   };
   const sedeOptions = (): ListItem[] =>

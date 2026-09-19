@@ -537,11 +537,12 @@ export default function DiarioTab() {
         onMouseDown={onDragStart}
         onWheel={onWheel}
       >
-        <table className="border-collapse">
-          <thead className="sticky top-0 z-10">
+        {/* border-separate (no collapse): imprescindible para que sticky funcione en todos los navegadores */}
+        <table className="border-separate border-spacing-0">
+          <thead>
             <tr>
-              {/* Sede label column - compact on mobile */}
-              <th className="sticky left-0 z-20 bg-black border-r-[3px] border-amber-500 px-0.5 sm:px-3 py-1 sm:py-2 text-[9px] sm:text-xs text-blue-400 font-bold text-left w-[62px] sm:w-[200px] min-w-[62px] sm:min-w-[200px]">
+              {/* Sede label column - compact on mobile. Fija arriba E izquierda (esquina) */}
+              <th className="sticky left-0 top-0 z-30 bg-black border-r-[3px] border-amber-500 px-0.5 sm:px-3 py-1 sm:py-2 text-[9px] sm:text-xs text-blue-400 font-bold text-left w-[62px] sm:w-[200px] min-w-[62px] sm:min-w-[200px]">
                 SEDES
               </th>
               {daysArr.map((d, i) => {
@@ -549,7 +550,7 @@ export default function DiarioTab() {
                 const isToday = f === todayStr;
                 return (
                   <th key={i} ref={isToday ? todayRef : undefined}
-                    className={`${isToday ? "bg-amber-500 !text-black" : "bg-slate-900"} ${cellW} px-0 py-1 sm:py-2 ${viewMode === "compact" ? "text-[6px] sm:text-[8px]" : "text-[7px] sm:text-[9px]"} font-bold text-center border-b-2 border-slate-700`}>
+                    className={`sticky top-0 z-20 ${isToday ? "bg-amber-500 !text-black" : "bg-slate-900"} ${cellW} px-0 py-1 sm:py-2 ${viewMode === "compact" ? "text-[6px] sm:text-[8px]" : "text-[7px] sm:text-[9px]"} font-bold text-center border-b-2 border-slate-700`}>
                     {DOW[d.getDay()]}<br />{d.getDate()}/{d.getMonth() + 1}
                   </th>
                 );
