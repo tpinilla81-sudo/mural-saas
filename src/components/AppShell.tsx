@@ -54,6 +54,13 @@ export default function AppShell() {
               {role === "SUPER_ADMIN" ? "Super Admin" : role === "COMPANY_ADMIN" ? (session.user as any)?.companyName : "Usuario"}
             </div>
           </div>
+          <a
+            href="/coche"
+            className="bg-[#2E5D3A] hover:bg-[#3a7a4c] text-white px-3 py-2 rounded-lg text-sm font-bold transition"
+            title="Modo coche: pantalla gigante para el móvil en el soporte del coche"
+          >
+            🚗
+          </a>
           <button
             onClick={() => signOut()}
             className="bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg text-sm font-bold transition"
@@ -85,6 +92,13 @@ export default function AppShell() {
               {role === "SUPER_ADMIN" ? "Super Admin" : role === "COMPANY_ADMIN" ? (session.user as any)?.companyName : "Usuario"}
             </div>
           </div>
+          <a
+            href="/coche"
+            onClick={() => setMenuOpen(false)}
+            className="block text-center w-full bg-[#2E5D3A]/30 border border-[#6BBE7A]/50 hover:bg-[#2E5D3A] text-[#6BBE7A] hover:text-white font-bold py-2 rounded-lg text-sm transition"
+          >
+            🚗 Modo coche
+          </a>
           <button
             onClick={() => { signOut(); setMenuOpen(false); }}
             className="w-full bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white font-bold py-2 rounded-lg text-sm transition"
