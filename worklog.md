@@ -829,3 +829,28 @@ Stage Summary:
 - Seguridad: imposible auto-degradar el rol admin ni dejar una empresa sin admin;
   los accesos ya no pueden secuestrar cuentas de administrador.
 - Login admin intacto: julio1974@ → app MURAL completa.
+
+---
+Task ID: 25
+Agent: Super Z (main)
+Task: Mensual swipe táctil para cambiar de mes; cabecera "Acceso" → "MURAL"; avisos por voz como permiso elegible en Configuración de Accesos.
+
+Work Log:
+- MensualTab: navegación por gesto — swipe izquierda = mes siguiente, derecha = anterior (umbral 60px, eje horizontal dominante para no interferir con scroll vertical); siempre arranca en el mes actual (ya existente). Flechas ‹ › junto al título del mes (no-print) + pista móvil "Desliza el dedo ‹ › para cambiar de mes". Animación de deslizamiento (keyframes month-slide-next/prev en globals.css, remount por key año-mes).
+- Conflict resuelto: tabla mensual dejó de forzar min-w-[780px] → ahora cabe en el ancho del móvil/tablet y el swipe no compite con el scroll horizontal.
+- layout.tsx: metadata title "Acceso" → "MURAL" (pestaña del navegador / pantalla de inicio).
+- Permiso elegible "can_voice_avisos" (grupo Acciones en ConfigTab): añadido a PERM_KEYS en /api/company/permissions (GET parse + PUT persist), catálogo PermKey/PERM_GROUPS de ConfigTab (checkbox con ayuda), y Perms/parsePerms de UserView.
+- UserView: VoiceAvisoButton visible si el acceso tiene can_voice_avisos (junto a Imprimir/Enviar); /api/company/professionals ahora se carga siempre; onSaved recarga datos.
+- API /api/company/avisos POST: admins siempre; USER solo si su CSV de permisos incluye can_voice_avisos (getSessionUser en vez de requireCompanyAdmin).
+- FIX latente: POST /api/company/professionals hacía 500 al no llegar startDate (null sobre String NOT NULL) — coerción segura de campos string; así la creación de profesionales por API/UI vuelve a funcionar.
+- FIX impresión: no existía @media print (el botón 🖨️ PDF imprimía toda la app). Nuevo CSS: solo #print-target visible (guard body:has(#print-target); .no-print display:none). id="print-target" añadido al mensual de UserView.
+- Scripts/verificación: scripts/verify-voice-perm.mjs — E2E producción completo: crea pro+acceso sin permiso → POST aviso = 403 ✓; activa can_voice_avisos → re-login → POST = 201 ✓; cleanup (aviso+usuario+profesional) ✓ → TODO OK.
+- UI real (agent-browser, viewport iPhone 14): login ✓ → Mensual inicia SEPTIEMBRE 2026 ✓; ‹/› cambian OCTUBRE/SEPTIEMBRE ✓; TouchEvent swipe izq→OCTUBRE ✓, swipe der→SEPTIEMBRE ✓; swipe vertical NO cambia mes ✓; pista móvil visible ✓; botón 🎙️ Voz presente ✓; Configuración → fila JULIO → checkbox "🎙️ Avisos por voz" existe (unchecked por defecto) ✓. title MURAL en HTML ✓.
+- Commits: 9d463fc (feature), 723f47f + a589d05 (higiene repo), 1088a95 (fix professionals POST). Deploy Vercel READY.
+
+Stage Summary:
+- Mensual navegable con el dedo en móvil/tablet (swipe ‹ ›, flechas, animación) y arranca siempre en el mes actual.
+- App identifica como MURAL en la cabecera/pestaña.
+- "Avisos por voz" ahora es un permiso elegible por acceso en Configuración de Accesos → Acciones: el profesional ve el botón 🎙️ en su vista y el API se lo permite; sin el permiso el backend rechaza (403).
+- Corregidos dos bugs de fondo: 500 al crear profesional por API y estilos de impresión inexistentes.
+- Verificado E2E en producción (UI táctil simulada + API): todo verde.
