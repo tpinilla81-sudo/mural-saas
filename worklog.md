@@ -854,3 +854,50 @@ Stage Summary:
 - "Avisos por voz" ahora es un permiso elegible por acceso en Configuración de Accesos → Acciones: el profesional ve el botón 🎙️ en su vista y el API se lo permite; sin el permiso el backend rechaza (403).
 - Corregidos dos bugs de fondo: 500 al crear profesional por API y estilos de impresión inexistentes.
 - Verificado E2E en producción (UI táctil simulada + API): todo verde.
+
+---
+Task ID: 26
+Agent: Super Z (main)
+Task: CarPlay / Android Auto — respuesta + solución práctica instalable (PWA + Modo Coche).
+
+Work Log:
+- Respuesta al usuario: la integración NATIVA CarPlay/Android Auto NO es posible para MURAL
+  (Apple solo aprueba categorías navegación/audio/mensajería/parking/comida y exige app
+  nativa Swift con entitlement especial; Google exige app nativa Kotlin + categorías
+  media/mensajería/navegación/POI). Solución práctica implementada: PWA instalable + "Modo Coche".
+- scripts/make_pwa_icons.py: iconos generados desde mural-logo.png recortando la marca M
+  (bbox sin blanco) sobre lienzo blanco → icon-192, icon-512, apple-touch-icon (180),
+  maskable-512 (zona segura 46%).
+- public/manifest.webmanifest: name MURAL Plastic Surgery, display standalone, orientación
+  libre, theme #0b1120, iconos any+maskable, shortcut "Modo Coche" → /coche.
+- public/sw.js: service worker passthrough (sin interceptar respuestas → cero riesgo de
+  cachés obsoletas; satisface instalabilidad Android/Chrome).
+- SWRegister.tsx registrado en layout.tsx; metadata PWA completa: manifest, appleWebApp
+  (capable/title/status-bar), icons, themeColor #0b1120, viewportFit cover + meta legacy
+  apple-mobile-web-app-capable (fix compat iOS; Next emite solo mobile-web-app-capable).
+- src/app/coche/page.tsx (MODO COCHE): pantalla oscura gigante para móvil/tablet en
+  soporte de coche — reloj enorme (tick 20s), fecha es-ES, botón micrófono 128-160px
+  que abre VoiceAvisoModal (dictado por voz completo), lista "AVISOS DE HOY" con badges
+  MAÑANA/TARDE + motivo coloreado + nota 📝, botón ⟳, "← App completa", wake lock
+  (pantalla no se apaga, re-adquiere al volver a visible), redirección a / si sin sesión,
+  layout responsive portrait/landscape (landscape:grid-cols-2) y safe-area insets.
+- AppShell: botón 🚗 en navbar desktop + "🚗 Modo coche" en menú hamburguesa móvil.
+- Build ✓ (8.5s). Commits: 1db020b (PWA+Modo Coche), 6f5a085 (meta legacy iOS) → deploy READY.
+- Verificación producción scripts/verify-pwa.sh: 13/13 ✓ (manifest, standalone, shortcut,
+  4 iconos, sw.js, /coche 200, metas manifest/apple/icons en HTML).
+- UI real agent-browser (iPhone 14): login ✓ → menú móvil → "🚗 Modo coche" → /coche ✓
+  (reloj 17:37, fecha, mic gigante, avisos hoy 0) → tap mic → modal voz ✓ → texto
+  "hoy en Vitoria, Julio, vacaciones, nota: prueba modo coche" → Analizar → Guardar
+  (Todo el día) → 2 avisos MAÑANA/TARDE VACACIONES JULIO MURILLO VIT + nota visibles ✓
+  → landscape (844x390): 2 columnas reloj+mic / avisos ✓. Capturas: download/
+  modo-coche-portrait.png, modo-coche-con-aviso.png, modo-coche-landscape.png.
+- Cleanup scripts/cleanup-car-test.mjs: DELETE de los 2 avisos de prueba → 0 restantes ✓.
+
+Stage Summary:
+- MURAL es ahora una PWA instalable: iPhone (Safari → Compartir → Añadir a pantalla de
+  inicio) y Android (Chrome → ⋮ → Instalar app) se abre a pantalla completa sin navegador,
+  con icono de la marca M en pantalla de inicio y acceso directo "Modo Coche".
+- Nueva ruta /coche: pantalla de coche con reloj gigante, dictado de avisos por voz a un
+  toque, avisos de hoy en letra grande con notas, pantalla siempre encendida. Con el móvil
+  en el soporte del salpicadero cumple la función que CarPlay/Android Auto no permiten para
+  apps de gestión.
