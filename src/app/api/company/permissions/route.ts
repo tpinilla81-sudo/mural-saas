@@ -166,6 +166,19 @@ export async function PUT(req: Request) {
     },
   });
 
+  // ── Guard: never convert an administrator account into a restricted access ──
+  // (this bug previously downgraded the COMPANY_ADMIN himself to USER when a
+  //  professional shared his email)
+  if (linked && (linked.id === user.id || (linked.role !== "USER" && linked.role !== null))) {
+    return NextResponse.json(
+      {
+        error:
+          "Ese profesional está vinculado a una cuenta de administrador. Usa otro email distinto para crear el acceso de este profesional.",
+      },
+      { status: 400 }
+    );
+  }
+
   // Build perms object from body
   const perms: Record<PermKey, boolean> = {
     view_diario: !!body.view_diario,
