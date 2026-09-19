@@ -901,3 +901,47 @@ Stage Summary:
   toque, avisos de hoy en letra grande con notas, pantalla siempre encendida. Con el móvil
   en el soporte del salpicadero cumple la función que CarPlay/Android Auto no permiten para
   apps de gestión.
+
+---
+Task ID: 27
+Agent: Super Z (main)
+Task: Entradas por voz sin tocar la pantalla (conducir) — Modo Manos Libres con diálogo de audio.
+
+Work Log:
+- Petición: que las entradas por voz eviten usar la pantalla en el coche; propuesta del
+  usuario: preguntas de audio. Diseño: conversación guiada por voz (la app pregunta por
+  altavoz con TTS y escucha respuestas con SpeechRecognition), una sola pulsación para
+  arrancar (gesto obligatorio del navegador), cero toques después.
+- src/lib/voice-dialog.ts (lógica pura, sin DOM, testeable): parseDateAnswer (hoy/mañana/
+  pasado mañana/día N/N de mes/N-M/día de la semana/número suelto), matchSedeAnswer
+  (número de lista o nombre/ciudad con mejor puntuación), matchProAnswer (número, alias o
+  nombre; "toda la sede"), parseTurnAnswer (mañana/tarde/todo el día, ambos → ALL),
+  parseReasonAnswer (palabras clave o número 1-5), parseYesNo, wantsStop/wantsCancel/
+  wantsRepeat/wantsAnother, speechList ("1 A, 2 B o 3 C"), dateLabel, turnPhrase,
+  parseListNumber.
+- src/components/HandsFreeOverlay.tsx: máquina de estados por refs (sin stale closures):
+  date → sede (se salta si solo hay 1) → pro → turno → motivo → nota → confirmación
+  "¿Guardo?" → guardado → bucle "¿Otro aviso?". TTS es-ES con fallback por timeout si
+  onend no dispara; re-escucha tras cada pregunta; comandos de voz globales: «terminar»,
+  «cancela», «repite»; reintento si no se oye (hasta 3 fallos); manejo de mic bloqueado
+  (mensaje + CERRAR); UI: paso actual (1·DÍA … 7·CONFIRMAR), pregunta grande, lo que se
+  oye en vivo, ficha del borrador, registro de conversación, botón ■ PARAR, z-60.
+- /coche: botón "🔊 MANOS LIBRES" (borde verde) bajo el micrófono gigante + pista "Para
+  conducir: la app pregunta por voz y tú solo hablas"; overlay montado con onSaved=load
+  (la lista de hoy se refresca sola tras cada guardado).
+- Tests: scripts/test-voice-dialog.mjs (node --experimental-strip-types sobre el TS real,
+  sin duplicar lógica) — 53/53 ✓ (fechas, sedes, pros, turno, motivo, sí/no, intenciones,
+  locución; fix de expectativa "1 A o 2 B").
+- Build ✓ (8.6s). Commit b68be46 → deploy Vercel READY; bundle /coche contiene
+  "MANOS LIBRES" ✓.
+- UI real (agent-browser iPhone 14): login → /coche → botón 🔊 MANOS LIBRES ✓ → overlay
+  abre, paso "1 · DÍA", pregunta por TTS arranca, y sin micrófono (headless) muestra el
+  mensaje de micrófono bloqueado con CERRAR (comportamiento diseñado). Captura:
+  download/manos-libres-overlay.png.
+
+Stage Summary:
+- Nuevo Modo Manos Libres en /coche: se pulsa una vez antes de conducir y a partir de ahí
+  la app conduce la conversación por audio: pregunta día → sede → quién → turno → motivo →
+  nota → "¿Guardo?"; entiende números ("1", "dos"), nombres, alias, fechas relativas y
+  comandos «cancela/repite/terminar». Bucle para dictar varios avisos seguidos sin tocar
+  nada. Lógica validada con 53 tests; desplegado en producción.
