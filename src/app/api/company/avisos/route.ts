@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireCompanyUser, getSessionUser } from "@/lib/api-auth";
 import { db } from "@/lib/db";
+import { logAudit, queueAvisoEmail } from "@/lib/audit";
 
 export async function GET() {
   // Read access available to any company user (restricted accesses need it)
@@ -50,6 +51,26 @@ export async function POST(req: Request) {
       reason: body.reason || "",
       note: typeof body.note === "string" ? body.note : "",
     },
+    include: { professional: true, sede: true },
+  });
+
+  // Auditoría + email automático (fire-and-forget, nunca bloquean)
+  void logAudit({
+    companyId,
+    userId: user.id,
+    userName: user.email || "",
+    action: "AVISO_CREATE",
+    entity: "Aviso",
+    entityId: aviso.id,
+    detail: `${aviso.date} · ${aviso.turn} · ${aviso.sede?.name || ""} · ${aviso.professional?.alias || "toda la sede"}${aviso.note ? ` · nota: ${aviso.note}` : ""}`,
+  });
+  void queueAvisoEmail({
+    companyId,
+    date: aviso.date,
+    turn: aviso.turn,
+    sedeName: aviso.sede?.name || "",
+    proName: aviso.professional ? aviso.professional.alias : "",
+    note: aviso.note || "",
   });
 
   return NextResponse.json(aviso, { status: 201 });

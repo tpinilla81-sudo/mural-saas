@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { VoiceButtons } from "@/components/VoiceAvisoButton";
 
@@ -53,6 +53,9 @@ export default function UserView() {
   const [professionals, setProfessionals] = useState<any[]>([]);
   const [myPro, setMyPro] = useState<MyPro | null>(null);
   const [view, setView] = useState<"mensual" | "diario">("mensual");
+  // Swipe "visto": registro táctil por tarjeta
+  const swipeStart = useRef<{ x: number; y: number; id: string } | null>(null);
+  const [seenFlash, setSeenFlash] = useState<string[]>([]);
 
   const perms = parsePerms((session?.user as any)?.permissions);
   const professionalId = (session?.user as any)?.professionalId as string | undefined;
@@ -88,6 +91,50 @@ export default function UserView() {
   }
 
   useEffect(() => { load(); }, [year, month, professionalId]);
+
+  // ── Marcar aviso como VISTO (swipe o botón 👁) ──
+  const markSeen = async (id: string) => {
+    setAvisos((prev: any[]) => prev.map(a => (a.id === id ? { ...a, seenAt: new Date().toISOString() } : a)));
+    setSeenFlash(f => [...f, id]);
+    setTimeout(() => setSeenFlash(f => f.filter(x => x !== id)), 1400);
+    try {
+      const res = await fetch(`/api/company/avisos/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ seenAt: "now" }),
+      });
+      if (!res.ok) setAvisos((prev: any[]) => prev.map(a => (a.id === id ? { ...a, seenAt: null } : a)));
+    } catch {
+      setAvisos((prev: any[]) => prev.map(a => (a.id === id ? { ...a, seenAt: null } : a)));
+    }
+  };
+
+  const onCardTouchStart = (id: string) => (e: React.TouchEvent) => {
+    const t = e.touches[0];
+    swipeStart.current = { x: t.clientX, y: t.clientY, id };
+  };
+  const onCardTouchEnd = () => (e: React.TouchEvent) => {
+    if (!swipeStart.current) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - swipeStart.current.x;
+    const dy = t.clientY - swipeStart.current.y;
+    const id = swipeStart.current.id;
+    swipeStart.current = null;
+    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.4) markSeen(id);
+  };
+
+  // Avisos de hoy en adelante sin marcar como visto (campana)
+  const todayISO = new Date().toISOString().slice(0, 10);
+  const unseen = avisos.filter((a: any) => a.date >= todayISO && !a.seenAt);
+  const markAllSeen = async () => {
+    if (unseen.length === 0) return;
+    if (!confirm(`¿Marcar ${unseen.length} aviso(s) como vistos?`)) return;
+    const ids = unseen.map((a: any) => a.id);
+    setAvisos((prev: any[]) => prev.map(a => (ids.includes(a.id) ? { ...a, seenAt: new Date().toISOString() } : a)));
+    for (const id of ids) {
+      try { await fetch(`/api/company/avisos/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ seenAt: "now" }) }); } catch { /* noop */ }
+    }
+  };
 
   // Default view based on perms
   useEffect(() => {
@@ -222,15 +269,29 @@ export default function UserView() {
         const sede = sedes.find((s: any) => s.id === a.sedeId);
         const reason = (a.reason || "AUSENCIA").toUpperCase();
         const turnLabel = a.turn === "M" ? "M" : a.turn === "T" ? "T" : "";
+        const seen = !!a.seenAt;
+        const flashing = seenFlash.includes(a.id);
         assigns.push(
           <div key={`av-${a.id}`}
-            className="text-[9px] px-1 py-0.5 rounded font-bold leading-tight border border-red-900/40 break-words"
-            style={{ background: "repeating-linear-gradient(45deg, #fee2e2, #fee2e2 5px, #fecaca 5px, #fecaca 10px)", color: "#7f1d1d" }}
-            title={`${reason}${a.professional ? ` · ${a.professional.firstName || ""} ${a.professional.lastName || ""}`.trim() : ""}${sede ? ` · ${sede.name}` : ""}`}>
+            onTouchStart={onCardTouchStart(a.id)}
+            onTouchEnd={onCardTouchEnd()}
+            className={`text-[9px] px-1 py-0.5 rounded font-bold leading-tight border break-words transition-all duration-300 ${flashing ? "scale-105" : ""} ${seen ? "opacity-45 border-emerald-700/40" : "border-red-900/40"}`}
+            style={{ background: seen ? "#ecfdf5" : "repeating-linear-gradient(45deg, #fee2e2, #fee2e2 5px, #fecaca 5px, #fecaca 10px)", color: seen ? "#065f46" : "#7f1d1d" }}
+            title={`${reason}${a.professional ? ` · ${a.professional.firstName || ""} ${a.professional.lastName || ""}`.trim() : ""}${sede ? ` · ${sede.name}` : ""}${seen ? " · VISTO ✓ (desliza o pulsa 👁 para desmarcar" : " · desliza la tarjeta → para marcar como visto"}`}
+            onClick={() => {
+              // En escritorio: clic alterno marca/desmarca como visto
+              if (!("ontouchstart" in window)) {
+                if (seen) {
+                  setAvisos((prev: any[]) => prev.map(x => (x.id === a.id ? { ...x, seenAt: null } : x)));
+                  fetch(`/api/company/avisos/${a.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ seenAt: "clear" }) }).catch(() => {});
+                } else markSeen(a.id);
+              }
+            }}>
             {turnLabel && <span className="inline-block font-black px-0.5 mr-0.5 bg-red-900 text-white rounded-[2px]">{turnLabel}</span>}
-            <span className="font-black">🏖 {reason}</span>
+            <span className="font-black">{seen ? "✓" : "🏖"} {reason}</span>
             {a.professional ? ` - ${a.professional.alias || a.professional.firstName}` : ""}
             {sede ? ` (${sede.name})` : ""}
+            {!seen && <span className="ml-1 opacity-70" title="Desliza para marcar como visto">👁</span>}
           </div>
         );
       });
@@ -301,6 +362,15 @@ export default function UserView() {
             </button>
           </div>
         )}
+
+        {/* Campana de novedades: avisos de hoy en adelante sin marcar */}
+        <button onClick={markAllSeen} disabled={unseen.length === 0}
+          className={`px-3 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 border ${
+            unseen.length > 0 ? "bg-amber-500/20 border-amber-500/60 text-amber-300 animate-pulse" : "bg-slate-800 text-slate-500 border-slate-700"
+          }`}
+          title={unseen.length > 0 ? "Toca para marcarlos todos como vistos" : "Sin avisos nuevos"}>
+          🔔<span className="hidden sm:inline">{unseen.length > 0 ? `${unseen.length} nuevo(s)` : "Al día"}</span>
+        </button>
 
         {/* Action buttons: Voice aviso (if permitted) / Print / Send (gated by perms) */}
         <div className="flex gap-2 ml-auto sm:ml-0">

@@ -46,6 +46,8 @@ export async function PUT(req: Request) {
       province: body.province,
       postalCode: body.postalCode,
       logoUrl: body.logoUrl,
+      brandColor: typeof body.brandColor === "string" ? body.brandColor : undefined,
+      notifyEmail: typeof body.notifyEmail === "string" ? body.notifyEmail : undefined,
     },
     include: {
       subscription: {

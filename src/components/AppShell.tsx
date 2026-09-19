@@ -11,10 +11,43 @@ export default function AppShell() {
   const { data: session, status } = useSession();
   const [loading, setLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
+  // Tema claro/oscuro (persistido) + branding corporativo
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [brand, setBrand] = useState<{ name?: string; logoUrl?: string; brandColor?: string }>({});
 
   useEffect(() => {
     if (status !== "loading") setLoading(false);
   }, [status]);
+
+  // Tema guardado + branding de la empresa (cuando hay sesión)
+  useEffect(() => {
+    const saved = (localStorage.getItem("mural-theme") as "dark" | "light") || "dark";
+    setTheme(saved);
+    document.documentElement.setAttribute("data-theme", saved);
+  }, []);
+
+  useEffect(() => {
+    if (!session) return;
+    fetch("/api/company/branding").then(r => (r.ok ? r.json() : {})).then(setBrand).catch(() => {});
+  }, [session]);
+
+  const toggleTheme = () => {
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    localStorage.setItem("mural-theme", next);
+    document.documentElement.setAttribute("data-theme", next);
+  };
+
+  // Color corporativo → variables CSS que sobrescriben los verdes del panel
+  useEffect(() => {
+    const c = (brand.brandColor || "").trim();
+    if (c && /^#[0-9a-fA-F]{6}$/.test(c)) {
+      document.documentElement.style.setProperty("--brand", c);
+      document.documentElement.setAttribute("data-brand", "1");
+    } else {
+      document.documentElement.removeAttribute("data-brand");
+    }
+  }, [brand]);
 
   if (loading) {
     return (
@@ -38,16 +71,27 @@ export default function AppShell() {
       {/* Navbar */}
       <nav className="bg-black px-3 sm:px-6 py-3 flex items-center gap-3 border-b-2 border-[#6BBE7A] shrink-0">
         <div className="flex items-center gap-2 sm:gap-3">
-          {/* Logo MURAL (placa blanca como la app original) */}
-          <img src="/mural-logo.png" alt="MURAL" className="h-9 sm:h-10 w-auto bg-white rounded-lg px-1.5 shadow-md" />
+          {/* Logo corporativo (si hay) o placa MURAL */}
+          {brand.logoUrl ? (
+            <img src={brand.logoUrl} alt={brand.name || "Logo"} className="h-9 sm:h-10 w-auto object-contain rounded-lg"
+              onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+          ) : (
+            <img src="/mural-logo.png" alt="MURAL" className="h-9 sm:h-10 w-auto bg-white rounded-lg px-1.5 shadow-md" />
+          )}
           <div className="leading-none hidden sm:block select-none">
             <span className="text-amber-500 font-black text-base tracking-wide">MURAL</span>
-            <small className="block text-white text-[9px] font-bold tracking-[2px] mt-0.5">PLASTIC SURGERY</small>
+            <small className="block text-white text-[9px] font-bold tracking-[2px] mt-0.5">{brand.name || "PLASTIC SURGERY"}</small>
           </div>
         </div>
 
         {/* Desktop: show user + logout */}
-        <div className="ml-auto hidden sm:flex items-center gap-4">
+        <div className="ml-auto hidden sm:flex items-center gap-3">
+          {/* Tema claro/oscuro */}
+          <button onClick={toggleTheme}
+            className="bg-slate-700 hover:bg-slate-600 text-white h-9 w-9 rounded-lg text-base transition"
+            title={theme === "dark" ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}>
+            {theme === "dark" ? "☀️" : "🌙"}
+          </button>
           <div className="text-right">
             <div className="text-sm font-bold">{session.user?.name}</div>
             <div className="text-xs text-slate-400">
@@ -70,7 +114,10 @@ export default function AppShell() {
         </div>
 
         {/* Mobile: hamburger */}
-        <div className="ml-auto sm:hidden">
+        <div className="ml-auto sm:hidden flex items-center gap-1">
+          <button onClick={toggleTheme} className="text-white p-2 text-lg" title="Tema claro/oscuro">
+            {theme === "dark" ? "☀️" : "🌙"}
+          </button>
           <button onClick={() => setMenuOpen(!menuOpen)} className="text-white p-2">
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               {menuOpen ? (

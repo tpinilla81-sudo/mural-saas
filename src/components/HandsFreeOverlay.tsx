@@ -23,14 +23,12 @@ import {
 } from "@/lib/voice-dialog";
 
 // ═══════════════════════════════════════════════════════════════
-// MANOS LIBRES — estilo CarPlay: cada paso muestra una LISTA
-// NUMERADA EN PANTALLA y la app solo dice "elige número".
-// El conductor responde con el número ("dos", "el 3") — rápido,
-// fiable y sin escuchar listas largas por altavoz.
-// Flujo: día → sede → profesional → turno → ¿nota? (sí/no) →
-// confirmación. Tras guardar: "¿Igual, nuevo o terminar?"
-// Sin MOTIVO: la tarjeta ya se identifica con profesional + sede
-// + día; si el conductor quiere detalle, dicta una nota libre.
+// MANOS LIBRES — estilo CarPlay: listas numeradas EN PANTALLA para
+// sede/profesional/turno (responde el número) y DÍA LIBRE por voz
+// ("mañana", "el viernes", "día 15", "23"…). Flujo: día → sede →
+// profesional → turno → ¿nota? (sí/no) → confirmación. Tras guardar:
+// "¿Igual, nuevo o terminar?" Sin MOTIVO: la tarjeta ya se identifica
+// con profesional + sede + día.
 // ═══════════════════════════════════════════════════════════════
 
 // Web Speech API — typings mínimos
@@ -108,6 +106,7 @@ export default function HandsFreeOverlay({
   const skipSedeProTurnRef = useRef(false);
   const askRef = useRef<(payload: AskPayload) => void>(() => {});
   const handlerRef = useRef<(raw: string) => void>(() => {});
+  const tapRef = useRef<(n: number) => void>(() => {});
   const closeRef = useRef<(msg?: string) => void>(() => {});
 
   const addLog = (line: string) =>
@@ -225,7 +224,9 @@ export default function HandsFreeOverlay({
   const gotoRef = useRef<(step: Step, payload: AskPayload) => void>(ask);
   gotoRef.current = ask;
 
-  // ── Listas numeradas en pantalla ──
+  // ── Listas numeradas en pantalla (apoyo táctil) ──
+  // El DÍA es libre por voz; la lista de días queda solo como apoyo
+  // visual/táctil (los taps llaman a handleTap, no a la voz).
   const dateOptions = (): ListItem[] => {
     const days = upcomingDays(DATE_LIST_SIZE);
     return days.map((ds, i) => {
@@ -333,6 +334,47 @@ export default function HandsFreeOverlay({
   };
 
   // ── Reparto de respuestas por paso ──
+  // ── Taps de las listas: atajo directo tipo "elige número" ──
+  // Los botones de lista llaman aquí: se comportan como si el conductor
+  // dijera el número (sedes/pros/turno/nota/otro) PERO en el paso de
+  // fecha seleccionan la opción de la lista tal cual.
+  const handleTap = (n: number) => {
+    if (stepRef.current === "date") {
+      const ds = upcomingDays(DATE_LIST_SIZE)[n - 1];
+      if (ds) { addLog(`🧑 [toca] ${shortDateLabel(ds)}`); selectDate(ds); }
+      return;
+    }
+    handlerRef.current(String(n));
+  };
+  tapRef.current = handleTap;
+
+  // Aplica la fecha elegida y continúa el flujo (usado por voz libre y taps)
+  const selectDate = (date: string) => {
+    setDraftField({ date });
+    const keep = skipSedeProTurnRef.current && draftRef.current.sedeId;
+    skipSedeProTurnRef.current = false;
+    if (keep) {
+      gotoRef.current("note", {
+        title: "¿Quieres poner nota?",
+        say: "¿Quieres poner nota? Di sí o no.",
+        items: noteOptions(),
+        echo: `El ${dateLabel(date)} · igual que antes`,
+      });
+      return;
+    }
+    if (draftRef.current.sedeId || sedes.length === 1) {
+      if (sedes.length === 1 && !draftRef.current.sedeId) setDraftField({ sedeId: sedes[0].id });
+      gotoPro(`El ${dateLabel(date)}`);
+      return;
+    }
+    gotoRef.current("sede", {
+      title: "¿Qué sede?",
+      say: "Sede. Elige número.",
+      items: sedeOptions(),
+      echo: `El ${dateLabel(date)}`,
+    });
+  };
+
   const handleAnswer = (raw: string) => {
     addLog(`🧑 ${raw}`);
     if (wantsStop(raw)) { void close("Modo manos libres terminado. ¡Hasta luego!"); return; }
@@ -351,47 +393,27 @@ export default function HandsFreeOverlay({
 
     switch (stepRef.current) {
       case "date": {
-        // Si dice "día 15" o "15 de octubre" va directo al parser de fechas;
-        // si dice un número suelto, es la opción de la lista en pantalla.
-        const t = norm(raw);
-        const wantsExplicitDate = /\b(dia|de)\b/.test(t);
-        let date: string | null = null;
-        if (!wantsExplicitDate) {
+        // DÍA LIBRE: primero se intenta la fecha hablada — "hoy", "mañana",
+        // "pasado mañana", "el viernes", "día 15", "15 de octubre", "15/10",
+        // o un número suelto = día del mes ("23" → día 23). Los TAPS de la
+        // lista llegan por handleTap y no pasan por aquí.
+        let date = parseDateAnswer(raw, contextYear, contextMonth);
+        if (!date) {
           const n = parseListNumber(raw, DATE_LIST_SIZE);
-          if (n) date = upcomingDays(DATE_LIST_SIZE)[n - 1];
+          if (n && /\b(dia|opcion|opción|numero|número|el)\b/.test(norm(raw))) {
+            // "día 2 de la lista" / "opción 3": still list-ish → apoya
+            date = upcomingDays(DATE_LIST_SIZE)[n - 1];
+          }
         }
-        if (!date) date = parseDateAnswer(raw, contextYear, contextMonth);
         if (!date) {
           gotoRef.current("date", {
             title: "¿Qué día?",
-            say: "No lo he pillado. Día: elige número de la lista, o di el día.",
+            say: "No lo he pillado. Di el día: mañana, viernes, día 15.",
             items: dateOptions(),
           });
           return;
         }
-        setDraftField({ date });
-        const keep = skipSedeProTurnRef.current && draftRef.current.sedeId;
-        skipSedeProTurnRef.current = false;
-        if (keep) {
-          gotoRef.current("note", {
-            title: "¿Quieres poner nota?",
-            say: "¿Quieres poner nota? Di sí o no.",
-            items: noteOptions(),
-            echo: `El ${dateLabel(date)} · igual que antes`,
-          });
-          return;
-        }
-        if (draftRef.current.sedeId || sedes.length === 1) {
-          if (sedes.length === 1 && !draftRef.current.sedeId) setDraftField({ sedeId: sedes[0].id });
-          gotoPro(`El ${dateLabel(date)}`);
-          return;
-        }
-        gotoRef.current("sede", {
-          title: "¿Qué sede?",
-          say: "Sede. Elige número.",
-          items: sedeOptions(),
-          echo: `El ${dateLabel(date)}`,
-        });
+        selectDate(date);
         return;
       }
       case "sede": {
@@ -522,7 +544,7 @@ export default function HandsFreeOverlay({
               : "toda la sede";
             gotoRef.current("date", {
               title: "¿Qué día?",
-              say: "Igual que antes. Día: elige número.",
+              say: "Igual que antes. ¿Qué día?",
               items: dateOptions(),
               echo: `${sName} · ${pLabel} · ${turnPhrase(last.turn)}`,
             });
@@ -531,14 +553,14 @@ export default function HandsFreeOverlay({
           // sin aviso previo → flujo normal
           draftRef.current = emptyDraft();
           setDraft(draftRef.current);
-          gotoRef.current("date", { title: "¿Qué día?", say: "Día: elige número.", items: dateOptions() });
+          gotoRef.current("date", { title: "¿Qué día?", say: "¿Qué día?", items: dateOptions() });
           return;
         }
         if (n === 2 || wantsAnother(raw) || parseYesNo(raw) === true) {
           draftRef.current = emptyDraft();
           setDraft(draftRef.current);
           skipSedeProTurnRef.current = false;
-          gotoRef.current("date", { title: "¿Qué día?", say: "Día: elige número.", items: dateOptions() });
+          gotoRef.current("date", { title: "¿Qué día?", say: "¿Qué día?", items: dateOptions() });
           return;
         }
         gotoRef.current("again", {
@@ -592,7 +614,7 @@ export default function HandsFreeOverlay({
     const t = setTimeout(() => {
       gotoRef.current("date", {
         title: "¿Qué día?",
-        say: "Manos libres activado. Día: elige número de la lista.",
+        say: "Manos libres activado. ¿Qué día?",
         items: dateOptions(),
       });
     }, 400);
@@ -691,7 +713,7 @@ export default function HandsFreeOverlay({
                 {items.map(it => (
                   <button
                     key={it.n}
-                    onClick={() => handlerRef.current(String(it.n))}
+                    onClick={() => tapRef.current(it.n)}
                     className="flex items-center gap-3 bg-slate-800/80 hover:bg-slate-700 border border-slate-600 hover:border-[#6BBE7A] rounded-xl px-3 py-2.5 text-left active:scale-[0.98] transition"
                   >
                     <span className="shrink-0 h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-amber-500 text-black font-black text-lg sm:text-xl flex items-center justify-center shadow-[0_0_10px_rgba(245,158,11,0.4)]">
@@ -753,7 +775,7 @@ export default function HandsFreeOverlay({
           </div>
 
           <p className="text-center text-[10px] sm:text-xs text-slate-500 font-bold shrink-0 pb-1">
-            Di el <span className="text-amber-400">número</span> de la lista · «repite» reescucha · «cancela» reinicia · «terminar» sale
+            Día <span className="text-amber-400">libre por voz</span> («mañana», «viernes», «día 15») · resto: di el número · «repite» reescucha · «terminar» sale
           </p>
         </div>
       )}

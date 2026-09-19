@@ -7,13 +7,14 @@ import SedesTab from "@/components/SedesTab";
 import CalendariosTab from "@/components/CalendariosTab";
 import DiarioTab from "@/components/DiarioTab";
 import MensualTab from "@/components/MensualTab";
+import StatsTab from "@/components/StatsTab";
 import CompanyProfileTab from "@/components/CompanyProfileTab";
 import ConfigTab from "@/components/ConfigTab";
 import { VoiceAvisoModal } from "@/components/VoiceAvisoButton";
 import HandsFreeOverlay from "@/components/HandsFreeOverlay";
 
 type MainTab = "empresa" | "diario" | "config";
-type DiarioSubTab = "sedes" | "pros" | "cal" | "diario" | "mensual";
+type DiarioSubTab = "sedes" | "pros" | "cal" | "diario" | "mensual" | "datos";
 
 interface SedeLike { id: string; name: string; city?: string; task?: string }
 interface ProLike { id: string; alias: string; firstName: string; lastName: string }
@@ -55,6 +56,7 @@ export default function CompanyDashboard() {
     { key: "cal", label: "Calendarios" },
     { key: "diario", label: "Diario" },
     { key: "mensual", label: "Mensual" },
+    { key: "datos", label: "📊 Datos" },
   ];
 
   const now = new Date();
@@ -131,6 +133,7 @@ export default function CompanyDashboard() {
               {diarioSub === "cal" && <CalendariosTab />}
               {diarioSub === "diario" && <DiarioTab />}
               {diarioSub === "mensual" && <MensualTab />}
+              {diarioSub === "datos" && <StatsTab />}
             </div>
           </div>
         )}

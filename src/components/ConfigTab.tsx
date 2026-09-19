@@ -622,6 +622,114 @@ export default function ConfigTab() {
           {rows.filter(r => (drafts[r.professional.id]?.canLogin)).length} de {rows.length} profesionales con acceso activo. Cada acceso entra con su propia contraseña desde el login principal.
         </div>
       )}
+
+      <OpsPanel />
+    </div>
+  );
+}
+
+/** Sección de OPERACIONES: envíos de avisos por email + auditoría de cambios. */
+function OpsPanel() {
+  const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState<"envios" | "auditoria">("envios");
+  const [outbox, setOutbox] = useState<any[]>([]);
+  const [audit, setAudit] = useState<any[]>([]);
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const load = async () => {
+    setBusy(true);
+    try {
+      const [oRes, aRes] = await Promise.all([
+        fetch("/api/company/outbox"),
+        fetch("/api/company/audit"),
+      ]);
+      if (oRes.ok) setOutbox(await oRes.json());
+      if (aRes.ok) setAudit(await aRes.json());
+    } catch { /* noop */ } finally { setBusy(false); }
+  };
+
+  useEffect(() => { if (open) load(); }, [open]);
+
+  const retrySend = async () => {
+    setBusy(true); setMsg("");
+    try {
+      const res = await fetch("/api/company/outbox", { method: "POST" });
+      const j = await res.json().catch(() => ({}));
+      setMsg(res.ok ? `Enviados ${j.sent}/${j.attempted}` : (j.error || "Error"));
+      await load();
+    } catch { setMsg("Error de conexión"); } finally { setBusy(false); }
+  };
+
+  const statusBadge = (s: string) =>
+    s === "sent" ? "bg-emerald-600/20 text-emerald-400 border-emerald-600/40"
+    : s === "failed" ? "bg-red-600/20 text-red-400 border-red-600/40"
+    : "bg-amber-500/20 text-amber-400 border-amber-500/40";
+
+  return (
+    <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-3 sm:p-4">
+      <button onClick={() => setOpen(v => !v)} className="w-full flex items-center gap-3 text-left">
+        <span className="text-2xl">📮</span>
+        <span className="flex-1 min-w-0">
+          <span className="block font-bold text-white text-sm">Envíos de avisos y auditoría</span>
+          <span className="block text-xs text-slate-400">Emails automáticos al crear avisos y registro de quién cambió qué.</span>
+        </span>
+        <span className="text-slate-400">{open ? "▲" : "▼"}</span>
+      </button>
+
+      {open && (
+        <div className="mt-3 space-y-3">
+          <div className="flex gap-2 items-center flex-wrap">
+            <button onClick={() => setTab("envios")} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${tab === "envios" ? "bg-[#6BBE7A] text-black" : "bg-slate-800 text-slate-400 hover:bg-slate-700"}`}>📧 Envíos</button>
+            <button onClick={() => setTab("auditoria")} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${tab === "auditoria" ? "bg-[#6BBE7A] text-black" : "bg-slate-800 text-slate-400 hover:bg-slate-700"}`}>🧾 Auditoría</button>
+            <button onClick={load} disabled={busy} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-700 hover:bg-slate-600 text-white transition">⟳</button>
+            {tab === "envios" && (
+              <button onClick={retrySend} disabled={busy} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-[#2E5D3A] hover:bg-[#3a7a4c] text-white transition" title="Reintentar envíos pendientes (requiere RESEND_API_KEY en el servidor)">
+                ↗ Reintentar envío
+              </button>
+            )}
+            {msg && <span className="text-xs text-amber-400 font-bold">{msg}</span>}
+          </div>
+
+          {tab === "envios" && (
+            <div className="space-y-1 max-h-[360px] overflow-y-auto">
+              {outbox.length === 0 && (
+                <p className="text-xs text-slate-500 py-4 text-center">
+                  Sin envíos todavía. Configura el email en MI EMPRESA → Logo y Branding → «Email para avisos automáticos».
+                </p>
+              )}
+              {outbox.map(o => (
+                <div key={o.id} className="flex items-start gap-2 bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2">
+                  <span className={`shrink-0 text-[9px] font-black uppercase px-1.5 py-0.5 rounded border ${statusBadge(o.status)}`}>{o.status}</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-xs font-bold text-white truncate">{o.subject}</div>
+                    <div className="text-[10px] text-slate-400 truncate">→ {o.target} · {new Date(o.createdAt).toLocaleString("es-ES")}{o.error ? ` · ⚠ ${o.error}` : ""}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {tab === "auditoria" && (
+            <div className="space-y-1 max-h-[360px] overflow-y-auto">
+              {audit.length === 0 && (
+                <p className="text-xs text-slate-500 py-4 text-center">Sin eventos registrados todavía.</p>
+              )}
+              {audit.map(e => (
+                <div key={e.id} className="flex items-center gap-2 bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-1.5">
+                  <span className={`shrink-0 text-[9px] font-black uppercase px-1.5 py-0.5 rounded ${
+                    e.action === "AVISO_CREATE" ? "bg-emerald-600/20 text-emerald-400"
+                    : e.action === "AVISO_DELETE" ? "bg-red-600/20 text-red-400"
+                    : "bg-slate-600/30 text-slate-300"
+                  }`}>{e.action}</span>
+                  <span className="text-xs text-slate-200 font-bold truncate flex-1">{e.detail}</span>
+                  <span className="text-[10px] text-slate-500 shrink-0">{e.userName || "—"} · {new Date(e.createdAt).toLocaleString("es-ES")}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

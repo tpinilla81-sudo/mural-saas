@@ -70,6 +70,7 @@ export default function CompanyProfileTab() {
   const [form, setForm] = useState({
     name: "", address: "", city: "", province: "", postalCode: "",
     nif: "", phone: "", email: "", website: "", logoUrl: "",
+    brandColor: "", notifyEmail: "",
   });
 
   const [userForm, setUserForm] = useState({ name: "", email: "", role: "USER" });
@@ -100,6 +101,7 @@ export default function CompanyProfileTab() {
             province: data.province || "", postalCode: data.postalCode || "",
             nif: data.nif || "", phone: data.phone || "", email: data.email || "",
             website: data.website || "", logoUrl: data.logoUrl || "",
+            brandColor: data.brandColor || "", notifyEmail: data.notifyEmail || "",
           });
         }
         if (uRes.ok) setUsers(await uRes.json());
@@ -428,6 +430,25 @@ export default function CompanyProfileTab() {
                     <span className="text-slate-600 text-xs text-center">Sin logo</span>
                   </div>
                 )}
+              </div>
+              <div>
+                <label className="block text-xs font-extrabold text-blue-400 uppercase mb-1">Color corporativo</label>
+                <div className="flex items-center gap-2">
+                  <input type="color" value={form.brandColor || "#2E5D3A"} onChange={e => setForm({ ...form, brandColor: e.target.value })}
+                    className="h-10 w-14 rounded cursor-pointer bg-slate-900 border border-slate-600" />
+                  <input value={form.brandColor} onChange={e => setForm({ ...form, brandColor: e.target.value })}
+                    className="flex-1 px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm" placeholder="#2E5D3A" />
+                  {form.brandColor && (
+                    <button onClick={() => setForm({ ...form, brandColor: "" })} className="text-[10px] text-slate-400 underline" title="Quitar color personalizado">quitar</button>
+                  )}
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1">Se aplica a la barra superior y a los botones principales del panel.</p>
+              </div>
+              <div>
+                <label className="block text-xs font-extrabold text-blue-400 uppercase mb-1">Email para avisos automáticos</label>
+                <input value={form.notifyEmail} onChange={e => setForm({ ...form, notifyEmail: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm" placeholder="avisos@empresa.com" />
+                <p className="text-[10px] text-slate-500 mt-1">Cada aviso nuevo se enviará a este email (ver envíos en Configuración). Vacío = no enviar.</p>
               </div>
             </div>
           </div>

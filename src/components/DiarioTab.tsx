@@ -5,6 +5,17 @@ import { useState, useEffect, useRef, useCallback } from "react";
 const AVISO_REASONS = ["BAJA", "FORMACION", "PERMISO", "VACACIONES"] as const;
 type AvisoReason = (typeof AVISO_REASONS)[number];
 
+// Memoria del último aviso guardado en esta sesión (para el botón DUPLICAR).
+// Sobrevive a cambios de pestaña; se reinicia al recargar.
+let lastAvisoMem: {
+  professionalId: string | null;
+  proAlias: string;
+  sedeId: string;
+  turn: "M" | "T";
+  reason: string;
+  note: string;
+} | null = null;
+
 interface Sede {
   id: string;
   name: string;
@@ -77,6 +88,13 @@ export default function DiarioTab() {
   // Aviso creation modal
   const [avisoModal, setAvisoModal] = useState<{ sedeId: string; date: string; turn: string } | null>(null);
   const [avisoReason, setAvisoReason] = useState<AvisoReason>("VACACIONES");
+  // Multi-día: se pueden añadir más fechas al mismo aviso (chips)
+  const [avisoDates, setAvisoDates] = useState<string[]>([]);
+  const [avisoExtraDate, setAvisoExtraDate] = useState("");
+  const [avisoNote, setAvisoNote] = useState("");
+  // Profesional del modal (puede venir del botón DUPLICAR, no del selector global)
+  const [modalPro, setModalPro] = useState<string>("");
+  const [savingAviso, setSavingAviso] = useState(false);
 
   // Slot action dialog (touch-friendly: shows cell details before acting)
   const [slotDialog, setSlotDialog] = useState<{
@@ -338,26 +356,97 @@ export default function DiarioTab() {
     }
     setAvisoModal({ sedeId, date, turn });
     setAvisoReason("VACACIONES");
+    setAvisoDates([date]);
+    setAvisoExtraDate("");
+    setAvisoNote("");
+    setModalPro("");
   };
 
-  // Confirm aviso creation
+  // ── Botón DUPLICAR: reabre el modal con el último aviso guardado ──
+  const duplicarUltimo = () => {
+    if (!lastAvisoMem) return;
+    const today = fmt(new Date());
+    setAvisoModal({
+      sedeId: lastAvisoMem.sedeId,
+      date: today,
+      turn: lastAvisoMem.turn === "M" ? "MANANA" : "TARDE",
+    });
+    setAvisoReason((lastAvisoMem.reason as AvisoReason) || "VACACIONES");
+    setAvisoDates([today]);
+    setAvisoExtraDate("");
+    setAvisoNote(lastAvisoMem.note || "");
+    setModalPro(lastAvisoMem.proAlias || "");
+  };
+
+  const addExtraDate = (d: string) => {
+    if (!d || avisoDates.includes(d)) return;
+    setAvisoDates(ds => [...ds, d].sort());
+    setAvisoExtraDate("");
+  };
+
+  // Confirm aviso creation — GUARDADO OPTIMISTA + multi-día
   const confirmAviso = async () => {
-    if (!avisoModal) return;
+    if (!avisoModal || savingAviso || avisoDates.length === 0) return;
+    setSavingAviso(true);
     const t = avisoModal.turn === "MANANA" ? "M" : "T";
-    const pro = selectedPro ? professionals.find(p => p.alias === selectedPro) : null;
-    await fetch("/api/company/avisos", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        date: avisoModal.date,
+    const alias = modalPro || selectedPro;
+    const pro = alias ? professionals.find(p => p.alias === alias) : null;
+
+    // 1) Tarjetas temporales AL INSTANTE (sin esperar al servidor)
+    const tempIds = avisoDates.map(d => `tmp-${d}-${t}`);
+    setAvisos(prev => [
+      ...prev,
+      ...avisoDates.map(d => ({
+        id: `tmp-${d}-${t}`,
+        date: d,
         professionalId: pro?.id || null,
         sedeId: avisoModal.sedeId,
         turn: t,
         reason: avisoReason,
-      }),
-    });
+        note: avisoNote,
+        professional: pro || null,
+      } as AvisoEntry)),
+    ]);
     setAvisoModal(null);
-    load();
+    setSavingAviso(false);
+
+    // 2) Persistencia en segundo plano: sustituimos tmp → real
+    let failed = 0;
+    for (const d of avisoDates) {
+      try {
+        const res = await fetch("/api/company/avisos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            date: d,
+            professionalId: pro?.id || null,
+            sedeId: avisoModal.sedeId,
+            turn: t,
+            reason: avisoReason,
+            note: avisoNote,
+          }),
+        });
+        if (!res.ok) { failed++; continue; }
+        const created = await res.json();
+        lastAvisoMem = {
+          professionalId: pro?.id || null,
+          proAlias: pro?.alias || "",
+          sedeId: avisoModal.sedeId,
+          turn: t as "M" | "T",
+          reason: avisoReason,
+          note: avisoNote,
+        };
+        setAvisos(prev => prev.map(a => (a.id === `tmp-${d}-${t}` ? created : a)));
+      } catch {
+        failed++;
+      }
+    }
+    if (failed > 0) {
+      // revertimos los temporales y recargamos estado real del servidor
+      setAvisos(prev => prev.filter(a => !tempIds.includes(a.id)));
+      alert(`No se pudieron guardar ${failed} aviso(s). Se han revertido.`);
+      load();
+    }
   };
 
   // Avisos now use a single uniform color regardless of reason
@@ -485,6 +574,13 @@ export default function DiarioTab() {
             HOY
           </button>
 
+          {/* Duplicar último aviso */}
+          <button onClick={duplicarUltimo} disabled={!lastAvisoMem}
+            className="bg-slate-700 hover:bg-slate-600 disabled:opacity-30 disabled:cursor-not-allowed text-white font-bold px-3 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm transition shrink-0"
+            title={lastAvisoMem ? `Duplicar: ${lastAvisoMem.proAlias || "sede"} · ${lastAvisoMem.reason} · ${lastAvisoMem.turn === "M" ? "Mañana" : "Tarde"}` : "Guarda un aviso para habilitar el duplicado"}>
+            ⧉ <span className="hidden sm:inline">Duplicar</span>
+          </button>
+
           {/* View mode toggle */}
           <button onClick={() => setViewMode(v => v === "full" ? "compact" : "full")}
             className="bg-slate-700 hover:bg-slate-600 text-white font-bold px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg text-[10px] sm:text-xs transition shrink-0">
@@ -601,7 +697,7 @@ export default function DiarioTab() {
                           {sede.morningEnabled && (
                             <div
                               onClick={(e) => { if (suppressIfDragged(e)) return; avisoM ? openAvisoModal(sede.id, f, "MANANA") : handleSlotClick(sede.id, f, "MANANA"); }}
-                              className={`${viewMode === "compact" ? "h-4 sm:h-5" : "h-5 sm:h-6"} w-[85%] rounded flex items-center justify-center ${textSize} font-bold cursor-pointer transition ${
+                              className={`${viewMode === "compact" ? "h-4 sm:h-5" : "h-5 sm:h-6"} w-[85%] rounded flex items-center justify-center ${textSize} font-bold cursor-pointer transition animate-[fadeIn_.25s_ease-out] ${
                                 avisoM ? getAvisoColor(avisoM.reason) :
                                 planM ? "text-black border border-white" : "text-white/20 border border-white/5"
                               } ${!visMatchM ? "opacity-30" : ""}`}
@@ -617,7 +713,7 @@ export default function DiarioTab() {
                           {sede.afternoonEnabled && (
                             <div
                               onClick={(e) => { if (suppressIfDragged(e)) return; avisoT ? openAvisoModal(sede.id, f, "TARDE") : handleSlotClick(sede.id, f, "TARDE"); }}
-                              className={`${viewMode === "compact" ? "h-4 sm:h-5" : "h-5 sm:h-6"} w-[85%] rounded flex items-center justify-center ${textSize} font-bold cursor-pointer transition ${
+                              className={`${viewMode === "compact" ? "h-4 sm:h-5" : "h-5 sm:h-6"} w-[85%] rounded flex items-center justify-center ${textSize} font-bold cursor-pointer transition animate-[fadeIn_.25s_ease-out] ${
                                 avisoT ? getAvisoColor(avisoT.reason) :
                                 planT ? "text-black border border-white" : "text-white/20 border border-white/5"
                               } ${!visMatchT ? "opacity-30" : ""}`}
@@ -671,21 +767,48 @@ export default function DiarioTab() {
 
       {/* ═══ Aviso Modal ═══ */}
       {avisoModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setAvisoModal(null)}>
-          <div className="bg-slate-800 border border-slate-600 rounded-xl p-4 sm:p-6 w-[90vw] max-w-sm space-y-4" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-3" onClick={() => setAvisoModal(null)}>
+          <div className="bg-slate-800 border border-slate-600 rounded-xl p-4 sm:p-6 w-full max-w-sm space-y-4 shadow-2xl animate-[popIn_.18s_ease-out]" onClick={e => e.stopPropagation()}>
             <h3 className="text-white font-bold text-lg">Crear Aviso</h3>
             <div className="space-y-3">
               <div>
                 <label className="block text-xs text-slate-400 font-bold mb-1">PROFESIONAL</label>
-                <div className="text-white font-bold">{selectedPro || <span className="text-slate-400 italic">Sin profesional (cierre de sede)</span>}</div>
-              </div>
-              <div>
-                <label className="block text-xs text-slate-400 font-bold mb-1">FECHA</label>
-                <div className="text-white font-bold">{avisoModal.date}</div>
+                <div className="text-white font-bold">{modalPro || selectedPro || <span className="text-slate-400 italic">Sin profesional (cierre de sede)</span>}
+                  {modalPro && <button onClick={() => setModalPro("")} className="ml-2 text-[10px] text-amber-400 underline" title="Volver al selector global">usar selector global</button>}
+                </div>
               </div>
               <div>
                 <label className="block text-xs text-slate-400 font-bold mb-1">TURNO</label>
                 <div className="text-white font-bold">{avisoModal.turn === "MANANA" ? "Mañana" : "Tarde"}</div>
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 font-bold mb-1">FECHAS ({avisoDates.length}) — toca la ✕ para quitar</label>
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {avisoDates.map(d => (
+                    <span key={d} className="inline-flex items-center gap-1 bg-slate-700 border border-slate-500 rounded-lg pl-2 pr-1 py-1 text-white text-xs font-bold">
+                      {d}
+                      {avisoDates.length > 1 && (
+                        <button onClick={() => setAvisoDates(ds => ds.filter(x => x !== d))} className="text-red-300 hover:text-red-400 w-4 h-4 rounded-full bg-slate-600 text-[10px] leading-none">✕</button>
+                      )}
+                    </span>
+                  ))}
+                </div>
+                <div className="flex gap-1.5 items-center flex-wrap">
+                  <input type="date" value={avisoExtraDate} onChange={e => setAvisoExtraDate(e.target.value)}
+                    className="bg-slate-900 border border-slate-600 rounded px-2 py-1.5 text-white text-xs" />
+                  <button onClick={() => addExtraDate(avisoExtraDate)} disabled={!avisoExtraDate}
+                    className="bg-[#2E5D3A] hover:bg-[#3a7a4c] disabled:opacity-40 text-white text-xs font-bold px-2.5 py-1.5 rounded-lg transition">+ Añadir</button>
+                  <button onClick={() => {
+                    const lastD = avisoDates[avisoDates.length - 1];
+                    if (!lastD) return;
+                    const nd = new Date(lastD + "T00:00:00"); nd.setDate(nd.getDate() + 1); addExtraDate(fmt(nd));
+                  }} className="bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold px-2.5 py-1.5 rounded-lg transition" title="Añadir el día siguiente">+1 día</button>
+                  <button onClick={() => {
+                    const lastD = avisoDates[avisoDates.length - 1];
+                    if (!lastD) return;
+                    const nd = new Date(lastD + "T00:00:00"); nd.setDate(nd.getDate() + 7); addExtraDate(fmt(nd));
+                  }} className="bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold px-2.5 py-1.5 rounded-lg transition" title="Añadir el mismo día de la semana próxima">+7 días</button>
+                </div>
               </div>
               <div>
                 <label className="block text-xs text-slate-400 font-bold mb-1">MOTIVO</label>
@@ -703,13 +826,18 @@ export default function DiarioTab() {
                   ))}
                 </div>
               </div>
+              <div>
+                <label className="block text-xs text-slate-400 font-bold mb-1">NOTA (opcional)</label>
+                <input value={avisoNote} onChange={e => setAvisoNote(e.target.value)} placeholder="p. ej. vuelve el lunes"
+                  className="w-full bg-slate-900 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm" />
+              </div>
             </div>
             <div className="flex gap-3 pt-2">
               <button onClick={() => setAvisoModal(null)} className="flex-1 py-2 px-4 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-bold text-sm transition">
                 Cancelar
               </button>
               <button onClick={confirmAviso} className="flex-1 py-2 px-4 bg-red-600 hover:bg-red-500 text-white rounded-lg font-bold text-sm transition">
-                Confirmar
+                Confirmar{avisoDates.length > 1 ? ` (${avisoDates.length})` : ""}
               </button>
             </div>
           </div>

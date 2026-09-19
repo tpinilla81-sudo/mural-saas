@@ -14,6 +14,8 @@ model Company {
   slug       String   @unique
   logo       String?
   logoUrl    String?  @default("")
+  brandColor String?  @default("")
+  notifyEmail String? @default("")
   address    String?  @default("")
   city       String?  @default("")
   province   String?  @default("")
@@ -40,6 +42,8 @@ model Company {
   billDiarioItems BillDiarioItem[]
   billConfig    BillConfig?
   billFacturaSeq BillFacturaSeq?
+  auditLogs      AuditLog[]
+  outbox         OutboxNotification[]
 }
 
 model User {
@@ -215,6 +219,7 @@ model Aviso {
   turn            String   // M | T
   reason          String   @default("") // BAJA | FORMACION | PERMISO | VACACIONES | custom
   note            String   @default("") // free-form note (e.g. added by voice)
+  seenAt          DateTime? // marcado como visto (swipe en la app)
   createdAt       DateTime @default(now())
 
   company      Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
@@ -411,4 +416,41 @@ model BillDiarioLine {
 
   @@index([diarioItemId])
   @@index([companyId])
+}
+
+// ═══════════════════════════════════════════
+// AUDITORÍA + COLA DE NOTIFICACIONES
+// ═══════════════════════════════════════════
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  companyId String
+  userId    String?
+  userName  String   @default("")
+  action    String   // AVISO_CREATE | AVISO_DELETE | AVISO_SEEN | SEDE_... | LOGIN | ...
+  entity    String   // Aviso | Sede | Professional | Company | ...
+  entityId  String?
+  detail    String   @default("")
+  createdAt DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, createdAt])
+}
+
+model OutboxNotification {
+  id        String    @id @default(cuid())
+  companyId String
+  channel   String    @default("email") // email | whatsapp
+  target    String    // email o teléfono destino
+  subject   String    @default("")
+  body      String    @default("")
+  status    String    @default("pending") // pending | sent | failed | manual
+  error     String?   
+  createdAt DateTime  @default(now())
+  sentAt    DateTime?
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, createdAt])
 }

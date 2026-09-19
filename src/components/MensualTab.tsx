@@ -78,6 +78,59 @@ export default function MensualTab() {
     goMonth(dx < 0 ? 1 : -1);
   };
 
+  // ── Exportar a Excel (.xlsx): matriz sedes × días + hoja de avisos ──
+  const exportExcel = async () => {
+    const XLSX = await import("xlsx");
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const DOWX = ["D", "L", "M", "X", "J", "V", "S"];
+
+    const head: (string | number)[] = ["SEDE", "TAREA"];
+    for (let d = 1; d <= daysInMonth; d++) {
+      const wd = new Date(year, month, d).getDay();
+      head.push(`${d} ${DOWX[wd]}`);
+    }
+
+    const visible = sedes.filter((s: any) => selectedSedes.size === 0 || selectedSedes.has(s.id));
+    const rows: (string | number)[][] = [head];
+    for (const s of visible) {
+      const row: (string | number)[] = [s.name, s.task || ""];
+      for (let d = 1; d <= daysInMonth; d++) {
+        const f = `${year}-${String(month + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+        const pM = plans.find((p: any) => p.sedeId === s.id && p.date === f && p.turn === "MANANA");
+        const pT = plans.find((p: any) => p.sedeId === s.id && p.date === f && p.turn === "TARDE");
+        const aM = avisos.find((a: any) => a.sedeId === s.id && a.date === f && a.turn === "M");
+        const aT = avisos.find((a: any) => a.sedeId === s.id && a.date === f && a.turn === "T");
+        const m = aM ? `⚠${aM.professional?.alias || "SEDE"}` : pM?.professionalAlias || "";
+        const t = aT ? `⚠${aT.professional?.alias || "SEDE"}` : pT?.professionalAlias || "";
+        row.push([m, t].filter(Boolean).join(" / "));
+      }
+      rows.push(row);
+    }
+
+    const avisoRows: (string | number)[][] = [
+      ["FECHA", "TURNO", "SEDE", "PROFESIONAL", "MOTIVO", "NOTA"],
+      ...avisos
+        .filter((a: any) => parseInt(a.date.slice(5, 7), 10) - 1 === month && parseInt(a.date.slice(0, 4), 10) === year)
+        .map((a: any) => [
+          a.date,
+          a.turn === "M" ? "Mañana" : "Tarde",
+          a.sede?.name || "",
+          a.professional ? a.professional.alias : "Toda la sede",
+          (a.reason || "AUSENCIA").toUpperCase(),
+          a.note || "",
+        ]),
+    ];
+
+    const wb = XLSX.utils.book_new();
+    const ws1 = XLSX.utils.aoa_to_sheet(rows);
+    ws1["!cols"] = [{ wch: 18 }, { wch: 14 }, ...Array(daysInMonth).fill({ wch: 9 })];
+    XLSX.utils.book_append_sheet(wb, ws1, `Turnos ${month + 1}/${year}`);
+    const ws2 = XLSX.utils.aoa_to_sheet(avisoRows);
+    ws2["!cols"] = [{ wch: 12 }, { wch: 9 }, { wch: 18 }, { wch: 12 }, { wch: 12 }, { wch: 30 }];
+    XLSX.utils.book_append_sheet(wb, ws2, "Avisos");
+    XLSX.writeFile(wb, `mural-${year}-${String(month + 1).padStart(2, "0")}.xlsx`);
+  };
+
   async function load() {
     const [sRes, pRes, plRes, hRes, aRes] = await Promise.all([
       fetch("/api/company/sedes"),
@@ -429,6 +482,7 @@ export default function MensualTab() {
         </div>
         <button onClick={() => { setSlideDir(""); setYear(new Date().getFullYear()); setMonth(new Date().getMonth()); }} className="bg-amber-500 hover:bg-amber-400 text-black font-black px-3 py-2 rounded-lg text-xs transition">HOY</button>
         <button onClick={() => window.print()} className="bg-slate-700 hover:bg-slate-600 text-white font-bold px-3 py-2 rounded-lg text-xs transition">🖨️ PDF</button>
+        <button onClick={exportExcel} className="bg-[#2E5D3A] hover:bg-[#3a7a4c] text-white font-bold px-3 py-2 rounded-lg text-xs transition" title="Descargar Excel con turnos y avisos del mes">⤓ Excel</button>
       </div>
 
       <div

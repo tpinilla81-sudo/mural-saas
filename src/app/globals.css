@@ -192,3 +192,44 @@
   -webkit-user-select: none !important;
   pointer-events: none;
 }
+
+/* ── Animaciones (mejoras Task 33) ── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(2px) scale(0.96); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes popIn {
+  from { opacity: 0; transform: scale(0.92); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* ── TEMA CLARO: sobrescribe las superficies oscuras más comunes cuando
+   html[data-theme="light"]. Las sedes mantienen sus colores propios. ── */
+html[data-theme="light"] body {
+  background: #eef2f7;
+  color: #0f172a;
+}
+html[data-theme="light"] .bg-slate-900 { background-color: #ffffff !important; }
+html[data-theme="light"] .bg-slate-800 { background-color: #f1f5f9 !important; }
+html[data-theme="light"] .bg-slate-800\/50 { background-color: rgba(241, 245, 249, 0.9) !important; }
+html[data-theme="light"] .bg-slate-800\/30 { background-color: rgba(241, 245, 249, 0.6) !important; }
+html[data-theme="light"] .bg-slate-700 { background-color: #e2e8f0 !important; }
+html[data-theme="light"] .bg-black { background-color: #ffffff !important; }
+html[data-theme="light"] .text-white { color: #0f172a !important; }
+html[data-theme="light"] .text-slate-100,
+html[data-theme="light"] .text-slate-200 { color: #1e293b !important; }
+html[data-theme="light"] .text-slate-300 { color: #334155 !important; }
+html[data-theme="light"] .text-slate-400 { color: #475569 !important; }
+html[data-theme="light"] .border-slate-700 { border-color: #cbd5e1 !important; }
+html[data-theme="light"] .border-slate-600 { border-color: #cbd5e1 !important; }
+html[data-theme="light"] .bg-purple-500\/15 { background-color: rgba(147, 51, 234, 0.12) !important; }
+
+/* ── COLOR CORPORATIVO: cuando html[data-brand="1"], los verdes del panel
+   toman var(--brand) (fijada desde AppShell con el color de la empresa) ── */
+html[data-brand="1"] .bg-\[\#2E5D3A\] { background-color: var(--brand) !important; }
+html[data-brand="1"] .hover\:bg-\[\#3a7a4c\]:hover { background-color: color-mix(in srgb, var(--brand) 85%, white) !important; }
+html[data-brand="1"] .hover\:bg-\[\#4a9a60\]:hover { background-color: color-mix(in srgb, var(--brand) 75%, white) !important; }
+html[data-brand="1"] .bg-\[\#6BBE7A\] { background-color: color-mix(in srgb, var(--brand) 70%, white) !important; }
+html[data-brand="1"] .border-\[\#6BBE7A\] { border-color: var(--brand) !important; }
+html[data-brand="1"] .from-\[\#3a7a4c\] { --tw-gradient-from: var(--brand) !important; }
+html[data-brand="1"] .to-\[\#2E5D3A\] { --tw-gradient-to: var(--brand) !important; }
