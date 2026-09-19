@@ -758,3 +758,74 @@ Stage Summary:
   y/o sin vacaciones si así se configura.
 - Para crear un acceso: Configuración → Configuración de Accesos → desplegar un
   profesional → activar "Puede iniciar sesión" → contraseña → elegir permisos → Guardar.
+
+---
+Task ID: 24
+Agent: main
+Task: Versión móvil completa como PC + avisos por voz (día, sede, profesional, nota)
+
+Work Log:
+- User: "la version mobil, no es completa como la de pc. quiero incorporar el meter los
+  avisos por voz, esto seria decir el dia, la sede, el profesional y añadir la nota" y
+  aclaración: "que en un movil Android o iPhone, como en una tablet Android/Apple o
+  Windows, funcione igual que en un PC con todas las funciones de edición manual y voz"
+- .env restaurado a Neon (había sido sobreescrito a SQLite de nuevo); URL recuperada
+  descifrando env vars de Vercel (endpoint individual /env/{id}?decrypt=true).
+- Schema: Aviso.note String @default("") + migración aditiva en Neon
+  (scripts/add_aviso_note_column.cjs, ALTER TABLE ADD COLUMN IF NOT EXISTS) ✓ aplicada.
+- API avisos: POST acepta note; nuevo PUT /api/company/avisos/[id] (note, reason).
+- src/components/VoiceAvisoButton.tsx (nuevo, ~575 líneas):
+  * Botón 🎙️ "Aviso por voz"/"Voz" + modal (Web Speech API es-ES; interimResults; mic
+    con pulso al escuchar; errores de permiso; fallback: textarea editable + "Analizar
+    texto" para navegadores sin voz — Firefox/iOS viejos).
+  * Parser español (parseAvisoText, exportado y testeado): notas ("nota: ...",
+    "apunta/anota"), motivos por palabra clave (vacaciones/baja/formación/permiso/
+    ausencia/curso/falta), turno ("por la mañana/de la tarde/turno de..."/"tardes"/
+    "mañanas"; "mañana" suelto = fecha mañana), fechas ("hoy", "mañana", "pasado
+    mañana", "día N" (mes visto; si ya pasó → mes siguiente), "N de MES" (números y
+    palabras: quince, veintiuno, treinta y uno...), "N/M", "N-M", días de semana con
+    "próximo"), matching por límites de palabra \b de sedes (nombre/token/ciudad) y
+    profesionales (alias/nombre/apellido, mejor puntuación).
+  * Vista previa editable (fecha, turno Todo el día/M/T, sede, profesional,
+    motivo, nota) antes de guardar; "Todo el día" crea 2 avisos (M+T).
+- Integración: botón de voz en DiarioTab (junto a HOY) y MensualTab (junto a HOY).
+- MensualTab: tarjetas de aviso ahora clicables → editor de nota del aviso (PUT) con
+  indicador 📝 y tooltip con nota; botón 🖨️ PDF visible también en móvil; calendario
+  con overflow-x-auto + min-w-[780px] (legible en móvil con scroll horizontal);
+  padding móvil p-2.
+- DiarioTab: al tocar un turno/aviso ocupado ya no hay confirm() a ciego — nuevo
+  diálogo táctil con detalle (sede, fecha, turno, pro/motivo, nota) y botón Eliminar
+  (paridad con tooltip de PC); columna SEDES móvil 50px→62px (nombre hasta 54px).
+- BUG CRÍTICO encontrado y corregido: Julio había quedado como role=USER +
+  professionalId en la DB (al probar Configuración de Accesos, un profesional compartía
+  su email y el PUT de permissions forzaba role:"USER" sobre la cuenta vinculada).
+  * Restaurado en DB: Julio = COMPANY_ADMIN, professionalId=null.
+  * Guarda en /api/company/permissions PUT: rechaza si el usuario vinculado es admin
+    o la propia sesión ("Ese profesional está vinculado a una cuenta de administrador...").
+  * Guarda en /api/company/users/[id] PUT: prohibido cambiar el propio rol; obligatorio
+    mantener ≥1 COMPANY_ADMIN activo; roles limitados a USER/COMPANY_ADMIN.
+- Tests parser: scripts/test-voice-parser.mjs — 6/6 ✓ (incluye fix de matching con
+  puntuación adyacente: comas tras nombres/sedes).
+- E2E producción: scripts/verify-voice-avisos.mjs — login julio1974@ ✓, POST aviso
+  M+T con note ✓, PUT nota ✓, persistencia por turno ✓, cleanup ✓ → "TODO OK".
+- Verificación UI real con agent-browser (viewport iPhone 14):
+  login ✓ → CompanyDashboard admin ✓ → botón "🎙️ Voz" en Diario ✓ → modal → texto
+  "el dia 15 en Vitoria, JM, vacaciones, nota: se va de viaje" → Analizar → preview:
+  15/10/2026, Todo el día, VIT, JM-JULIO, VACACIONES, nota "se va de viaje" ✓ →
+  Guardar → 2 avisos en BD ✓ → Mensual OCTUBRE muestra "M/T 🏖 VACACIONES - JM (VIT) •"
+  ✓ → tap tarjeta → editor de nota con todos los datos ✓ → limpieza de prueba ✓.
+  Capturas: download/voice-modal-saved.png, download/mensual-movil-avisos.png.
+- Builds ✓ (8.0-8.4s). Commits: 0275a00 (feature), 30ea91f (guardas) → deploy READY.
+
+Stage Summary:
+- Nueva función: avisos por voz en Diario y Mensual — dictar "el día X en [sede],
+  [profesional], [motivo], nota: ..." o escribirlo; preview editable; día completo
+  crea M+T; nota del aviso guardada y visible.
+- Notas de aviso: campo note persistido, editable tocando la tarjeta en Mensual,
+  indicador • + tooltip con nota también en Diario.
+- Paridad móvil/tablet/PC: todas las pestañas usables en táctil, PDF en móvil,
+  calendario mensual con scroll legible, diálogo de detalle en Diario al tocar,
+  fallback de texto cuando el navegador no soporta dictado.
+- Seguridad: imposible auto-degradar el rol admin ni dejar una empresa sin admin;
+  los accesos ya no pueden secuestrar cuentas de administrador.
+- Login admin intacto: julio1974@ → app MURAL completa.
