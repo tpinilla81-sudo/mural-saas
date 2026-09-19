@@ -1059,3 +1059,23 @@ Stage Summary:
   desde cualquier pestaña del panel.
 - /coche ahora es 100% seguro para conducir: un solo método (manos libres), cero necesidad
   de tocar o mirar la pantalla; el dictado libre queda fuera de la pantalla de coche.
+
+---
+Task ID: 30
+Agent: main
+Task: Quitar los botones de voz de las barras de herramientas (Diario/Mensual); los grandes de la línea superior solo visibles en la pestaña DIARIO
+
+Work Log:
+- Petición del usuario (captura con los botones pequeños tachados en rojo): "quitar esos botones y que los de avisos de arriba solo aparezcan cuando se elija diario en el menu de arriba".
+- src/components/DiarioTab.tsx: eliminado <VoiceButtons> de la fila de herramientas (HOY / Compacto quedan limpios) y eliminado el import de VoiceAvisoButton (no se usaba para nada más; el modal inline de avisos es autónomo).
+- src/components/MensualTab.tsx: eliminado <VoiceButtons> de su barra (HOY → PDF directo) y su import.
+- src/components/CompanyDashboard.tsx: los dos botones grandes 🔊 MODO COCHE / 🎙️ MODO PC de la línea MI EMPRESA/DIARIO/CONFIGURACIÓN ahora se renderizan condicionados a {tab === "diario" && (...)}; overlays globales intactos.
+- UserView (rol USER) se deja igual: no tiene el menú superior MI EMPRESA/DIARIO/CONFIGURACIÓN y sus botones están gated por permiso can_voice_avisos.
+- Build ✓ (8.1s). Commit 1a607a4 → push main → Vercel READY (HTTP 200).
+- E2E producción (agent-browser, login julio1974@): DIARIO → botones grandes presentes (x=962 y x=1160, y=86) y barra del grid limpia (solo HOY + ▦ Compacto); MI EMPRESA → 0 botones de voz; CONFIGURACIÓN → 0 botones de voz; sub-tab Mensual → solo los 2 grandes de arriba; /coche → intacto (solo 🔊 AUDIO MODO COCHE, sin Modo PC).
+- Capturas: download/diario-botones-solo-arriba.png, download/mensual-sin-botones-voz.png, download/mi-empresa-sin-botones-voz.png.
+
+Stage Summary:
+- Los avisos por voz viven SOLO en la línea superior (grandes, a la derecha, resaltados) y únicamente cuando la pestaña activa es DIARIO (incluye sus sub-tabs Diario/Mensual/Sedes/Pros/Calendarios).
+- Sin duplicados en las barras de herramientas del Diario y Mensual.
+- /coche mantiene su restricción de seguridad: único método manos libres.
