@@ -1018,3 +1018,44 @@ Stage Summary:
   Las cabeceras (días arriba, sedes izquierda) ya eran sticky y se mantienen fijas al
   desplazar — ahora combinadas con scrollbar visible y drag se ve claramente dónde se
   está en el año y no se pierden las fechas al bajar del todo.
+
+---
+Task ID: 29
+Agent: Super Z (main)
+Task: Botones MODO COCHE / MODO PC grandes y resaltados en la barra principal del inicio; /coche (CarPlay/Android Auto) restringido al método Coche por seguridad.
+
+Work Log:
+- Petición: los dos botones de voz deben estar en la pantalla de inicio, en grande, en la
+  línea de MI EMPRESA/DIARIO/CONFIGURACIÓN pero a la derecha y resaltando; y en el coche
+  (pantalla /coche) por seguridad solo debe poder usarse el método Coche (manos libres),
+  no el dictado libre.
+- src/components/CompanyDashboard.tsx:
+  * Añadidos fetch de sedes+professionals al montar (para alimentar overlays globales).
+  * En la barra de main tabs, contenedor ml-auto con dos botones grandes: 🔊 MODO COCHE
+    (gradiente ámbar from-amber-500, texto negro, shadow glow ámbar 18px) y 🎙️ MODO PC
+    (gradiente verde, ring #6BBE7A, glow verde). En móvil solo icono+palabra corta.
+  * Ambos abren sus overlays fullscreen (HandsFreeOverlay / VoiceAvisoModal) desde
+    cualquier pestaña; disabled si no hay sedes cargadas.
+- src/app/coche/page.tsx:
+  * Eliminado el Modo PC (VoiceAvisoModal, botón gigante anterior, estado voiceOpen).
+  * El botón gigante único (w-36/44, gradiente ámbar, glow) ahora abre directamente el
+    diálogo manos libres; etiqueta "AUDIO MODO COCHE" en ámbar; subtítulos: "La app
+    pregunta por voz y tú respondes hablando — 100% manos libres" y "🛡️ Único método
+    disponible al conducir por seguridad". Comentario de cabecera documenta la decisión
+    de seguridad (dictar libre exige mirar la pantalla para revisar/editar).
+- src/components/AppShell.tsx: botón 🚗 del navbar ahora ámbar resaltado con glow y title
+  aclarando "solo manos libres por seguridad".
+- Build ✓ (7.7s). Commit 9dfedca → deploy Vercel READY.
+- Verificación E2E (agent-browser): login → inicio: botones "🔊 Modo Coche" x=654 y
+  "🎙️ Modo PC" x=807 a la derecha de la línea de tabs, con gradiente aplicado (linear-
+  gradient lab() tras reload de CSS; el primer load sirvió CSS cacheado del build previo).
+  /coche: solo existe el botón 🔊 gigante "AUDIO MODO COCHE" + aviso de método único;
+  clic abre overlay "MANOS LIBRES" paso "1 · DÍA" (mic bloqueado solo por headless).
+  Capturas: download/inicio-botones-grandes.png, download/coche-solo-modo-coche.png.
+
+Stage Summary:
+- Inicio con los dos accesos de voz siempre visibles, grandes y a la derecha: Modo Coche
+  (preguntas por audio, sin mirar) y Modo PC (dictado libre con revisión), funcionando
+  desde cualquier pestaña del panel.
+- /coche ahora es 100% seguro para conducir: un solo método (manos libres), cero necesidad
+  de tocar o mirar la pantalla; el dictado libre queda fuera de la pantalla de coche.
