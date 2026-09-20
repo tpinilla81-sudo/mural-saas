@@ -324,7 +324,7 @@ export default function SedesTab() {
       {/* Mobile: card layout */}
       <div className="sm:hidden flex items-center gap-1.5 text-[10px] text-slate-400">
         <span className="text-amber-400 font-bold">ORDEN:</span>
-        <span>usa ↑ ↓ — se guarda y sale en Diario</span>
+        <span>usa las flechas ↑ ↓ — se guarda y sale en Diario</span>
       </div>
       <div className="sm:hidden space-y-2">
         {loading && sedes.length === 0 ? (
@@ -334,12 +334,12 @@ export default function SedesTab() {
         ) : (
           sedes.map((s, idx) => (
             <div key={s.id} className="bg-slate-800/50 border border-slate-700 rounded-xl p-3 space-y-2 flex gap-2">
-              {/* Flechas orden */}
+              {/* Flechas orden (grandes, fáciles de tocar) */}
               <div className="flex flex-col justify-center gap-1">
                 <button onClick={() => moveSede(idx, -1)} disabled={idx === 0}
-                  className="w-7 h-7 rounded bg-slate-700 text-white text-xs font-bold disabled:opacity-25 active:bg-amber-500 active:text-black transition">↑</button>
+                  className="w-9 h-9 rounded bg-slate-700 text-white text-base font-bold disabled:opacity-25 active:bg-amber-500 active:text-black transition">↑</button>
                 <button onClick={() => moveSede(idx, 1)} disabled={idx === sedes.length - 1}
-                  className="w-7 h-7 rounded bg-slate-700 text-white text-xs font-bold disabled:opacity-25 active:bg-amber-500 active:text-black transition">↓</button>
+                  className="w-9 h-9 rounded bg-slate-700 text-white text-base font-bold disabled:opacity-25 active:bg-amber-500 active:text-black transition">↓</button>
               </div>
               <div className="flex-1 space-y-2">
                 <div className="flex justify-between items-start">
@@ -371,7 +371,7 @@ export default function SedesTab() {
       <div className="hidden sm:block bg-slate-800/50 border border-slate-700 rounded-xl overflow-auto max-h-[calc(100vh-320px)]">
         <div className="flex items-center gap-2 px-4 py-2 text-[10px] text-slate-400 border-b border-slate-700">
           <span className="text-amber-400 font-bold">ORDEN:</span>
-          <span>arrastra las filas (⠿) o usa ↑ ↓ — se guarda y sale en Diario</span>
+          <span>usa las flechas ↑ ↓ (en PC también puedes arrastrar) — se guarda y sale en Diario</span>
         </div>
         {loading && sedes.length === 0 ? (
           <div className="flex items-center justify-center py-12 text-slate-400 text-sm">Cargando sedes...</div>
@@ -408,13 +408,14 @@ export default function SedesTab() {
                   </td>
                   <td className="px-4 py-2"><div className="w-5 h-5 rounded border border-slate-600" style={{ background: s.color }} /></td>
                   <td className="px-4 py-2">
-                    <div className="flex gap-1">
+                    <div className="flex gap-1.5 items-center">
                       <button onClick={() => moveSede(idx, -1)} disabled={idx === 0}
-                        className="bg-slate-700 hover:bg-slate-600 disabled:opacity-25 px-2 py-1 rounded text-xs transition" title="Subir">↑</button>
+                        className="bg-slate-600 hover:bg-amber-500 hover:text-black disabled:opacity-25 text-white font-bold px-3 py-2 rounded text-sm transition" title="Subir">↑</button>
                       <button onClick={() => moveSede(idx, 1)} disabled={idx === sedes.length - 1}
-                        className="bg-slate-700 hover:bg-slate-600 disabled:opacity-25 px-2 py-1 rounded text-xs transition" title="Bajar">↓</button>
-                      <button onClick={() => handleEdit(s)} className="bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded text-xs transition" title="Editar sede">✏️</button>
-                      <button onClick={() => setDeleteTarget(s)} className="bg-red-600/30 hover:bg-red-600/50 text-red-400 px-2 py-1 rounded text-xs transition" title="Eliminar sede">✖</button>
+                        className="bg-slate-600 hover:bg-amber-500 hover:text-black disabled:opacity-25 text-white font-bold px-3 py-2 rounded text-sm transition" title="Bajar">↓</button>
+                      <span className="w-px h-6 bg-slate-600 mx-0.5" />
+                      <button onClick={() => handleEdit(s)} className="bg-slate-700 hover:bg-slate-600 px-2 py-1.5 rounded text-xs transition" title="Editar sede">✏️</button>
+                      <button onClick={() => setDeleteTarget(s)} className="bg-red-600/30 hover:bg-red-600/50 text-red-400 px-2 py-1.5 rounded text-xs transition" title="Eliminar sede">✖</button>
                     </div>
                   </td>
                 </tr>
