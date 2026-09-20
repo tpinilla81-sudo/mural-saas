@@ -1555,3 +1555,19 @@ Work Log:
 
 Stage Summary:
 - Al generar CUALQUIER entrada (turno en Mensual, aviso por voz PC, manos libres Coche, notas de tarjetas) la app ahora PREGUNTA: ¿crear notificación? → ¿con qué días de antelación? → ¿a quién (TODOS o elegidos)? Si respondes que no, se acaba. El aviso viaja en la nota (@N[:nombres]) y lo dispara el cron diario 10:00 España con push + copia en el sobre 📩.
+
+---
+Task ID: 48
+Agent: main
+Task: "en el movil no se ve lo rodeado en rojo, que se vea" (tarea de la sede en Diario móvil) + "en sedes se pueda mover las lineas para ordenar como se quiera y que salga en diario"
+
+Work Log:
+- DIARIO MÓVIL: la columna SEDES solo mostraba el nombre (task oculta en sm:hidden). Ahora: nombre (9px) + tarea (7px, gris) con la barra de color a la izquierda cubriendo ambas líneas; columna 62px→78px, max-w 66px. UserView ya lo mostraba, solo faltaba DiarioTab.
+- REORDER: Sede ya tenía campo `order` (GET orderBy order asc) pero no había UI ni API para cambiarlo. Nueva ruta POST /api/company/sedes/reorder {ids:[...]} → requireCompanyAdmin + ownership + $transaction order=i. GET ahora orderBy [{order:asc},{createdAt:asc}] (tie-break estable).
+- SEDESTAB: móvil tarjetas con flechas ↑↓ (HTML5 drag no fiable en iOS) + hint "ORDEN: usa ↑↓ — se guarda y sale en Diario"; escritorio filas draggable (⠿, borde ámbar en destino) + botones ↑↓ en Acciones. persistOrder optimista con rollback y toast "Orden guardado — ya sale en Diario".
+- El orden personalizado sale solo en Diario (y Mensual/UserView/selectores) porque todos consumen GET /api/company/sedes ya ordenado.
+- Commit cd9a31b → Vercel 200. scripts/verify-48.mjs: login → invertir ✓ → restaurar ✓ → sin sesión 401 ✓. OJO: tras entrar por el formulario del navegador, el login por script (email+password) dejó de devolver session-token (200 sin cookie, 401 después) — verificaciones finales hechas vía la sesión del navegador (fetch interno).
+- E2E NAVEGADOR 412×915: Diario móvil muestra "VIT / Quirofano VIT", "NAV / Gestion", "CONGRESO / Cursos…" ✓ (captura t48-diario-movil.png); Sedes móvil con ↑↓ (t48-sedes-movil.png); ↓ en VIT → NAV primera + toast (t48-sedes-movido.png); recarga → Diario refleja NAV primera (t48-diario-orden-aplicado.png); restaurado con ↑ y API confirma 0:VIT 1:NAV 2:CONGRESO… ✓.
+
+Stage Summary:
+- En el móvil el Diario ya muestra la TAREA de cada sede bajo el nombre (lo rodeado en rojo). En SEDES se pueden mover las líneas con flechas ↑↓ (móvil) o arrastrando las filas (PC); el orden se guarda en la BD y sale tanto en Diario como en el resto de la app.
