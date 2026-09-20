@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 
 type Sede = {
   id: string; name: string; city: string; province: string; task: string;
-  email: string; phone: string; morningEnabled: boolean; afternoonEnabled: boolean; color: string;
+  email: string; phone: string; morningEnabled: boolean; afternoonEnabled: boolean; color: string; order: number;
 };
 
 export default function SedesTab() {
@@ -18,6 +18,8 @@ export default function SedesTab() {
   const [deleteTarget, setDeleteTarget] = useState<Sede | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const dragIdx = useRef<number | null>(null);
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
 
   const showToast = useCallback((message: string, type: "success" | "error" = "success") => {
     setToast({ message, type });
@@ -114,6 +116,36 @@ export default function SedesTab() {
       setDeleting(false);
     }
   };
+
+  // ─── Reordenar sedes (drag o flechas) ───
+  const persistOrder = async (next: Sede[]) => {
+    const prev = sedes;
+    setSedes(next); // optimista
+    try {
+      const res = await fetch("/api/company/sedes/reorder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: next.map(s => s.id) }),
+      });
+      if (!res.ok) throw new Error();
+      showToast("Orden guardado — ya sale en Diario");
+    } catch {
+      showToast("Error al guardar el orden", "error");
+      setSedes(prev);
+    }
+  };
+
+  const moveTo = (from: number, to: number) => {
+    if (from === to || from < 0 || to < 0 || from >= sedes.length || to >= sedes.length) return;
+    const next = [...sedes];
+    const [item] = next.splice(from, 1);
+    next.splice(to, 0, item);
+    dragIdx.current = null;
+    setDragOverIdx(null);
+    persistOrder(next);
+  };
+
+  const moveSede = (i: number, dir: -1 | 1) => moveTo(i, i + dir);
 
   return (
     <div className="space-y-5">
@@ -290,32 +322,45 @@ export default function SedesTab() {
       </div>
 
       {/* Mobile: card layout */}
+      <div className="sm:hidden flex items-center gap-1.5 text-[10px] text-slate-400">
+        <span className="text-amber-400 font-bold">ORDEN:</span>
+        <span>usa ↑ ↓ — se guarda y sale en Diario</span>
+      </div>
       <div className="sm:hidden space-y-2">
         {loading && sedes.length === 0 ? (
           <div className="flex items-center justify-center py-12 text-slate-400 text-sm">Cargando sedes...</div>
         ) : sedes.length === 0 ? (
           <div className="flex items-center justify-center py-12 text-slate-500 text-sm">No hay sedes registradas</div>
         ) : (
-          sedes.map(s => (
-            <div key={s.id} className="bg-slate-800/50 border border-slate-700 rounded-xl p-3 space-y-2">
-              <div className="flex justify-between items-start">
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded" style={{ background: s.color }} />
-                  <div>
-                    <div className="text-sm font-bold text-white">{s.name}</div>
-                    <div className="text-xs text-slate-400">{s.city}{s.province ? `, ${s.province}` : ""}</div>
+          sedes.map((s, idx) => (
+            <div key={s.id} className="bg-slate-800/50 border border-slate-700 rounded-xl p-3 space-y-2 flex gap-2">
+              {/* Flechas orden */}
+              <div className="flex flex-col justify-center gap-1">
+                <button onClick={() => moveSede(idx, -1)} disabled={idx === 0}
+                  className="w-7 h-7 rounded bg-slate-700 text-white text-xs font-bold disabled:opacity-25 active:bg-amber-500 active:text-black transition">↑</button>
+                <button onClick={() => moveSede(idx, 1)} disabled={idx === sedes.length - 1}
+                  className="w-7 h-7 rounded bg-slate-700 text-white text-xs font-bold disabled:opacity-25 active:bg-amber-500 active:text-black transition">↓</button>
+              </div>
+              <div className="flex-1 space-y-2">
+                <div className="flex justify-between items-start">
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 rounded" style={{ background: s.color }} />
+                    <div>
+                      <div className="text-sm font-bold text-white">{s.name}</div>
+                      <div className="text-xs text-slate-400">{s.city}{s.province ? `, ${s.province}` : ""}</div>
+                    </div>
+                  </div>
+                  <div className="flex gap-1">
+                    <span className={`text-[10px] font-bold ${s.morningEnabled ? "text-emerald-400" : "text-slate-500"}`}>M{s.morningEnabled ? "✓" : "✗"}</span>
+                    <span className={`text-[10px] font-bold ${s.afternoonEnabled ? "text-emerald-400" : "text-slate-500"}`}>T{s.afternoonEnabled ? "✓" : "✗"}</span>
                   </div>
                 </div>
-                <div className="flex gap-1">
-                  <span className={`text-[10px] font-bold ${s.morningEnabled ? "text-emerald-400" : "text-slate-500"}`}>M{s.morningEnabled ? "✓" : "✗"}</span>
-                  <span className={`text-[10px] font-bold ${s.afternoonEnabled ? "text-emerald-400" : "text-slate-500"}`}>T{s.afternoonEnabled ? "✓" : "✗"}</span>
+                {s.task && <div className="text-xs text-slate-400">Tarea: {s.task}</div>}
+                {(s.phone || s.email) && <div className="text-xs text-slate-400">{s.phone || s.email}</div>}
+                <div className="flex gap-2">
+                  <button onClick={() => handleEdit(s)} className="flex-1 bg-blue-600/20 text-blue-400 font-bold py-1.5 rounded text-xs">EDITAR</button>
+                  <button onClick={() => setDeleteTarget(s)} className="bg-red-600/20 text-red-400 font-bold py-1.5 px-3 rounded text-xs">✕</button>
                 </div>
-              </div>
-              {s.task && <div className="text-xs text-slate-400">Tarea: {s.task}</div>}
-              {(s.phone || s.email) && <div className="text-xs text-slate-400">{s.phone || s.email}</div>}
-              <div className="flex gap-2">
-                <button onClick={() => handleEdit(s)} className="flex-1 bg-blue-600/20 text-blue-400 font-bold py-1.5 rounded text-xs">EDITAR</button>
-                <button onClick={() => setDeleteTarget(s)} className="bg-red-600/20 text-red-400 font-bold py-1.5 px-3 rounded text-xs">✕</button>
               </div>
             </div>
           ))
@@ -324,6 +369,10 @@ export default function SedesTab() {
 
       {/* Desktop: table */}
       <div className="hidden sm:block bg-slate-800/50 border border-slate-700 rounded-xl overflow-auto max-h-[calc(100vh-320px)]">
+        <div className="flex items-center gap-2 px-4 py-2 text-[10px] text-slate-400 border-b border-slate-700">
+          <span className="text-amber-400 font-bold">ORDEN:</span>
+          <span>arrastra las filas (⠿) o usa ↑ ↓ — se guarda y sale en Diario</span>
+        </div>
         {loading && sedes.length === 0 ? (
           <div className="flex items-center justify-center py-12 text-slate-400 text-sm">Cargando sedes...</div>
         ) : sedes.length === 0 ? (
@@ -338,9 +387,17 @@ export default function SedesTab() {
               </tr>
             </thead>
             <tbody>
-              {sedes.map(s => (
-                <tr key={s.id} className="border-b border-slate-700/50 hover:bg-slate-700/30 transition">
-                  <td className="px-4 py-2 text-sm font-bold">{s.name}</td>
+              {sedes.map((s, idx) => (
+                <tr key={s.id} draggable
+                  onDragStart={() => { dragIdx.current = idx; }}
+                  onDragOver={(e) => { e.preventDefault(); if (dragOverIdx !== idx) setDragOverIdx(idx); }}
+                  onDrop={(e) => { e.preventDefault(); if (dragIdx.current !== null) moveTo(dragIdx.current, idx); }}
+                  onDragEnd={() => { dragIdx.current = null; setDragOverIdx(null); }}
+                  className={`border-b border-slate-700/50 hover:bg-slate-700/30 transition ${dragOverIdx === idx && dragIdx.current !== null && dragIdx.current !== idx ? "border-t-2 border-t-amber-500" : ""}`}
+                >
+                  <td className="px-4 py-2 text-sm font-bold cursor-move select-none">
+                    <span className="text-slate-500 mr-2">⠿</span>{s.name}
+                  </td>
                   <td className="px-4 py-2 text-xs">{s.city}{s.province ? `, ${s.province}` : ""}</td>
                   <td className="px-4 py-2 text-xs">{s.task}</td>
                   <td className="px-4 py-2 text-xs">{s.phone || s.email || "—"}</td>
@@ -352,6 +409,10 @@ export default function SedesTab() {
                   <td className="px-4 py-2"><div className="w-5 h-5 rounded border border-slate-600" style={{ background: s.color }} /></td>
                   <td className="px-4 py-2">
                     <div className="flex gap-1">
+                      <button onClick={() => moveSede(idx, -1)} disabled={idx === 0}
+                        className="bg-slate-700 hover:bg-slate-600 disabled:opacity-25 px-2 py-1 rounded text-xs transition" title="Subir">↑</button>
+                      <button onClick={() => moveSede(idx, 1)} disabled={idx === sedes.length - 1}
+                        className="bg-slate-700 hover:bg-slate-600 disabled:opacity-25 px-2 py-1 rounded text-xs transition" title="Bajar">↓</button>
                       <button onClick={() => handleEdit(s)} className="bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded text-xs transition" title="Editar sede">✏️</button>
                       <button onClick={() => setDeleteTarget(s)} className="bg-red-600/30 hover:bg-red-600/50 text-red-400 px-2 py-1 rounded text-xs transition" title="Eliminar sede">✖</button>
                     </div>

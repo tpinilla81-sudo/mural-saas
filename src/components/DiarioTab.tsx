@@ -666,7 +666,7 @@ export default function DiarioTab() {
           <thead>
             <tr>
               {/* Sede label column - compact on mobile. Fija arriba E izquierda (esquina) */}
-              <th className="sticky left-0 top-0 z-30 bg-black border-r-[3px] border-amber-500 px-0.5 sm:px-3 py-1 sm:py-2 text-[9px] sm:text-xs text-blue-400 font-bold text-left w-[62px] sm:w-[200px] min-w-[62px] sm:min-w-[200px]">
+              <th className="sticky left-0 top-0 z-30 bg-black border-r-[3px] border-amber-500 px-0.5 sm:px-3 py-1 sm:py-2 text-[9px] sm:text-xs text-blue-400 font-bold text-left w-[78px] sm:w-[200px] min-w-[78px] sm:min-w-[200px]">
                 SEDES
               </th>
               {daysArr.map((d, i) => {
@@ -685,13 +685,14 @@ export default function DiarioTab() {
             {filteredSedes.map(sede => {
               return (
                 <tr key={sede.id}>
-                  {/* Sede label - very compact on mobile */}
+                  {/* Sede label - compact on mobile (nombre + tarea visibles) */}
                   <td className="sticky left-0 z-10 bg-black border-r-[3px] border-amber-500 px-0.5 sm:px-3 py-0.5 sm:py-2 border-b-2 border-white/90">
-                    {/* Mobile: ultra-compact view */}
-                    <div className="sm:hidden">
-                      <div className="font-bold text-[8px] leading-tight truncate max-w-[54px]" style={{ borderLeft: `3px solid ${sede.color}`, paddingLeft: 3 }}>
-                        {sede.name}
-                      </div>
+                    {/* Mobile: nombre + tarea */}
+                    <div className="sm:hidden" style={{ borderLeft: `3px solid ${sede.color}`, paddingLeft: 3 }}>
+                      <div className="font-bold text-[9px] leading-tight text-white truncate max-w-[66px]">{sede.name}</div>
+                      {sede.task && (
+                        <div className="text-[7px] text-slate-400 leading-tight truncate max-w-[66px]">{sede.task}</div>
+                      )}
                     </div>
                     {/* Desktop: full view */}
                     <div className="hidden sm:block">

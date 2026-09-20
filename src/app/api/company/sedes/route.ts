@@ -13,13 +13,13 @@ export async function GET() {
 
   if (!companyId) {
     // Super admin: return all or filtered
-    const sedes = await db.sede.findMany({ orderBy: { order: "asc" } });
+    const sedes = await db.sede.findMany({ orderBy: [{ order: "asc" }, { createdAt: "asc" }] });
     return NextResponse.json(sedes);
   }
 
   const sedes = await db.sede.findMany({
     where: { companyId },
-    orderBy: { order: "asc" },
+    orderBy: [{ order: "asc" }, { createdAt: "asc" }],
   });
   return NextResponse.json(sedes);
 }
