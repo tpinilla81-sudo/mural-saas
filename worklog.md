@@ -1284,3 +1284,30 @@ Stage Summary:
 - Solo Julio (COMPANY_ADMIN) tiene login activo con julio1974@. Los otros 9 Users existen como placeholders inactivos enlazados a sus profesionales; cuando Julio quiera dar acceso a alguien, va a Configuración → Configuración de Accesos → despliega el profesional → activa "Puede iniciar sesión" → pone contraseña + elige permisos → guarda (el User pasa a isActive=true y se le asigna la contraseña real).
 - Las antiguas cuentas SaaS (mural@mural.app SUPER_ADMIN y admin@mural.es) fueron borradas definitivamente: el usuario ya las había desactivado en Task 22 y nunca las usó.
 - scripts/sync-10-users.mjs queda commiteado para re-sincronizar si en algún momento se añaden más profesionales y se quiere volver a alinear Users ↔ Professionals 1:1.
+
+---
+Task ID: 40
+Agent: main
+Task: "EN LAS NOTIFICACIONES AL MOBIL... COMO SE SABE A QUE MOVIL LO ENVIA Y QUE MENSAJE?" + "LO QUE HAY EN ACCESOS, EL TEMA ENVIOS Y AVISOS DE AUDITORIAS QUITARLO" + "ACCESOS Y PERMISOS SE REPITEN — HACER SOLO UNO EN MI EMPRESA, COMPLETO, QUE SE PUEDA ELEGIR TODO"
+
+Work Log:
+- RESPUESTA (también añadida en la UI, panel Avisos programados → caja "¿Cómo funciona?"):
+  * ¿A qué móvil llega? A TODOS los dispositivos (móviles/PC) donde se haya pulsado 🔔 ACTIVAR AQUÍ — cada uno queda registrado como PushSub en la BD. No se elige un móvil concreto: broadcast a todos los de la empresa.
+  * ¿Qué mensaje? Título "PALABRA — HOY/MAÑANA/en X días" + cuerpo con fecha dd/mm/aaaa, sede, turno (Mañana/Tarde) y el texto de la nota. Dedupe por (tarjeta, regla): se avisa UNA sola vez. Envío diario a las 10:00 Madrid (cron Vercel /api/cron/alerts).
+- FUERA OpsPanel "📮 Envíos de avisos y auditoría": eliminado de ConfigTab (componente y render). Las APIs /outbox y /audit siguen en el servidor pero ya no tienen UI.
+- FUSIÓN ACCESOS + PERMISOS en UN solo panel en MI EMPRESA:
+  * Nuevo src/components/AccessPanel.tsx: editor completo por profesional (antes vivía en CONFIGURACIÓN → "Configuración de Accesos"). Contiene TODO: puede iniciar sesión, email identificador, contraseña de entrada, los 11 permisos (Ver/Editar Diario, Ver/Editar Mensual, Ver/Editar Sedes, Solo sus turnos, Solo sus sedes, Imprimir, Enviar, 🎙️ Avisos por voz), restricciones de Vista Mensual (sedes visibles TODAS/ELEGIR con color, profesionales visibles TODOS/ELEGIR, 📝 ver notas, 🏖 ver vacaciones/ausencias), borrador con Guardar y cascada edit⇒view.
+  * CompanyProfileTab: sección "permisos" ahora renderiza <AccessPanel />; pestaña renombrada "Permisos" → "Accesos · Permisos". Eliminados la tabla simple antigua (4 permisos), ProPermission, loadProPerms y updateProPermissions.
+  * ConfigTab reescrito: SOLO 🔔 Avisos programados (abierto por defecto, con la caja explicativa). Fuera el editor duplicado de accesos.
+- DB (scripts/fix-placeholder-passwords.mjs, ejecutado): los 8 Users creados en Task 39 tenían PLACEHOLDER_HASH (bcrypt válido) → hasPassword=true habría dejado activar el login sin contraseña conocida. Sustituidos por "revoked_..." (no-bcrypt, como passwordCleared de la API) → ahora hasPassword=false y al activar "Puede iniciar sesión" el panel EXIGE contraseña nueva (mín. 4). Julio (julio1974@) y Alma (contraseña real del test) intactos.
+- Build limpio (npm i web-push — faltaba en node_modules tras el reset). Commit e6d79fb → push → Vercel 200.
+- E2E producción (login julio1974@):
+  * MI EMPRESA: pestañas Datos | Usuarios (10) | Accesos · Permisos ✓. El panel lista 10 profesionales (JM con ACCESO ACTIVO·contraseña activa; 9 SIN ACCESO) ✓.
+  * Expandido AS: checkbox Puede iniciar sesión + email + contraseña deshabilitados hasta activar; Vista Mensual con las 20 sedes (TODAS) y los 10 pros (TODOS), 📝/🏖 marcados; grupos DIARIO/MENSUAL/SEDES/FILTROS/ACCIONES con los 11 permisos; Cerrar/Guardar ✓.
+  * CONFIGURACIÓN: SOLO 🔔 Avisos programados con la caja "¿Cómo funciona? ¿A qué móvil llega y qué mensaje?"; cero textos "Envíos de avisos"/"Auditoría"/"Configuración de Accesos" en la página ✓.
+  * Capturas: download/config-avisos-solo.png, download/accesos-panel-completo.png.
+
+Stage Summary:
+- MI EMPRESA → Accesos · Permisos: panel ÚNICO y COMPLETO — se elige TODO por profesional (acceso+contraseña, 11 permisos, sedes y profesionales visibles del mensual, notas, vacaciones).
+- CONFIGURACIÓN: solo 🔔 Avisos programados, ahora con explicación clara de a qué móviles llega (todos los ACTIVAR AQUÍ), qué mensaje reciben (palabra+días, fecha, sede, turno, nota) y cuándo (10:00 diario, una vez por tarjeta).
+- Panel Envíos/Auditoría eliminado de la UI.
