@@ -78,6 +78,13 @@ export default function AppShell() {
               {role === "SUPER_ADMIN" ? "Super Admin" : role === "COMPANY_ADMIN" ? (session.user as any)?.companyName : "Usuario"}
             </div>
           </div>
+          <button
+            onClick={() => window.dispatchEvent(new Event("push-onboard:open"))}
+            className="bg-slate-700 hover:bg-slate-600 text-white w-9 h-9 rounded-lg text-base transition"
+            title="Avisos en este móvil: activar / estado"
+          >
+            🔔
+          </button>
           <a
             href="/coche"
             className="bg-amber-500 hover:bg-amber-400 text-black px-3 py-2 rounded-lg text-sm font-black transition shadow-[0_0_14px_rgba(245,158,11,0.45)]"
@@ -95,6 +102,13 @@ export default function AppShell() {
 
         {/* Mobile: hamburger */}
         <div className="ml-auto sm:hidden flex items-center gap-1">
+          <button
+            onClick={() => window.dispatchEvent(new Event("push-onboard:open"))}
+            className="text-white p-2 text-lg"
+            title="Avisos en este móvil: activar / estado"
+          >
+            🔔
+          </button>
           <button onClick={() => setMenuOpen(!menuOpen)} className="text-white p-2">
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               {menuOpen ? (
