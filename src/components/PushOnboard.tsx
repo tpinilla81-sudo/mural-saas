@@ -20,6 +20,27 @@ function b64ToUint8(base64String: string): Uint8Array {
   return output;
 }
 
+/** requestPermission compatible con WebKit antiguo (callback) y moderno (Promise). */
+function askPermission(): Promise<NotificationPermission> {
+  return new Promise((resolve) => {
+    try {
+      const p = Notification.requestPermission();
+      if (p && typeof (p as Promise<NotificationPermission>).then === "function") {
+        (p as Promise<NotificationPermission>).then(resolve).catch(() => resolve("default"));
+      } else {
+        resolve(p as NotificationPermission); // Safari viejo devuelve sync
+      }
+    } catch {
+      try {
+        (Notification as unknown as { requestPermission: (cb: (r: NotificationPermission) => void) => void })
+          .requestPermission((r) => resolve(r));
+      } catch {
+        resolve("default");
+      }
+    }
+  });
+}
+
 type Mode =
   | "hidden"        // ya suscrito: nada que hacer
   | "ask"           // puede activarse YA (toque → prompt del sistema)
@@ -122,41 +143,66 @@ export default function PushOnboard() {
     setBusy(true); setInline("");
     try {
       if (!("Notification" in window) || !("PushManager" in window)) {
-        setMode(await reopenIosMode());
+        await reopenIosMode();
         setBusy(false);
         return;
       }
-      const perm = await Notification.requestPermission();
+      const perm = await askPermission();
       if (perm !== "granted") {
         setInline(perm === "denied"
           ? "⛔ Has pulsado «No permitir». Para revertirlo: borra el icono de inicio y vuelve a añadirlo."
-          : "Sin permiso no puede llegar nada. Vuelve a tocar ACTIVAR y pulsa «Permitir».");
+          : "Sin permiso no puede llegar nada. Vuelve a tocar ACTIVAR y pulsa «Permitir». (Di abajo qué dice permiso)");
         setBusy(false);
         return;
       }
-      await navigator.serviceWorker.register("/sw.js");
-      const reg = await navigator.serviceWorker.ready;
+      const reg = await Promise.race([
+        (async () => {
+          await navigator.serviceWorker.register("/sw.js");
+          return navigator.serviceWorker.ready;
+        })(),
+        new Promise<never>((_, rej) => setTimeout(() => rej(new Error("el service worker no responde (10s)")), 10000)),
+      ]);
       const keyRes = await fetch("/api/company/push/public-key");
-      if (!keyRes.ok) throw new Error("sin clave");
+      if (!keyRes.ok) throw new Error(`sin clave VAPID del servidor (HTTP ${keyRes.status})`);
       const { publicKey } = await keyRes.json();
       let sub = await reg.pushManager.getSubscription();
       if (!sub) {
-        sub = await reg.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: b64ToUint8(publicKey) as BufferSource,
-        });
+        try {
+          sub = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: b64ToUint8(publicKey) as BufferSource,
+          });
+        } catch (e2) {
+          if ((e2 as Error).name === "AbortError") {
+            // reintento único (iOS a veces aborta el 1er intento)
+            sub = await reg.pushManager.subscribe({
+              userVisibleOnly: true,
+              applicationServerKey: b64ToUint8(publicKey) as BufferSource,
+            });
+          } else {
+            throw e2;
+          }
+        }
       }
       const res = await fetch("/api/company/push/subscribe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(sub.toJSON()),
       });
-      if (!res.ok) throw new Error("fallo guardado");
+      if (!res.ok) throw new Error(`el servidor rechazó el registro (HTTP ${res.status})`);
       setToast("✅ ¡LISTO! Este móvil ya recibe avisos.");
       setTimeout(() => setToast(""), 6000);
       setMode("hidden"); setAsModal(false);
-    } catch {
-      setInline("⚠️ No se pudo completar. Abre MURAL desde el icono de la pantalla de inicio y toca 🔔 otra vez.");
+    } catch (err) {
+      const e = err as Error;
+      const name = e?.name || "Error";
+      const msg = e?.message || String(err);
+      let hint = "Cierra y reabre la app desde el icono y reintenta.";
+      if (name === "NotAllowedError") hint = "El móvil BLOQUEÓ el permiso: borra el icono de inicio, añádelo otra vez y reintenta.";
+      else if (name === "AbortError") hint = "Se cortó a medias: vuelve a tocar ACTIVAR.";
+      else if (name === "NotSupportedError") hint = "Este iPhone/navegador no soporta avisos web (hace falta iOS 16.4+).";
+      else if (name === "InvalidStateError") hint = "Reabre la app desde el icono y vuelve a tocar ACTIVAR.";
+      setInline(`⚠️ Fallo real: ${name} — ${msg}. ${hint}`);
     } finally {
       setBusy(false);
     }
@@ -257,6 +303,11 @@ export default function PushOnboard() {
       )}
 
       {inline && <p className="text-[11px] text-amber-400 font-bold leading-snug">{inline}</p>}
+      {envInfo && (
+        <p className="text-[9px] text-slate-500 leading-tight pt-1 border-t border-slate-800">
+          Diagnóstico: {envInfo.ios ? "iPhone/iPad" : "no-iOS"} · {envInfo.standalone ? "desde icono ✓" : "en navegador (sin icono)"} · {envInfo.hasPush ? "soporte push ✓" : "sin soporte push ✗"} · permiso: {envInfo.perm === "default" ? "sin decidir" : envInfo.perm === "granted" ? "concedido ✓" : envInfo.perm === "denied" ? "BLOQUEADO" : "?"}{envInfo.subscribed ? " · registrado ✓" : ""}
+        </p>
+      )}
     </div>
   );
 

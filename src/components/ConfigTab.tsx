@@ -260,10 +260,9 @@ function AlertRulesPanel() {
       setNotif("subscribed");
       setMsg("✅ ¡LISTO! Este móvil ya recibe avisos.");
       await load();
-    } catch {
-      setMsg(env.ios && !env.standalone
-        ? "📱 Estás DENTRO de Safari: añade la app a inicio (Compartir ⬆️ → Añadir a inicio) y abre MURAL desde el icono; ahí sí funciona 🔔 ACTIVAR AQUÍ."
-        : "⚠️ No se pudo activar. En iPhone: añade la app a inicio y abre desde el icono; ¿no sale «Permitir»? borra el icono, añádelo otra vez y reintenta.");
+    } catch (err) {
+      const e = err as Error;
+      setMsg(`⚠️ Fallo real: ${e?.name || "Error"} — ${e?.message || String(err)}. En iPhone: abre desde el icono de inicio (no Safari); si estaba bloqueado, borra el icono y vuelve a añadirlo.`);
     } finally {
       setBusy(false);
     }
