@@ -224,7 +224,7 @@ function AlertRulesPanel() {
       if (env.ios && env.standalone) {
         setMsg("⚠️ Tu iPhone necesita iOS 16.4 o superior: Ajustes → General → Actualización de software. Después vuelve aquí.");
       } else if (env.ios) {
-        setMsg("📱 Estás DENTRO de Safari y ahí NO se puede. Hazlo así: Compartir ⬆️ → Añadir a inicio → abre MURAL desde el ICONO nuevo → CONFIGURACIÓN → 🔔 ACTIVAR AQUÍ");
+        setMsg("📱 Estás DENTRO de Safari y ahí NO se puede. Hazlo así: Compartir ⬆️ → «Añadir a pantalla de inicio» → abre MURAL desde el ICONO nuevo → CONFIGURACIÓN → 🔔 ACTIVAR AQUÍ");
       } else {
         setMsg("⚠️ Este navegador no soporta notificaciones. Usa Chrome (Android) o Chrome/Edge en PC.");
       }
@@ -438,7 +438,7 @@ function AlertRulesPanel() {
                 <div className="text-[10px] font-black text-slate-200 mb-1">🍎 IPHONE (Safari)</div>
                 <ol className="text-[10px] text-slate-400 leading-snug list-decimal ml-3.5 space-y-0.5">
                   <li>Abre la app en <b className="text-slate-200">Safari</b></li>
-                  <li>Compartir ⬆️ → <b className="text-slate-200">Añadir a inicio</b> → Añadir</li>
+                  <li>Compartir ⬆️ → <b className="text-slate-200">«Añadir a pantalla de inicio»</b> → Añadir</li>
                   <li>Cierra Safari y abre MURAL <b className="text-slate-200">desde el ICONO nuevo</b> 📲</li>
                   <li>Abajo toca <b className="text-slate-200">⚙️ CONFIGURACIÓN</b> → <b className="text-[#6BBE7A]">🔔 ACTIVAR AQUÍ</b> → Permitir</li>
                 </ol>

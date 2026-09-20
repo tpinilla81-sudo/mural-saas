@@ -9,7 +9,7 @@ import { db } from "@/lib/db";
 export async function getVapid() {
   let row = await db.vapidKey.findUnique({ where: { id: "singleton" } });
   if (!row) {
-    const keys = webpush.generateVapidKeys();
+    const keys = webpush.generateVAPIDKeys();
     row = await db.vapidKey.upsert({
       where: { id: "singleton" },
       update: {},

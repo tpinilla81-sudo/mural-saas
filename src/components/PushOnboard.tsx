@@ -297,7 +297,7 @@ export default function PushOnboard() {
         <>
           <p className="text-sm font-black text-amber-400 leading-snug">📱 Estás DENTRO de Safari: los avisos solo funcionan desde la app de inicio</p>
           <ol className="text-[11px] text-slate-300 leading-snug list-decimal ml-4 space-y-0.5">
-            <li>Compartir ⬆️ → <b className="text-white">Añadir a inicio</b> → Añadir</li>
+            <li>Compartir ⬆️ → <b className="text-white">«Añadir a pantalla de inicio»</b> → Añadir</li>
             <li>Cierra Safari y abre MURAL <b className="text-white">desde el icono nuevo</b> 📲</li>
             <li>Al entrar te preguntará, igual que el micrófono → <b className="text-white">Permitir</b></li>
           </ol>
@@ -318,7 +318,7 @@ export default function PushOnboard() {
         <>
           <p className="text-sm font-black text-red-400 leading-snug">⛔ Las notificaciones están BLOQUEADAS en este dispositivo</p>
           <p className="text-[11px] text-slate-300 leading-snug">
-            Para resetear el permiso: <b className="text-white">borra el icono de MURAL de la pantalla de inicio, añádelo otra vez</b> (Compartir ⬆️ → Añadir a inicio) y al entrar vuelve a tocar 🔔 → Permitir.
+            Para resetear el permiso: <b className="text-white">borra el icono de MURAL de la pantalla de inicio, añádelo otra vez</b> (Compartir ⬆️ → «Añadir a pantalla de inicio») y al entrar vuelve a tocar 🔔 → Permitir.
           </p>
         </>
       )}
