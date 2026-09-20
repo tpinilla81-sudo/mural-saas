@@ -1,20 +1,13 @@
 "use client";
 
 // ═══════════════════════════════════════════════════════════
-// CONFIGURACIÓN — solo contiene 🔔 AVISOS PROGRAMADOS.
-// (Los accesos y permisos se gestionan en MI EMPRESA → Accesos · Permisos.)
-//
-// Cada aviso programado permite elegir:
-//   · ¿A QUIÉN le llega?  TODOS o unos usuarios concretos (están en la BD)
-//   · ¿POR DÓNDE le llega?  📱 móvil (push) · ✉️ correo · 📱+✉️ ambos
+// CONFIGURACIÓN — 🔔 AVISOS AL MÓVIL (versión SIMPLE)
+//   ① ACTIVA TU MÓVIL (una sola vez)  →  ② CREA UN AVISO  →  ③ LLEGA SOLO
+// Prioridad: que funcione de verdad en el móvil, con instrucciones
+// claras de activación (Android / iPhone) siempre visibles.
 // ═══════════════════════════════════════════════════════════
 
 import { useState, useEffect } from "react";
-
-// ───────────────────────────────────────────────────────────
-// AVISOS PROGRAMADOS — cuando en las NOTAS de una tarjeta/aviso
-// aparece una palabra y faltan X días → notificación.
-// ───────────────────────────────────────────────────────────
 
 interface AlertRule {
   id: string;
@@ -58,14 +51,14 @@ function deviceType(ua: string): string {
 
 type Channel = "push" | "email" | "both";
 
-const CHANNEL_LABEL: Record<Channel, string> = {
+const CHANNEL_SHORT: Record<Channel, string> = {
   push: "📱 Móvil",
   email: "✉️ Correo",
-  both: "📱+✉️ Ambos",
+  both: "📱+✉️",
 };
 
 function channelLabel(c: string): string {
-  return CHANNEL_LABEL[(c as Channel)] || "📱+✉️ Ambos";
+  return CHANNEL_SHORT[(c as Channel)] || "📱+✉️";
 }
 
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
@@ -85,7 +78,7 @@ export default function ConfigTab() {
   );
 }
 
-// ── Selector de destinatarios (¿A QUIÉN le llega?) ──
+// ── Selector de destinatarios (¿A QUIÉN le llega?) — solo en MÁS OPCIONES ──
 function RecipientsPicker({
   users, devices, all, selected, onSetAll, onToggle,
 }: {
@@ -101,9 +94,9 @@ function RecipientsPicker({
   return (
     <div>
       <div className="flex items-center justify-between mb-1.5">
-        <span className="text-[11px] font-extrabold text-slate-300 uppercase">¿A quién le llega?</span>
+        <span className="text-[11px] font-extrabold text-slate-300 uppercase">¿A quién?</span>
         <span className="text-[10px] text-emerald-400 font-bold">
-          {all ? "TODOS LOS USUARIOS" : `${selected.size} elegido(s)`}
+          {all ? "TODOS" : `${selected.size} elegido(s)`}
         </span>
       </div>
       <div className="flex gap-1 mb-1.5">
@@ -131,35 +124,33 @@ function RecipientsPicker({
                 />
                 <span className="text-[11px] font-bold text-white truncate">{u.name}</span>
                 {n > 0 && <span className="text-[9px] bg-emerald-600/20 text-emerald-400 px-1 rounded font-bold shrink-0" title={`${n} móvil(es) activado(s) por este usuario`}>📱×{n}</span>}
-                <span className={`text-[9px] truncate ${u.isActive ? "text-emerald-400" : "text-slate-500"}`}>
-                  {u.email}{!u.isActive && " · inactivo"}
-                </span>
+                {!u.isActive && <span className="text-[9px] text-slate-500 shrink-0">inactivo</span>}
               </label>
             );
           })}
         </div>
       )}
-      <p className="text-[9px] text-slate-500 mt-1 leading-tight">
-        La notificación 📱 llega a los móviles que cada usuario activó con 🔔 ACTIVAR AQUÍ (los que tienen 📱 ya tienen móvil metido); el ✉️ correo llega a la dirección de cada usuario.
-      </p>
     </div>
   );
 }
 
-// ── Selector de canal (¿POR DÓNDE le llega?) ──
+// ── Selector de canal (¿POR DÓNDE le llega?) — solo en MÁS OPCIONES ──
 function ChannelPicker({ value, onChange }: { value: Channel; onChange: (c: Channel) => void }) {
   const opts: Channel[] = ["push", "email", "both"];
   return (
     <div>
-      <span className="block text-[11px] font-extrabold text-slate-300 uppercase mb-1.5">¿Por dónde le llega?</span>
+      <span className="block text-[11px] font-extrabold text-slate-300 uppercase mb-1.5">¿Por dónde?</span>
       <div className="flex gap-1">
         {opts.map(c => (
           <button key={c} type="button" onClick={() => onChange(c)}
             className={`flex-1 text-[10px] px-2 py-1.5 rounded font-bold transition ${value === c ? "bg-[#2E5D3A] text-white ring-1 ring-emerald-400" : "bg-slate-800 hover:bg-slate-700 text-slate-300"}`}>
-            {CHANNEL_LABEL[c]}
+            {CHANNEL_SHORT[c]}
           </button>
         ))}
       </div>
+      <p className="text-[9px] text-slate-500 mt-1 leading-tight">
+        📱 = a los móviles activados de cada usuario · ✉️ = al correo de cada usuario
+      </p>
     </div>
   );
 }
@@ -172,9 +163,10 @@ function AlertRulesPanel() {
   const [emailOk, setEmailOk] = useState(false);
   const [keyword, setKeyword] = useState("");
   const [days, setDays] = useState("1");
+  const [showAdv, setShowAdv] = useState(false);
   const [recAll, setRecAll] = useState(true);
   const [recSel, setRecSel] = useState<Set<string>>(new Set());
-  const [channel, setChannel] = useState<Channel>("both");
+  const [channel, setChannel] = useState<Channel>("push");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   // Edición de una regla existente
@@ -223,7 +215,7 @@ function AlertRulesPanel() {
       const perm = await Notification.requestPermission();
       if (perm !== "granted") {
         setNotif("denied");
-        setMsg("⛔ Permiso de notificaciones denegado. Actívalo en los ajustes del navegador.");
+        setMsg("⛔ Permiso denegado. Vuelve a intentarlo o actívalo en los ajustes del navegador.");
         return;
       }
       await navigator.serviceWorker.register("/sw.js");
@@ -245,10 +237,10 @@ function AlertRulesPanel() {
       });
       if (!res.ok) throw new Error("fallo guardado");
       setNotif("subscribed");
-      setMsg("✅ MÓVIL REGISTRADO — este dispositivo queda a nombre de tu usuario y aparecerá en la lista de móviles");
+      setMsg("✅ ¡LISTO! Este móvil ya recibe avisos.");
       await load();
     } catch {
-      setMsg("⚠️ No se pudo activar. En iPhone: añade primero la app a la pantalla de inicio (Compartir → Añadir a inicio) y vuelve aquí.");
+      setMsg("⚠️ No se pudo activar aquí. En iPhone: primero añade la app a la pantalla de inicio (ver instrucciones) y abre MURAL desde ese icono.");
     } finally {
       setBusy(false);
     }
@@ -264,7 +256,7 @@ function AlertRulesPanel() {
   };
 
   const addRule = async () => {
-    if (!keyword.trim()) { setMsg("Escribe la palabra o texto a vigilar"); return; }
+    if (!keyword.trim()) { setMsg("Escribe la palabra a vigilar (la que pondrás en las notas)"); return; }
     if (!recAll && recSel.size === 0) { setMsg("Elige al menos un usuario (o pulsa TODOS)"); return; }
     setBusy(true); setMsg("");
     try {
@@ -283,9 +275,9 @@ function AlertRulesPanel() {
         setDays("1");
         setRecAll(true);
         setRecSel(new Set());
-        setChannel("both");
+        setChannel("push");
         await load();
-        setMsg("✅ Aviso programado creado");
+        setMsg("✅ Aviso creado. Pon esa palabra en la nota de la tarjeta y llegará solo.");
       } else {
         const j = await res.json().catch(() => ({}));
         setMsg(j.error || "Error al crear");
@@ -336,164 +328,173 @@ function AlertRulesPanel() {
   };
 
   const deleteRule = async (r: AlertRule) => {
-    if (!confirm(`¿Borrar el aviso programado «${r.keyword}»?`)) return;
+    if (!confirm(`¿Borrar el aviso «${r.keyword}»?`)) return;
     setRules(prev => prev.filter(x => x.id !== r.id));
     await fetch(`/api/company/alert-rules/${r.id}`, { method: "DELETE" }).catch(() => {});
   };
 
-  const namesOf = (r: AlertRule): string => {
-    const ids = (r.recipients || "").split(",").map(s => s.trim()).filter(Boolean);
-    if (ids.length === 0) return "TODOS";
-    return ids.map(id => {
+  const namesOfSel = (ids: string[]): string =>
+    ids.map(id => {
       const u = users.find(x => x.id === id);
       return u ? u.name.split(" ").slice(0, 2).join(" ") : "usuario";
     }).join(", ");
+
+  const namesOf = (r: AlertRule): string => {
+    const ids = (r.recipients || "").split(",").map(s => s.trim()).filter(Boolean);
+    if (ids.length === 0) return "TODOS";
+    return namesOfSel(ids);
   };
 
   const notifLabel = {
-    checking: "Comprobando…",
-    unsupported: "Este navegador no soporta notificaciones push",
-    denied: "⛔ Notificaciones BLOQUEADAS en este navegador (ajustes del navegador)",
-    off: "Notificaciones NO activadas en este dispositivo",
-    subscribed: "✅ Notificaciones ACTIVADAS en este dispositivo",
+    checking: "Comprobando este dispositivo…",
+    unsupported: "Este navegador no permite activarlo AQUÍ (en iPhone: añade la app a la pantalla de inicio y ábrela desde el icono; en PC: Chrome o Edge)",
+    denied: "⛔ BLOQUEADO en este navegador: Ajustes → Notificaciones → permitir esta web",
+    off: "⚠️ Este dispositivo AÚN NO recibe avisos",
+    subscribed: "✅ Este dispositivo YA recibe avisos",
   }[notif];
+
+  const createSummary = `${channelLabel(channel)} · para: ${recAll ? "TODOS" : namesOfSel([...recSel])}`;
 
   return (
     <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-3 sm:p-4">
+      {/* ── Cabecera ── */}
       <button onClick={() => setOpen(v => !v)} className="w-full flex items-center gap-3 text-left">
         <span className="text-2xl">🔔</span>
         <span className="flex-1 min-w-0">
-          <span className="block font-bold text-white text-sm">Avisos programados (móvil y correo)</span>
-          <span className="block text-xs text-slate-400">Cuando en las NOTAS de una tarjeta o aviso salga una palabra, avisamos X días antes. Eliges a quién y por dónde (móvil / correo / ambos).</span>
+          <span className="block font-bold text-white text-sm">Avisos al móvil</span>
+          <span className="block text-xs text-slate-400">① Activa tu móvil · ② Crea el aviso · ③ Llega solo, cada día a las 10:00</span>
         </span>
         <span className="text-slate-400">{open ? "▲" : "▼"}</span>
       </button>
 
       {open && (
         <div className="mt-3 space-y-3">
-          {/* ── 0) Cómo funciona ── */}
-          <div className="bg-slate-900/60 border border-blue-600/30 rounded-lg p-3 space-y-1.5">
-            <div className="text-[11px] font-extrabold text-blue-400 uppercase">¿Cómo funciona? ¿A quién llega, por dónde y qué mensaje?</div>
-            <p className="text-[11px] text-slate-300 leading-relaxed">
-              <span className="font-bold text-white">👤 ¿A quién?</span> En cada aviso eliges los usuarios que lo reciben (o TODOS). Están todos los de MI EMPRESA.
-            </p>
-            <p className="text-[11px] text-slate-300 leading-relaxed">
-              <span className="font-bold text-white">📱 ¿Cómo se METE un móvil?</span> No se puede meter desde aquí: hay que abrir la app EN ese móvil, entrar con su usuario y pulsar
-              <span className="font-bold text-[#6BBE7A]"> 🔔 ACTIVAR AQUÍ</span>. Ese móvil queda registrado a nombre de ese usuario y aparece en la lista de móviles de abajo. Sin ese paso, al móvil no puede llegar nada.
-            </p>
-            <p className="text-[11px] text-slate-300 leading-relaxed">
-              <span className="font-bold text-white">📱 Móvil:</span> llega en los móviles/PC donde CADA usuario pulsó
-              <span className="font-bold text-[#6BBE7A]"> 🔔 ACTIVAR AQUÍ</span> (cada dispositivo queda vinculado a su usuario).
-              <span className="font-bold text-white"> ✉️ Correo:</span> llega a la dirección de correo de cada usuario elegido.
-              {emailOk
-                ? <span className="text-emerald-400 font-bold"> El envío de correo está ACTIVADO en el servidor ✓</span>
-                : <span className="text-amber-400 font-bold"> ⚠️ El envío de correo NO está configurado aún en el servidor (Resend): los correos quedan en cola hasta activarlo.</span>}
-            </p>
-            <p className="text-[11px] text-slate-300 leading-relaxed">
-              <span className="font-bold text-white">📝 ¿Qué mensaje?</span> Ejemplo: <span className="text-amber-400 font-bold">«CIRUGÍA — MAÑANA»</span> con la fecha, la sede, el turno y el texto de la nota. Cada tarjeta se avisa UNA sola vez.
-              <span className="font-bold text-white"> ⏰ ¿Cuándo?</span> Cada día a las 10:00 (hora España).
-            </p>
-          </div>
 
-          {/* ── 1) Notificaciones en este dispositivo ── */}
-          <div className="bg-slate-900/60 border border-slate-700 rounded-lg p-3 space-y-2">
-            <div className="text-[11px] font-extrabold text-blue-400 uppercase">1 · Notificaciones en este móvil / PC</div>
+          {/* ════════ PASO 1 · ACTIVA TU MÓVIL ════════ */}
+          <div className={`rounded-lg p-3 border space-y-2 ${notif === "subscribed" ? "border-emerald-600/40 bg-emerald-900/10" : "border-amber-500/40 bg-amber-500/5"}`}>
+            <div className="text-xs font-black uppercase tracking-wide">
+              <span className={notif === "subscribed" ? "text-emerald-400" : "text-amber-400"}>① Activa tu móvil</span>
+              <span className="text-slate-500 font-bold"> — UNA sola vez, en cada móvil</span>
+            </div>
+
             <p className={`text-xs font-bold ${notif === "subscribed" ? "text-[#6BBE7A]" : notif === "denied" || notif === "unsupported" ? "text-red-400" : "text-amber-400"}`}>
               {notifLabel}
             </p>
-            <div className="flex gap-2 flex-wrap">
-              {notif !== "subscribed" && notif !== "unsupported" && (
-                <button onClick={enableNotif} disabled={busy}
-                  className="bg-[#2E5D3A] hover:bg-[#3a7a4c] disabled:opacity-40 text-white text-xs font-black px-3 py-2 rounded-lg transition">
-                  🔔 ACTIVAR AQUÍ
-                </button>
-              )}
-              <button onClick={sendTest} disabled={busy || notif !== "subscribed"}
-                className="bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-white text-xs font-bold px-3 py-2 rounded-lg transition"
-                title="Enviar una notificación de prueba a todos los dispositivos">
-                📤 ENVIAR PRUEBA
-              </button>
-            </div>
-            {msg && <p className="text-[11px] text-amber-400 font-bold">{msg}</p>}
 
-            {/* ── Móviles registrados ── */}
-            <div className="pt-1">
-              <div className="text-[11px] font-extrabold text-slate-300 uppercase mb-1">
-                📱 Móviles registrados ({devices.length})
+            {(notif === "off" || notif === "denied") && (
+              <button onClick={enableNotif} disabled={busy}
+                className="w-full bg-[#2E5D3A] hover:bg-[#3a7a4c] disabled:opacity-40 text-white text-sm font-black px-4 py-3 rounded-lg transition">
+                🔔 ACTIVAR AQUÍ
+              </button>
+            )}
+
+            {/* Instrucciones SIEMPRE visibles */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="bg-slate-900/60 border border-slate-700 rounded p-2">
+                <div className="text-[10px] font-black text-slate-200 mb-1">🤖 ANDROID (Chrome)</div>
+                <ol className="text-[10px] text-slate-400 leading-snug list-decimal ml-3.5 space-y-0.5">
+                  <li>Abre la app <b className="text-slate-200">en el móvil</b></li>
+                  <li>Entra con tu usuario</li>
+                  <li>CONFIGURACIÓN → <b className="text-[#6BBE7A]">🔔 ACTIVAR AQUÍ</b></li>
+                  <li>Pulsa <b className="text-slate-200">Permitir</b></li>
+                </ol>
+              </div>
+              <div className="bg-slate-900/60 border border-slate-700 rounded p-2">
+                <div className="text-[10px] font-black text-slate-200 mb-1">🍎 IPHONE (Safari)</div>
+                <ol className="text-[10px] text-slate-400 leading-snug list-decimal ml-3.5 space-y-0.5">
+                  <li>Abre la app en <b className="text-slate-200">Safari</b></li>
+                  <li>Compartir ⬆️ → <b className="text-slate-200">Añadir a inicio</b></li>
+                  <li>Abre MURAL <b className="text-slate-200">desde el icono nuevo</b></li>
+                  <li><b className="text-[#6BBE7A]">🔔 ACTIVAR AQUÍ</b> → Permitir</li>
+                </ol>
+              </div>
+            </div>
+
+            {/* Móviles activados */}
+            <div>
+              <div className="text-[10px] font-black text-slate-300 uppercase mb-1">
+                Móviles activados: {devices.length}
               </div>
               {devices.length === 0 ? (
-                <div className="bg-red-600/10 border border-red-600/40 rounded-lg p-2.5">
-                  <p className="text-[11px] font-bold text-red-400 leading-snug">
-                    ⚠️ NO HAY NINGÚN MÓVIL REGISTRADO: de momento las notificaciones al móvil NO pueden llegar a nadie (solo el ✉️ correo).
-                  </p>
-                  <p className="text-[10px] text-slate-400 leading-snug mt-1">
-                    Para METER un móvil: abre la app en ese móvil con su usuario → CONFIGURACIÓN → pulsa 🔔 ACTIVAR AQUÍ. En iPhone hay que añadir antes la app a la pantalla de inicio.
-                  </p>
-                </div>
+                <p className="text-[10px] font-bold text-red-400 leading-snug">
+                  ⚠️ Aún no hay NINGÚN móvil activado → hasta que no hagas el PASO ① en un móvil, no puede llegar nada.
+                </p>
               ) : (
-                <div className="bg-slate-900/60 border border-slate-700 rounded p-2 space-y-1">
-                  {devices.map((d, i) => (
-                    <div key={d.id} className="flex items-center gap-2 px-1 py-0.5">
-                      <span className="text-[10px] text-slate-500 w-4 shrink-0">{i + 1}.</span>
-                      <span className="text-[11px] font-bold text-white truncate">{d.userName}</span>
-                      <span className="text-[9px] text-slate-400 truncate">{deviceType(d.userAgent)}</span>
-                      <span className="text-[9px] text-slate-500 ml-auto shrink-0">
-                        {d.createdAt ? new Date(d.createdAt).toLocaleDateString("es-ES") : ""}
-                      </span>
+                <div className="bg-slate-900/60 border border-slate-700 rounded p-2 space-y-0.5">
+                  {devices.map(d => (
+                    <div key={d.id} className="text-[10px] text-slate-400 leading-snug">
+                      📱 <span className="font-bold text-white">{d.userName}</span>
+                      {" · "}{deviceType(d.userAgent)}
+                      {" · "}{d.createdAt ? new Date(d.createdAt).toLocaleDateString("es-ES") : ""}
                     </div>
                   ))}
-                  <p className="text-[9px] text-slate-500 leading-tight px-1 pt-0.5">
-                    Los avisos 📱 llegan a estos móviles según el usuario elegido en cada aviso. Para añadir otro móvil: repite 🔔 ACTIVAR AQUÍ en ese dispositivo.
-                  </p>
                 </div>
               )}
             </div>
+
+            <div className="flex items-center gap-2">
+              <button onClick={sendTest} disabled={busy || devices.length === 0}
+                className="bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-white text-[10px] font-bold px-3 py-2 rounded-lg transition"
+                title="Enviar una notificación de prueba a TODOS los móviles activados">
+                📤 ENVIAR PRUEBA
+              </button>
+              <span className="text-[9px] text-slate-500 leading-tight">comprueba que llega de verdad al móvil</span>
+            </div>
+
+            {msg && <p className="text-[11px] text-amber-400 font-bold">{msg}</p>}
           </div>
 
-          {/* ── 2) Crear aviso programado ── */}
-          <div className="bg-slate-900/60 border border-slate-700 rounded-lg p-3 space-y-3">
-            <div className="text-[11px] font-extrabold text-blue-400 uppercase">2 · Crear aviso programado</div>
-            <div className="flex flex-col sm:flex-row gap-2">
+          {/* ════════ PASO 2 · CREA UN AVISO ════════ */}
+          <div className="bg-slate-900/60 border border-slate-700 rounded-lg p-3 space-y-2">
+            <div className="text-xs font-black text-blue-400 uppercase">② Crea un aviso</div>
+            <p className="text-[10px] text-slate-400 leading-snug">
+              Pon una <b className="text-slate-200">palabra</b> (p. ej. CIRUGÍA) en la nota de una tarjeta: si faltan <b className="text-slate-200">X días</b> para su fecha, llega el aviso.
+            </p>
+            <div className="flex items-center gap-2">
               <input
                 value={keyword}
                 onChange={e => setKeyword(e.target.value)}
-                placeholder="Palabra o texto en notas (p. ej. REUNIÓN)"
-                className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm placeholder:text-slate-500"
+                placeholder="PALABRA"
+                className="flex-1 min-w-0 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm placeholder:text-slate-500 uppercase"
               />
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-slate-400 font-bold uppercase whitespace-nowrap">Avisar</span>
-                <input
-                  type="number" min={0} max={365} value={days}
-                  onChange={e => setDays(e.target.value)}
-                  className="w-16 bg-slate-800 border border-slate-600 rounded-lg px-2 py-2 text-white text-sm text-center"
+              <input
+                type="number" min={0} max={365} value={days}
+                onChange={e => setDays(e.target.value)}
+                className="w-14 bg-slate-800 border border-slate-600 rounded-lg px-2 py-2 text-white text-sm text-center shrink-0"
+              />
+              <span className="text-[10px] text-slate-400 font-bold whitespace-nowrap">días antes</span>
+            </div>
+            <button onClick={addRule} disabled={busy}
+              className="w-full bg-[#2E5D3A] hover:bg-[#3a7a4c] disabled:opacity-40 text-white text-sm font-black px-4 py-3 rounded-lg transition">
+              ➕ CREAR AVISO
+            </button>
+            <p className="text-[9px] text-slate-500 text-center">Llegará por {createSummary}</p>
+
+            <button type="button" onClick={() => setShowAdv(v => !v)}
+              className="text-[10px] text-blue-400 font-black hover:text-blue-300">
+              {showAdv ? "▲ Ocultar opciones" : "▼ Cambiar a quién y por dónde"}
+            </button>
+            {showAdv && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-700">
+                <RecipientsPicker
+                  users={users} devices={devices} all={recAll} selected={recSel}
+                  onSetAll={v => { setRecAll(v); if (v) setRecSel(new Set()); }}
+                  onToggle={id => setRecSel(prev => {
+                    const n = new Set(prev);
+                    if (n.has(id)) n.delete(id); else n.add(id);
+                    return n;
+                  })}
                 />
-                <span className="text-[10px] text-slate-400 font-bold whitespace-nowrap">días antes</span>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <RecipientsPicker
-                users={users} devices={devices} all={recAll} selected={recSel}
-                onSetAll={v => { setRecAll(v); if (v) setRecSel(new Set()); }}
-                onToggle={id => setRecSel(prev => {
-                  const n = new Set(prev);
-                  if (n.has(id)) n.delete(id); else n.add(id);
-                  return n;
-                })}
-              />
-              <div className="space-y-2">
                 <ChannelPicker value={channel} onChange={setChannel} />
-                <button onClick={addRule} disabled={busy}
-                  className="w-full bg-[#2E5D3A] hover:bg-[#3a7a4c] disabled:opacity-40 text-white text-xs font-black px-4 py-2.5 rounded-lg transition">
-                  ➕ AÑADIR AVISO
-                </button>
               </div>
-            </div>
+            )}
           </div>
 
-          {/* ── 3) Lista de avisos programados ── */}
+          {/* ════════ PASO 3 · TUS AVISOS ════════ */}
           <div className="space-y-1">
+            <div className="text-xs font-black text-blue-400 uppercase px-1">③ Tus avisos ({rules.length})</div>
             {rules.length === 0 && (
-              <p className="text-xs text-slate-500 py-3 text-center">No hay avisos programados todavía.</p>
+              <p className="text-xs text-slate-500 py-2 text-center">Todavía no hay ninguno. Crea el primero en el PASO ② ↑</p>
             )}
             {rules.map(r => {
               const editing = editingId === r.id;
@@ -504,26 +505,26 @@ function AlertRulesPanel() {
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-black text-white truncate">“{r.keyword}”</div>
                       <div className="text-[10px] text-slate-400 truncate">
-                        {r.daysBefore === 0 ? "El mismo día" : `${r.daysBefore} día(s) antes`} · {channelLabel(r.channel)} · para: {namesOf(r)} · {r.enabled ? "activo" : "pausado"}
+                        {r.daysBefore === 0 ? "El mismo día" : `${r.daysBefore} día(s) antes`} · {channelLabel(r.channel)} · {namesOf(r)}{r.enabled ? "" : " · ⏸ pausado"}
                       </div>
                     </div>
                     <button
                       onClick={() => (editing ? setEditingId(null) : startEdit(r))}
                       className="shrink-0 bg-slate-700 hover:bg-slate-600 text-slate-200 text-[10px] font-black px-2.5 py-1.5 rounded-lg transition"
-                      title="Cambiar a quién le llega y por dónde">
-                      {editing ? "▲ CERRAR" : "✏️ CAMBIAR"}
+                      title="Cambiar días, a quién y por dónde">
+                      {editing ? "▲" : "✏️"}
                     </button>
                     <button
                       onClick={() => toggleRule(r)}
                       className={`shrink-0 text-[10px] font-black px-2.5 py-1.5 rounded-lg transition ${r.enabled ? "bg-slate-700 hover:bg-slate-600 text-slate-300" : "bg-[#2E5D3A] hover:bg-[#3a7a4c] text-white"}`}
-                      title={r.enabled ? "Pausar este aviso" : "Reactivar este aviso"}
+                      title={r.enabled ? "Pausar" : "Reactivar"}
                     >
                       {r.enabled ? "⏸" : "▶"}
                     </button>
                     <button
                       onClick={() => deleteRule(r)}
                       className="shrink-0 bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white text-xs font-bold w-8 h-8 rounded-lg transition"
-                      title="Borrar este aviso programado"
+                      title="Borrar"
                     >
                       🗑
                     </button>
@@ -554,7 +555,7 @@ function AlertRulesPanel() {
                           <ChannelPicker value={editChannel} onChange={setEditChannel} />
                           <button onClick={() => saveEdit(r)} disabled={busy}
                             className="w-full bg-[#2E5D3A] hover:bg-[#3a7a4c] disabled:opacity-40 text-white text-xs font-black px-4 py-2.5 rounded-lg transition">
-                            💾 GUARDAR CAMBIOS
+                            💾 GUARDAR
                           </button>
                         </div>
                       </div>
@@ -564,6 +565,12 @@ function AlertRulesPanel() {
               );
             })}
           </div>
+
+          {/* ── Pie: qué mensaje llega ── */}
+          <p className="text-[10px] text-slate-500 leading-snug px-1">
+            ⏰ Cada día a las 10:00 (hora España) se revisan las notas. El aviso llega así: <b className="text-slate-400">«CIRUGÍA — faltan 3 días · 12/10 · Clínica Sur · Mañana»</b> + el texto de la nota. Cada tarjeta avisa UNA sola vez.
+            {!emailOk && " ✉️ El correo aún no sale del servidor: de momento solo llega al 📱 móvil."}
+          </p>
         </div>
       )}
     </div>
