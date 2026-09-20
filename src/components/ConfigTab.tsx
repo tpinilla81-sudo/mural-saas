@@ -32,6 +32,7 @@ interface DeviceRow {
   userName: string;
   userAgent: string;
   createdAt: string;
+  enabled?: boolean; // false = campana DESACTIVADA en ese dispositivo (🔔 tachada)
 }
 
 function deviceType(ua: string): string {
@@ -451,7 +452,10 @@ function AlertRulesPanel() {
             {/* Móviles activados */}
             <div>
               <div className="text-[10px] font-black text-slate-300 uppercase mb-1">
-                Móviles activados: {devices.length}
+                Móviles activados: {devices.filter(d => d.enabled !== false).length}
+                {devices.some(d => d.enabled === false) && (
+                  <span className="text-slate-500 normal-case font-bold"> · con 🔕 = campana desactivada en ese móvil</span>
+                )}
               </div>
               {devices.length === 0 ? (
                 <p className="text-[10px] font-bold text-red-400 leading-snug">
@@ -460,10 +464,11 @@ function AlertRulesPanel() {
               ) : (
                 <div className="bg-slate-900/60 border border-slate-700 rounded p-2 space-y-0.5">
                   {devices.map(d => (
-                    <div key={d.id} className="text-[10px] text-slate-400 leading-snug">
-                      📱 <span className="font-bold text-white">{d.userName}</span>
+                    <div key={d.id} className={`text-[10px] leading-snug ${d.enabled === false ? "text-slate-600" : "text-slate-400"}`}>
+                      {d.enabled === false ? "🔕" : "📱"} <span className={`font-bold ${d.enabled === false ? "text-slate-500" : "text-white"}`}>{d.userName}</span>
                       {" · "}{deviceType(d.userAgent)}
                       {" · "}{d.createdAt ? new Date(d.createdAt).toLocaleDateString("es-ES") : ""}
+                      {d.enabled === false && <span className="font-bold"> · DESACTIVADO (toque la campana para activar)</span>}
                     </div>
                   ))}
                 </div>
@@ -471,7 +476,7 @@ function AlertRulesPanel() {
             </div>
 
             <div className="flex items-center gap-2">
-              <button onClick={sendTest} disabled={busy || devices.length === 0}
+              <button onClick={sendTest} disabled={busy || devices.filter(d => d.enabled !== false).length === 0}
                 className="bg-slate-700 hover:bg-slate-600 disabled:opacity-40 text-white text-[10px] font-bold px-3 py-2 rounded-lg transition"
                 title="Enviar una notificación de prueba a TODOS los móviles activados">
                 📤 ENVIAR PRUEBA

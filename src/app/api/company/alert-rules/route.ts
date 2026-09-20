@@ -31,7 +31,7 @@ export async function GET() {
     // TODOS los móviles registrados (cada uno queda a nombre del usuario
 // que pulsó 🔔 ACTIVAR AQUÍ en ese dispositivo)
     db.pushSub.findMany({
-      select: { id: true, userId: true, userAgent: true, createdAt: true },
+      select: { id: true, userId: true, userAgent: true, createdAt: true, enabled: true },
       orderBy: { createdAt: "desc" },
     }),
   ]);
@@ -42,6 +42,7 @@ export async function GET() {
     userName: s.userId ? nameOf.get(s.userId) || "Usuario" : "Sin usuario",
     userAgent: s.userAgent,
     createdAt: s.createdAt,
+    enabled: s.enabled,
   }));
   return NextResponse.json({
     rules,

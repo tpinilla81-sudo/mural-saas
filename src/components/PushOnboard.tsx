@@ -55,6 +55,7 @@ interface EnvInfo {
   hasPush: boolean;
   perm: "default" | "granted" | "denied" | "unknown";
   subscribed: boolean;
+  enabled: boolean; // estado de la CAMPANA en el servidor (false = desactivada en este dispositivo)
 }
 
 const DAY = 24 * 3600 * 1000;
@@ -75,15 +76,27 @@ async function evaluate(): Promise<EnvInfo> {
   const hasPush = "Notification" in window && "PushManager" in window && "serviceWorker" in navigator;
   let perm: EnvInfo["perm"] = "unknown";
   let subscribed = false;
+  let enabled = true;
   if (hasPush) {
     try {
       perm = Notification.permission;
       const reg = await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.getSubscription();
       subscribed = !!(sub && perm === "granted");
+      if (sub) {
+        // ¿La campana está desactivada para este dispositivo? (🔔 tachada)
+        try {
+          const r = await fetch(`/api/company/push/state?endpoint=${encodeURIComponent(sub.endpoint)}`);
+          if (r.ok) {
+            const j = await r.json();
+            if (j.exists) enabled = !!j.enabled;
+            else subscribed = false; // el servidor no lo conoce → hay que (re)registrar
+          }
+        } catch { /* sin respuesta: no bloqueamos */ }
+      }
     } catch { /* noop */ }
   }
-  return { ios, standalone, hasPush, perm, subscribed };
+  return { ios, standalone, hasPush, perm, subscribed, enabled };
 }
 
 function decide(e: EnvInfo): Mode {
@@ -136,7 +149,11 @@ export default function PushOnboard() {
       setEnvInfo(e);
       const m = decide(e);
       if (m === "hidden") {
-        if (manual) setToast("✅ Este dispositivo YA recibe avisos.");
+        if (manual) {
+          setToast(e.enabled
+            ? "✅ Este dispositivo YA recibe avisos."
+            : "🔕 Las notificaciones están DESACTIVADAS: toca la campana de la barra para activarlas.");
+        }
         setTimeout(() => setToast(""), 5000);
         setMode("hidden");
         return;
@@ -219,6 +236,7 @@ export default function PushOnboard() {
       });
       if (!res.ok) throw new Error(`el servidor rechazó el registro (HTTP ${res.status})`);
       report(envInfo, "OK registrado ✓");
+      window.dispatchEvent(new Event("push-state:changed")); // la campana pasa a ACTIVADA
       setToast("✅ ¡LISTO! Este móvil ya recibe avisos.");
       setTimeout(() => setToast(""), 6000);
       setMode("hidden"); setAsModal(false);

@@ -24,23 +24,50 @@ export interface PushPayload {
   body: string;
   url?: string;
   tag?: string;
+  source?: string; // plan | aviso | inline | prueba (para la bandeja del sobre 📩)
 }
 
-/** Envía un push a TODOS los dispositivos suscritos. Devuelve cuántos recibieron. */
+// Cada aviso enviado deja COPÍA en la bandeja interna del usuario
+// (sobre 📩 de la barra): así los ve aunque el push no llegue o la
+// campana esté desactivada en ese dispositivo.
+async function createInbox(userIds: string[], payload: PushPayload): Promise<void> {
+  const ids = Array.from(new Set((userIds || []).filter(Boolean)));
+  if (ids.length === 0) return;
+  try {
+    await db.inboxMessage.createMany({
+      data: ids.map((uid) => ({
+        userId: uid,
+        title: payload.title,
+        body: payload.body,
+        url: payload.url || "/",
+        source: payload.source || "",
+      })),
+    });
+  } catch { /* la bandeja nunca debe romper el envío */ }
+}
+
+/** Envía un push a TODOS los dispositivos suscritos Y ACTIVADOS. Devuelve cuántos recibieron. */
 export async function sendPushToAll(payload: PushPayload): Promise<number> {
   const vapid = await getVapid();
   webpush.setVapidDetails("mailto:aviso@mural.app", vapid.publicKey, vapid.privateKey);
-  const subs = await db.pushSub.findMany();
+  const [subs, users] = await Promise.all([
+    db.pushSub.findMany({ where: { enabled: true } }),
+    db.user.findMany({ where: { isActive: true, role: { not: "SUPER_ADMIN" } }, select: { id: true } }),
+  ]);
+  await createInbox(users.map((u) => u.id), payload);
   return deliver(subs, payload);
 }
 
-/** Envía un push SOLO a los dispositivos de los usuarios indicados (User.id). */
+/** Envía un push SOLO a los dispositivos ACTIVADOS de los usuarios indicados (User.id). */
 export async function sendPushToUsers(userIds: string[], payload: PushPayload): Promise<number> {
   const ids = (userIds || []).filter(Boolean);
   if (ids.length === 0) return 0;
   const vapid = await getVapid();
   webpush.setVapidDetails("mailto:aviso@mural.app", vapid.publicKey, vapid.privateKey);
-  const subs = await db.pushSub.findMany({ where: { userId: { in: ids } } });
+  const [subs] = await Promise.all([
+    db.pushSub.findMany({ where: { userId: { in: ids }, enabled: true } }),
+    createInbox(ids, payload),
+  ]);
   return deliver(subs, payload);
 }
 

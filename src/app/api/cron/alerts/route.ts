@@ -120,8 +120,8 @@ export async function GET() {
       let n = 0;
       if (doPush) {
         n += rule.recipients
-          ? await sendPushToUsers(userIds, { title, body, url: cardUrl("plan", p.id, p.date), tag: `alert-${rule.id}-${p.id}` })
-          : await sendPushToAll({ title, body, url: cardUrl("plan", p.id, p.date), tag: `alert-${rule.id}-${p.id}` });
+          ? await sendPushToUsers(userIds, { title, body, url: cardUrl("plan", p.id, p.date), tag: `alert-${rule.id}-${p.id}`, source: "plan" })
+          : await sendPushToAll({ title, body, url: cardUrl("plan", p.id, p.date), tag: `alert-${rule.id}-${p.id}`, source: "plan" });
       }
       if (doEmail) {
         const email = await sendEmailToUsers(userIds, {
@@ -164,8 +164,8 @@ export async function GET() {
       let n = 0;
       if (doPush) {
         n += rule.recipients
-          ? await sendPushToUsers(userIds, { title, body, url: cardUrl("aviso", a.id, a.date), tag: `alert-${rule.id}-${a.id}` })
-          : await sendPushToAll({ title, body, url: cardUrl("aviso", a.id, a.date), tag: `alert-${rule.id}-${a.id}` });
+          ? await sendPushToUsers(userIds, { title, body, url: cardUrl("aviso", a.id, a.date), tag: `alert-${rule.id}-${a.id}`, source: "aviso" })
+          : await sendPushToAll({ title, body, url: cardUrl("aviso", a.id, a.date), tag: `alert-${rule.id}-${a.id}`, source: "aviso" });
       }
       if (doEmail) {
         const email = await sendEmailToUsers(userIds, {
@@ -208,6 +208,7 @@ export async function GET() {
       body: `${p.sede?.name || "sede"} · ${p.professionalAlias || "—"} · ${labelDate(p.date)} ${p.turn === "MANANA" ? "Mañana" : "Tarde"} — ${stripInline(p.notes)}`.trim(),
       url: cardUrl("plan", p.id, p.date),
       tag: `inline-${p.id}`,
+      source: "inline",
     });
     await db.alertSent.create({ data: { source: "plan", sourceId: p.id, ruleId: "inline", targetDate: p.date } });
     sent += nSent;
@@ -235,6 +236,7 @@ export async function GET() {
       body: `${a.sede?.name || "sede"} · ${who} · ${labelDate(a.date)} ${a.turn === "M" ? "Mañana" : "Tarde"} — ${stripInline(a.note)} (ausencia)`.trim(),
       url: cardUrl("aviso", a.id, a.date),
       tag: `inline-${a.id}`,
+      source: "inline",
     });
     await db.alertSent.create({ data: { source: "aviso", sourceId: a.id, ruleId: "inline", targetDate: a.date } });
     sent += nSent;

@@ -23,6 +23,7 @@ export async function POST() {
       body: `Sede Parsen · Dr. García · ${fecha} Tarde — Blefaroplastias, quirófano 2 (ejemplo)`,
       url: "/",
       tag: "prueba",
+      source: "prueba",
     });
     if (sent === 0) {
       return NextResponse.json(

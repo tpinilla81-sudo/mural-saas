@@ -488,7 +488,24 @@ model PushSub {
   companyId String?  // empresa desde la que se activó (informativo)
   userId    String?  // usuario que activó ESTE dispositivo (para elegir a quién llega cada aviso)
   userAgent String   @default("")
+  enabled   Boolean  @default(true) // 🔔 campana: false = desactivada en ESTE dispositivo (no le llegan pushes)
   createdAt DateTime @default(now())
+}
+
+// Bandeja interna: cada aviso que se envía queda aquí por usuario,
+// visible en el SOBRE 📩 de la barra superior con contador de no leídos.
+model InboxMessage {
+  id        String    @id @default(cuid())
+  companyId String    @default("")
+  userId    String
+  title     String
+  body      String    @default("")
+  url       String    @default("/")
+  source    String    @default("") // plan | aviso | inline | prueba
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, readAt])
 }
 
 // Dedupe: un (entrada, regla, fecha objetivo) notifica una sola vez
