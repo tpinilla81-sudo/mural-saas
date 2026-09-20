@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { sendPushToUsers } from "@/lib/push";
+import { sendPushToAll, sendPushToUsers } from "@/lib/push";
 import { sendEmailToUsers } from "@/lib/email";
 
 // ═══════════════════════════════════════════════════════════
@@ -11,8 +11,10 @@ import { sendEmailToUsers } from "@/lib/email";
 //      contenga la palabra (sin distinguir mayúsculas).
 //   2. Si faltan ≤ daysBefore días para su fecha (y aún no llegó), envía el
 //      aviso según la CONFIGURACIÓN DE LA REGLA:
-//        · ¿A QUIÉN?  recipients (CSV de User.id; "" = todos los usuarios)
+//        · ¿A QUIÉN?  recipients (CSV de User.id; "" = TODOS)
 //        · ¿POR DÓNDE? channel: push (📱 móvil) | email (✉️ correo) | both
+//          - 📱 con "" (TODOS) → broadcast a TODOS los móviles registrados
+//          - 📱 con usuarios elegidos → solo los móviles de esos usuarios
 //   3. Dedupe: cada (tarjeta, regla) notifica UNA sola vez (tabla AlertSent).
 // Endpoint idempotente: rellamarlo no duplica avisos.
 // ═══════════════════════════════════════════════════════════
@@ -89,7 +91,11 @@ export async function GET() {
       const title = `🔔 ${rule.keyword.toUpperCase()} — ${labelWhen(diff)}`;
       const body = `TARJETA ${labelDate(p.date)} · ${p.sede?.name || "sede"} · ${p.turn === "MANANA" ? "Mañana" : "Tarde"} — ${p.notes || ""}`.trim();
       let n = 0;
-      if (doPush) n += await sendPushToUsers(userIds, { title, body, url: "/", tag: `alert-${rule.id}-${p.id}` });
+      if (doPush) {
+        n += rule.recipients
+          ? await sendPushToUsers(userIds, { title, body, url: "/", tag: `alert-${rule.id}-${p.id}` })
+          : await sendPushToAll({ title, body, url: "/", tag: `alert-${rule.id}-${p.id}` });
+      }
       if (doEmail) {
         const email = await sendEmailToUsers(userIds, {
           companyId: rule.companyId,
@@ -129,7 +135,11 @@ export async function GET() {
       const title = `🔔 ${rule.keyword.toUpperCase()} — ${labelWhen(diff)}`;
       const body = `AVISO ${labelDate(a.date)} · ${a.sede?.name || "sede"} · ${who} · ${a.turn === "M" ? "Mañana" : "Tarde"} — ${a.note || ""}`.trim();
       let n = 0;
-      if (doPush) n += await sendPushToUsers(userIds, { title, body, url: "/", tag: `alert-${rule.id}-${a.id}` });
+      if (doPush) {
+        n += rule.recipients
+          ? await sendPushToUsers(userIds, { title, body, url: "/", tag: `alert-${rule.id}-${a.id}` })
+          : await sendPushToAll({ title, body, url: "/", tag: `alert-${rule.id}-${a.id}` });
+      }
       if (doEmail) {
         const email = await sendEmailToUsers(userIds, {
           companyId: rule.companyId,

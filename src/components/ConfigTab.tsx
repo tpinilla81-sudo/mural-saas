@@ -33,6 +33,29 @@ interface UserRow {
   isActive: boolean;
 }
 
+interface DeviceRow {
+  id: string;
+  userId: string | null;
+  userName: string;
+  userAgent: string;
+  createdAt: string;
+}
+
+function deviceType(ua: string): string {
+  const s = (ua || "").toLowerCase();
+  const os = s.includes("android") ? "Android"
+    : s.includes("iphone") || s.includes("ipad") ? "iPhone/iPad"
+    : s.includes("windows") ? "Windows"
+    : s.includes("mac") ? "Mac"
+    : s.includes("linux") ? "Linux" : "Dispositivo";
+  const br = s.includes("edg/") ? "Edge"
+    : s.includes("opr/") || s.includes("opera") ? "Opera"
+    : s.includes("chrome") ? "Chrome"
+    : s.includes("firefox") ? "Firefox"
+    : s.includes("safari") ? "Safari" : "";
+  return br ? `${os} · ${br}` : os;
+}
+
 type Channel = "push" | "email" | "both";
 
 const CHANNEL_LABEL: Record<Channel, string> = {
@@ -64,14 +87,17 @@ export default function ConfigTab() {
 
 // ── Selector de destinatarios (¿A QUIÉN le llega?) ──
 function RecipientsPicker({
-  users, all, selected, onSetAll, onToggle,
+  users, devices, all, selected, onSetAll, onToggle,
 }: {
   users: UserRow[];
+  devices: DeviceRow[];
   all: boolean;
   selected: Set<string>;
   onSetAll: (v: boolean) => void;
   onToggle: (id: string) => void;
 }) {
+  const devCount = new Map<string, number>();
+  for (const d of devices) if (d.userId) devCount.set(d.userId, (devCount.get(d.userId) || 0) + 1);
   return (
     <div>
       <div className="flex items-center justify-between mb-1.5">
@@ -93,24 +119,28 @@ function RecipientsPicker({
       {!all && (
         <div className="max-h-[150px] overflow-y-auto bg-slate-900/60 border border-slate-700 rounded p-2 space-y-1">
           {users.length === 0 && <p className="text-[10px] text-slate-500 px-1">Cargando usuarios…</p>}
-          {users.map(u => (
-            <label key={u.id} className="flex items-center gap-2 px-1.5 py-1 cursor-pointer hover:bg-slate-800 rounded">
-              <input
-                type="checkbox"
-                checked={selected.has(u.id)}
-                onChange={() => onToggle(u.id)}
-                className="accent-emerald-500 w-3.5 h-3.5 shrink-0"
-              />
-              <span className="text-[11px] font-bold text-white truncate">{u.name}</span>
-              <span className={`text-[9px] truncate ${u.isActive ? "text-emerald-400" : "text-slate-500"}`}>
-                {u.email}{!u.isActive && " · inactivo"}
-              </span>
-            </label>
-          ))}
+          {users.map(u => {
+            const n = devCount.get(u.id) || 0;
+            return (
+              <label key={u.id} className="flex items-center gap-2 px-1.5 py-1 cursor-pointer hover:bg-slate-800 rounded">
+                <input
+                  type="checkbox"
+                  checked={selected.has(u.id)}
+                  onChange={() => onToggle(u.id)}
+                  className="accent-emerald-500 w-3.5 h-3.5 shrink-0"
+                />
+                <span className="text-[11px] font-bold text-white truncate">{u.name}</span>
+                {n > 0 && <span className="text-[9px] bg-emerald-600/20 text-emerald-400 px-1 rounded font-bold shrink-0" title={`${n} móvil(es) activado(s) por este usuario`}>📱×{n}</span>}
+                <span className={`text-[9px] truncate ${u.isActive ? "text-emerald-400" : "text-slate-500"}`}>
+                  {u.email}{!u.isActive && " · inactivo"}
+                </span>
+              </label>
+            );
+          })}
         </div>
       )}
       <p className="text-[9px] text-slate-500 mt-1 leading-tight">
-        La notificación 📱 llega a los móviles que cada usuario activó con 🔔 ACTIVAR AQUÍ; el ✉️ correo llega a la dirección de cada usuario.
+        La notificación 📱 llega a los móviles que cada usuario activó con 🔔 ACTIVAR AQUÍ (los que tienen 📱 ya tienen móvil metido); el ✉️ correo llega a la dirección de cada usuario.
       </p>
     </div>
   );
@@ -138,6 +168,7 @@ function AlertRulesPanel() {
   const [open, setOpen] = useState(true);
   const [rules, setRules] = useState<AlertRule[]>([]);
   const [users, setUsers] = useState<UserRow[]>([]);
+  const [devices, setDevices] = useState<DeviceRow[]>([]);
   const [emailOk, setEmailOk] = useState(false);
   const [keyword, setKeyword] = useState("");
   const [days, setDays] = useState("1");
@@ -162,6 +193,7 @@ function AlertRulesPanel() {
         const j = await res.json();
         setRules(j.rules || []);
         setUsers(j.users || []);
+        setDevices(j.devices || []);
         setEmailOk(!!j.emailConfigured);
       }
     } catch { /* noop */ }
@@ -213,7 +245,8 @@ function AlertRulesPanel() {
       });
       if (!res.ok) throw new Error("fallo guardado");
       setNotif("subscribed");
-      setMsg("✅ Notificaciones activadas en este dispositivo (queda vinculado a tu usuario)");
+      setMsg("✅ MÓVIL REGISTRADO — este dispositivo queda a nombre de tu usuario y aparecerá en la lista de móviles");
+      await load();
     } catch {
       setMsg("⚠️ No se pudo activar. En iPhone: añade primero la app a la pantalla de inicio (Compartir → Añadir a inicio) y vuelve aquí.");
     } finally {
@@ -345,6 +378,10 @@ function AlertRulesPanel() {
               <span className="font-bold text-white">👤 ¿A quién?</span> En cada aviso eliges los usuarios que lo reciben (o TODOS). Están todos los de MI EMPRESA.
             </p>
             <p className="text-[11px] text-slate-300 leading-relaxed">
+              <span className="font-bold text-white">📱 ¿Cómo se METE un móvil?</span> No se puede meter desde aquí: hay que abrir la app EN ese móvil, entrar con su usuario y pulsar
+              <span className="font-bold text-[#6BBE7A]"> 🔔 ACTIVAR AQUÍ</span>. Ese móvil queda registrado a nombre de ese usuario y aparece en la lista de móviles de abajo. Sin ese paso, al móvil no puede llegar nada.
+            </p>
+            <p className="text-[11px] text-slate-300 leading-relaxed">
               <span className="font-bold text-white">📱 Móvil:</span> llega en los móviles/PC donde CADA usuario pulsó
               <span className="font-bold text-[#6BBE7A]"> 🔔 ACTIVAR AQUÍ</span> (cada dispositivo queda vinculado a su usuario).
               <span className="font-bold text-white"> ✉️ Correo:</span> llega a la dirección de correo de cada usuario elegido.
@@ -378,6 +415,39 @@ function AlertRulesPanel() {
               </button>
             </div>
             {msg && <p className="text-[11px] text-amber-400 font-bold">{msg}</p>}
+
+            {/* ── Móviles registrados ── */}
+            <div className="pt-1">
+              <div className="text-[11px] font-extrabold text-slate-300 uppercase mb-1">
+                📱 Móviles registrados ({devices.length})
+              </div>
+              {devices.length === 0 ? (
+                <div className="bg-red-600/10 border border-red-600/40 rounded-lg p-2.5">
+                  <p className="text-[11px] font-bold text-red-400 leading-snug">
+                    ⚠️ NO HAY NINGÚN MÓVIL REGISTRADO: de momento las notificaciones al móvil NO pueden llegar a nadie (solo el ✉️ correo).
+                  </p>
+                  <p className="text-[10px] text-slate-400 leading-snug mt-1">
+                    Para METER un móvil: abre la app en ese móvil con su usuario → CONFIGURACIÓN → pulsa 🔔 ACTIVAR AQUÍ. En iPhone hay que añadir antes la app a la pantalla de inicio.
+                  </p>
+                </div>
+              ) : (
+                <div className="bg-slate-900/60 border border-slate-700 rounded p-2 space-y-1">
+                  {devices.map((d, i) => (
+                    <div key={d.id} className="flex items-center gap-2 px-1 py-0.5">
+                      <span className="text-[10px] text-slate-500 w-4 shrink-0">{i + 1}.</span>
+                      <span className="text-[11px] font-bold text-white truncate">{d.userName}</span>
+                      <span className="text-[9px] text-slate-400 truncate">{deviceType(d.userAgent)}</span>
+                      <span className="text-[9px] text-slate-500 ml-auto shrink-0">
+                        {d.createdAt ? new Date(d.createdAt).toLocaleDateString("es-ES") : ""}
+                      </span>
+                    </div>
+                  ))}
+                  <p className="text-[9px] text-slate-500 leading-tight px-1 pt-0.5">
+                    Los avisos 📱 llegan a estos móviles según el usuario elegido en cada aviso. Para añadir otro móvil: repite 🔔 ACTIVAR AQUÍ en ese dispositivo.
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* ── 2) Crear aviso programado ── */}
@@ -402,7 +472,7 @@ function AlertRulesPanel() {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <RecipientsPicker
-                users={users} all={recAll} selected={recSel}
+                users={users} devices={devices} all={recAll} selected={recSel}
                 onSetAll={v => { setRecAll(v); if (v) setRecSel(new Set()); }}
                 onToggle={id => setRecSel(prev => {
                   const n = new Set(prev);
@@ -472,7 +542,7 @@ function AlertRulesPanel() {
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <RecipientsPicker
-                          users={users} all={editRecAll} selected={editRecSel}
+                          users={users} devices={devices} all={editRecAll} selected={editRecSel}
                           onSetAll={v => { setEditRecAll(v); if (v) setEditRecSel(new Set()); }}
                           onToggle={id => setEditRecSel(prev => {
                             const n = new Set(prev);

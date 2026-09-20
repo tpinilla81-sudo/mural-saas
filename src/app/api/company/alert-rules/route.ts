@@ -5,7 +5,7 @@ import { emailConfigured } from "@/lib/email";
 
 // ═══════════════════════════════════════════════════════════
 // AVISOS PROGRAMADOS — reglas (palabra en notas + días antes)
-// GET  /api/company/alert-rules  → { rules, emailConfigured, users }
+// GET  /api/company/alert-rules  → { rules, emailConfigured, users, devices }
 // POST /api/company/alert-rules  → crear { keyword, daysBefore, recipients, channel }
 // ═══════════════════════════════════════════════════════════
 
@@ -15,7 +15,7 @@ const CHANNELS = ["push", "email", "both"];
 export async function GET() {
   const { error, status, user } = await requireCompanyAdmin();
   if (error || !user) return NextResponse.json({ error }, { status });
-  const [rules, users] = await Promise.all([
+  const [rules, users, subs] = await Promise.all([
     db.alertRule.findMany({
       where: { companyId: user.companyId! },
       orderBy: { createdAt: "desc" },
@@ -28,7 +28,21 @@ export async function GET() {
       },
       orderBy: { name: "asc" },
     }),
+    // TODOS los móviles registrados (cada uno queda a nombre del usuario
+// que pulsó 🔔 ACTIVAR AQUÍ en ese dispositivo)
+    db.pushSub.findMany({
+      select: { id: true, userId: true, userAgent: true, createdAt: true },
+      orderBy: { createdAt: "desc" },
+    }),
   ]);
+  const nameOf = new Map(users.map((u) => [u.id, u.name]));
+  const devices = subs.map((s) => ({
+    id: s.id,
+    userId: s.userId,
+    userName: s.userId ? nameOf.get(s.userId) || "Usuario" : "Sin usuario",
+    userAgent: s.userAgent,
+    createdAt: s.createdAt,
+  }));
   return NextResponse.json({
     rules,
     users: users.map((u) => ({
@@ -38,6 +52,7 @@ export async function GET() {
       role: u.role,
       isActive: u.isActive,
     })),
+    devices,
     emailConfigured: emailConfigured(),
   });
 }
