@@ -1452,3 +1452,18 @@ Work Log:
 
 Stage Summary:
 - El próximo toque de ACTIVAR en su móvil dejará en BD el fallo EXACTO + diagnóstico del dispositivo; podré responder con la solución concreta sin depender de capturas.
+
+---
+Task ID: 43g
+Agent: main
+Task: "ES LO MISMO AÑADIR A INICIO QUE AÑADIR A PANTALLA DE INICIO, EN IPHONE? VUELVE A FALLAR" — diagnóstico remoto definitivo
+
+Work Log:
+- Leí PushErrorLog en Neon (telemetría del 43f funcionó): iPhone iOS 18.7 llegó a "desde-icono | push-ok | perm=granted" (todo lo del cliente BIEN) y falló SOLO en GET /api/company/push/public-key → HTTP 500. También un Android (Chrome 152) con el mismo 500. PushSub seguía 0 en TODOS los intentos históricos.
+- Pista clave: tabla VapidKey VACÍA en Neon → getVapid() nunca había funcionado en producción (ni en el cron de las 08:00).
+- CAUSA RAÍZ: src/lib/push.ts llamaba webpush.generateVapidKeys() — la API real es generateVAPIDKeys() (mayúsculas). TypeError en runtime → 500. Pasó el build porque next.config.ts tiene typescript.ignoreBuildErrors: true.
+- FIX 3bb83f7: generateVAPIDKeys() + textos iOS ahora usan el nombre EXACTO del menú de Safari: «Añadir a pantalla de inicio» (ConfigTab msg+paso 2, PushOnboard ios-home/ios-denied) — responde a la confusión del usuario.
+- VERIFICADO EN PRODUCCIÓN: login real (julio1974@) → public-key HTTP 200 publicKey len=87 ✓; VapidKey id=singleton creada en Neon ✓. El cron diario también queda desbloqueado.
+
+Stage Summary:
+- El fallo nunca fue el móvil del usuario: era el servidor (500 en public-key). Su iPhone ya estaba en el estado perfecto (icono ✓ push ✓ permiso concedido ✓). Al reintentar 🔔 → ACTIVAR → Permitir debería registrarse por fin (PushSub > 0) y 📤 PRUEBA debe llegar.
