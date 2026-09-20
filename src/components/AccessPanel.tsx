@@ -7,8 +7,9 @@
 //   · TODOS los permisos: Diario (ver/editar), Mensual (ver/editar),
 //     Sedes (ver/editar), Solo sus turnos, Solo sus sedes,
 //     Imprimir, Enviar, Avisos por voz
-//   · Vista Mensual: sedes visibles (TODAS/ELEGIR), profesionales visibles
-//     (TODOS/ELEGIR), ver notas, ver vacaciones/ausencias
+//   · Vista Mensual: VER TARJETAS DE OTROS (sedes visibles TODAS/ELEGIR,
+//     profesionales visibles TODOS/ELEGIR, ver vacaciones/ausencias)
+//     y VER NOTAS en un bloque SEPARADO e independiente
 // Guarda vía PUT /api/company/permissions (acepta todos estos campos).
 // ═══════════════════════════════════════════════════════════
 
@@ -277,7 +278,7 @@ export default function AccessPanel() {
           <div className="flex-1 min-w-0">
             <h3 className="font-bold text-white text-sm">Accesos y Permisos por Profesional</h3>
             <p className="text-xs text-slate-400 mt-0.5">
-              Para cada profesional puedes dar acceso con su contraseña y elegir TODO: qué pestañas ve y puede editar, si solo ve sus turnos o sus sedes, si puede imprimir o enviar, qué sedes y qué profesionales salen en su mensual, y si ve notas y vacaciones.
+              Para cada profesional puedes dar acceso con su contraseña y elegir TODO: qué pestañas ve y puede editar, si solo ve sus turnos o sus sedes, si puede imprimir o enviar, y en el mensual qué TARJETAS de otras sedes y otros profesionales ve (y si ve las NOTAS, aparte).
             </p>
           </div>
         </div>
@@ -407,20 +408,20 @@ export default function AccessPanel() {
                       </div>
                     </div>
 
-                    {/* ── Vista Mensual restrictions ── */}
+                    {/* ── VER TARJETAS DE OTROS (visibilidad en el mensual) ── */}
                     <div className="bg-slate-800/60 border border-amber-600/30 rounded-lg p-3">
                       <h4 className="text-xs font-extrabold text-amber-400 uppercase tracking-wider mb-1">
-                        Vista Mensual — qué puede ver este acceso
+                        👁️ Ver tarjetas de otras sedes y otros profesionales
                       </h4>
                       <p className="text-[10px] text-slate-500 mb-3 leading-tight">
-                        Elige de qué sedes y de qué profesionales se ven las tarjetas en el calendario mensual, y si se muestran las notas y las vacaciones/ausencias. Si no marcas nada en una lista, las verá todas.
+                        Elige QUÉ TARJETAS ve este acceso en el calendario mensual: de qué sedes y de qué profesionales. Solo da acceso a VER, no a editar. Si no marcas nada en una lista, las ve todas.
                       </p>
 
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                         {/* Sedes visibility */}
                         <div>
                           <div className="flex items-center justify-between mb-1.5">
-                            <span className="text-[11px] font-extrabold text-slate-300 uppercase">Sedes visibles</span>
+                            <span className="text-[11px] font-extrabold text-slate-300 uppercase">Tarjetas de estas sedes</span>
                             <span className="text-[10px] text-amber-400 font-bold">
                               {draft.vr.sedesAll ? "TODAS" : `${draft.vr.sedes.size} seleccionada(s)`}
                             </span>
@@ -460,7 +461,7 @@ export default function AccessPanel() {
                         {/* Professionals visibility */}
                         <div>
                           <div className="flex items-center justify-between mb-1.5">
-                            <span className="text-[11px] font-extrabold text-slate-300 uppercase">Profesionales visibles</span>
+                            <span className="text-[11px] font-extrabold text-slate-300 uppercase">Tarjetas de estos profesionales</span>
                             <span className="text-[10px] text-amber-400 font-bold">
                               {draft.vr.prosAll ? "TODOS" : `${draft.vr.pros.size} seleccionado(s)`}
                             </span>
@@ -497,21 +498,9 @@ export default function AccessPanel() {
                         </div>
                       </div>
 
-                      {/* Notes / vacaciones toggles */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-3">
-                        <label className={`flex items-center gap-2 px-3 py-2 rounded border cursor-pointer select-none transition ${draft.vr.showNotes ? "bg-amber-500/10 border-amber-500/40" : "bg-slate-900/60 border-slate-700"} ${!draft.canLogin ? "opacity-40 pointer-events-none" : ""}`}>
-                          <input
-                            type="checkbox"
-                            checked={draft.vr.showNotes}
-                            onChange={e => updateDraft(pro.id, { vr: { ...draft.vr, showNotes: e.target.checked } })}
-                            className="h-4 w-4 accent-amber-500"
-                          />
-                          <div>
-                            <div className="text-[11px] font-extrabold text-white">📝 Ver notas</div>
-                            <div className="text-[9px] text-slate-400">Muestra los indicadores y el texto de las notas de las tarjetas</div>
-                          </div>
-                        </label>
-                        <label className={`flex items-center gap-2 px-3 py-2 rounded border cursor-pointer select-none transition ${draft.vr.showVacaciones ? "bg-amber-500/10 border-amber-500/40" : "bg-slate-900/60 border-slate-700"} ${!draft.canLogin ? "opacity-40 pointer-events-none" : ""}`}>
+                      {/* Vacaciones toggle (son TARJETAS de ausencia) */}
+                      <div className="mt-3">
+                        <label className={`inline-flex items-center gap-2 px-3 py-2 rounded border cursor-pointer select-none transition ${draft.vr.showVacaciones ? "bg-amber-500/10 border-amber-500/40" : "bg-slate-900/60 border-slate-700"} ${!draft.canLogin ? "opacity-40 pointer-events-none" : ""}`}>
                           <input
                             type="checkbox"
                             checked={draft.vr.showVacaciones}
@@ -520,10 +509,32 @@ export default function AccessPanel() {
                           />
                           <div>
                             <div className="text-[11px] font-extrabold text-white">🏖️ Ver vacaciones/ausencias</div>
-                            <div className="text-[9px] text-slate-400">Muestra las tarjetas de vacaciones, bajas y permisos en el mensual</div>
+                            <div className="text-[9px] text-slate-400">Muestra también las tarjetas de vacaciones, bajas y permisos en el mensual</div>
                           </div>
                         </label>
                       </div>
+                    </div>
+
+                    {/* ── VER NOTAS — bloque SEPARADO e independiente de las tarjetas ── */}
+                    <div className="bg-slate-800/60 border border-blue-500/40 rounded-lg p-3">
+                      <h4 className="text-xs font-extrabold text-blue-400 uppercase tracking-wider mb-1">
+                        📝 Ver notas — aparte de las tarjetas
+                      </h4>
+                      <p className="text-[10px] text-slate-500 mb-3 leading-tight">
+                        Esto va SEPARADO de las tarjetas: controla si este acceso ve el TEXTO de las notas. Desactivado → ve las tarjetas, pero SIN notas ni indicadores de nota.
+                      </p>
+                      <label className={`inline-flex items-center gap-2 px-3 py-2 rounded border cursor-pointer select-none transition ${draft.vr.showNotes ? "bg-blue-500/10 border-blue-500/40" : "bg-slate-900/60 border-slate-700"} ${!draft.canLogin ? "opacity-40 pointer-events-none" : ""}`}>
+                        <input
+                          type="checkbox"
+                          checked={draft.vr.showNotes}
+                          onChange={e => updateDraft(pro.id, { vr: { ...draft.vr, showNotes: e.target.checked } })}
+                          className="h-4 w-4 accent-blue-500"
+                        />
+                        <div>
+                          <div className="text-[11px] font-extrabold text-white">📝 Ver el texto de las notas</div>
+                          <div className="text-[9px] text-slate-400">Activado: ve las notas de las tarjetas que puede ver · Desactivado: solo ve las tarjetas, sin notas</div>
+                        </div>
+                      </label>
                     </div>
 
                     {/* Permissions grid */}

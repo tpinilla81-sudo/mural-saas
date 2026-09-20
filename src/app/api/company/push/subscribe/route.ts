@@ -23,12 +23,15 @@ export async function POST(req: Request) {
   const userAgent = (req.headers.get("user-agent") || "").slice(0, 250);
   await db.pushSub.upsert({
     where: { endpoint },
-    update: { p256dh: String(p256dh), auth: String(auth), userAgent },
+    // Guardamos SIEMPRE el usuario dueño del dispositivo: así cada aviso
+    // programado puede elegir a qué usuarios les llega (📱 móvil).
+    update: { p256dh: String(p256dh), auth: String(auth), userAgent, userId: user.id },
     create: {
       endpoint,
       p256dh: String(p256dh),
       auth: String(auth),
       companyId: user.companyId || null,
+      userId: user.id,
       userAgent,
     },
   });

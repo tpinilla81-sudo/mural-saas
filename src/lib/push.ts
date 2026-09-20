@@ -31,6 +31,23 @@ export async function sendPushToAll(payload: PushPayload): Promise<number> {
   const vapid = await getVapid();
   webpush.setVapidDetails("mailto:aviso@mural.app", vapid.publicKey, vapid.privateKey);
   const subs = await db.pushSub.findMany();
+  return deliver(subs, payload);
+}
+
+/** Envía un push SOLO a los dispositivos de los usuarios indicados (User.id). */
+export async function sendPushToUsers(userIds: string[], payload: PushPayload): Promise<number> {
+  const ids = (userIds || []).filter(Boolean);
+  if (ids.length === 0) return 0;
+  const vapid = await getVapid();
+  webpush.setVapidDetails("mailto:aviso@mural.app", vapid.publicKey, vapid.privateKey);
+  const subs = await db.pushSub.findMany({ where: { userId: { in: ids } } });
+  return deliver(subs, payload);
+}
+
+async function deliver(
+  subs: { id: string; endpoint: string; p256dh: string; auth: string }[],
+  payload: PushPayload
+): Promise<number> {
   let ok = 0;
   await Promise.all(
     subs.map(async (s) => {

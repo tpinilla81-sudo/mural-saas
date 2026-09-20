@@ -467,6 +467,10 @@ model AlertRule {
   keyword    String   // palabra o texto a buscar dentro de las notas
   daysBefore Int      @default(1) // avisar X días antes de la fecha de la tarjeta
   enabled    Boolean  @default(true)
+  // ¿A QUIÉN le llega? CSV de User.id ("" = TODOS los usuarios de la empresa)
+  recipients String   @default("")
+  // ¿POR DÓNDE le llega? push (móvil) | email (correo) | both (ambos)
+  channel    String   @default("both")
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -482,6 +486,7 @@ model PushSub {
   p256dh    String
   auth      String
   companyId String?  // empresa desde la que se activó (informativo)
+  userId    String?  // usuario que activó ESTE dispositivo (para elegir a quién llega cada aviso)
   userAgent String   @default("")
   createdAt DateTime @default(now())
 }
