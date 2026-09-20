@@ -1484,3 +1484,16 @@ Work Log:
 Stage Summary:
 - Cadena completa OPERATIVA: activación ✓ registro en BD ✓ envío ✓. El botón 📤 ENVIAR PRUEBA ya funciona y el cron diario (08:00 UTC) también queda desbloqueado (usa sendPushToAll/sendPushToUsers).
 - Pendiente usuario: confirmar que la notificación de prueba apareció en la pantalla del móvil.
+
+---
+Task ID: 43-close
+Agent: main
+Task: "SI LLEGO" — confirmación del usuario: la notificación de prueba llegó a su iPhone
+
+Work Log:
+- Usuario confirma recepción de la push de prueba en el móvil. Cadena completa verificada de punta a punta: activación → registro (PushSub=1) → envío → recepción en pantalla.
+- Task 43 (notificaciones) CERRADA tras 8 iteraciones (43→43h). Causas raíz resueltas: (1) generateVAPIDKeys typo → 500 en public-key; (2) endpoint /push/prueba inexistente → 404 en ENVIAR PRUEBA; (3) telemetría PushErrorLog clave para diagnosticar sin capturas.
+
+Stage Summary:
+- Avisos programados OPERATIVOS: cron diario 08:00 UTC (10:00 España) → AlertRule "Blefaroplastias" 7 días antes → push a los móviles de los destinatarios.
+- Pendientes fuera de Task 43: RESEND_API_KEY/EMAIL_FROM en Vercel para el canal ✉email real; Task 38 (MODO COCHE voz) aparcada.
