@@ -488,6 +488,9 @@ function AlertRulesPanel() {
             <p className="text-[10px] text-slate-400 leading-snug">
               Pon una <b className="text-slate-200">palabra</b> (p. ej. CIRUGÍA) en la nota de una tarjeta: si faltan <b className="text-slate-200">X días</b> para su fecha, llega el aviso.
             </p>
+            <p className="text-[10px] text-blue-300 leading-snug">
+              💡 TRUCO sin configurar nada: escribe <b className="text-slate-200">@5</b> dentro de cualquier nota → te avisamos 5 días antes, a todo el equipo. <b className="text-slate-200">@5:ana,pepe</b> → solo a ellos (por nombre o email). Al tocar el aviso, la app se abre directamente en esa tarjeta.
+            </p>
             <div className="flex items-center gap-2">
               <input
                 value={keyword}

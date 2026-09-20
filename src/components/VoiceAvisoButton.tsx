@@ -529,7 +529,7 @@ export function VoiceAvisoModal({ onClose, onSaved, sedes, professionals, contex
                 onChange={e => update({ note: e.target.value })}
                 rows={2}
                 maxLength={2000}
-                placeholder="Nota del aviso (se ve al pulsar la tarjeta en Mensual)…"
+                placeholder="Nota del aviso (se ve al pulsar la tarjeta en Mensual)… 💡 @5 = te avisamos 5 días antes"
                 className="w-full px-2 py-1.5 bg-slate-800 border border-slate-600 focus:border-amber-500 rounded text-white text-xs resize-none outline-none transition"
               />
             </div>

@@ -70,6 +70,54 @@ export default function MensualTab() {
     return () => mq.removeEventListener("change", apply);
   }, []);
 
+  // ── Deep-link desde NOTIFICACIÓN: /?fecha=…&card=…&t=plan|aviso ──
+  // Al tocar una push, la app abre MENSUAL en la fecha del aviso y despliega
+  // su tarjeta (nota). Cuando se abre, se limpia la URL (no reaparece).
+  const deepRef = useRef<{ card: string; t: string; fecha: string | null } | null>(null);
+  const loadedMonthRef = useRef<{ y: number; m: number } | null>(null);
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    const f = sp.get("fecha");
+    if (f && /^\d{4}-\d{2}-\d{2}$/.test(f)) {
+      setYear(parseInt(f.slice(0, 4), 10));
+      setMonth(parseInt(f.slice(5, 7), 10) - 1);
+    }
+    const card = sp.get("card");
+    if (card) deepRef.current = { card, t: sp.get("t") || "plan", fecha: f };
+  }, []);
+  useEffect(() => {
+    const d = deepRef.current;
+    if (!loaded || !d) return;
+    const target = d.fecha && /^\d{4}-\d{2}-\d{2}$/.test(d.fecha)
+      ? { y: parseInt(d.fecha.slice(0, 4), 10), m: parseInt(d.fecha.slice(5, 7), 10) - 1 }
+      : null;
+    // Solo intenta cuando los datos cargados son los del MES del enlace
+    if (target && (loadedMonthRef.current?.y !== target.y || loadedMonthRef.current?.m !== target.m)) return;
+    const tryOpen = (): boolean => {
+      if (d.t === "aviso") {
+        const a = avisos.find(x => x.id === d.card);
+        if (a) { openAvisoNoteEditor(a); return true; }
+      } else {
+        const p = plans.find(x => x.id === d.card);
+        if (p) {
+          const sede = sedes.find(x => x.id === p.sedeId);
+          if (sede) {
+            const pro = professionals.find((x: any) => x.alias === p.professionalAlias);
+            openNoteEditor(p, sede, pro ? `${pro.firstName} ${pro.lastName}` : p.professionalAlias);
+            return true;
+          }
+        }
+      }
+      return false;
+    };
+    if (tryOpen()) {
+      deepRef.current = null;
+      window.history.replaceState(null, "", window.location.pathname);
+    } else if (target) {
+      deepRef.current = null; // mes correcto cargado y tarjeta no encontrada: desistir
+    }
+  }, [loaded, plans, avisos, sedes, professionals]);
+
   // ── Month navigation: swipe táctil + flechas ‹ › ──
   const [slideDir, setSlideDir] = useState<"" | "next" | "prev">("");
   const touchStart = useRef<{ x: number; y: number } | null>(null);
@@ -100,6 +148,7 @@ export default function MensualTab() {
   };
 
   async function load() {
+    loadedMonthRef.current = { y: year, m: month };
     const [sRes, pRes, plRes, hRes, aRes] = await Promise.all([
       fetch("/api/company/sedes"),
       fetch("/api/company/professionals"),
@@ -722,7 +771,7 @@ export default function MensualTab() {
                 autoFocus
                 maxLength={2000}
                 rows={6}
-                placeholder="Escribe aquí la nota (visible en tooltip al pasar el ratón)…"
+                placeholder="Escribe aquí la nota (visible en tooltip al pasar el ratón)… (💡 @5 = te avisamos 5 días antes)"
                 className="w-full px-3 py-2 bg-gray-50 border-2 border-gray-300 focus:border-amber-500 focus:bg-white rounded-lg text-sm text-gray-900 font-medium resize-none outline-none transition"
               />
               <div className="flex justify-between items-center mt-1">

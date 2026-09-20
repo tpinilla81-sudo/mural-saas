@@ -43,6 +43,33 @@ function labelDate(d: string): string {
   return `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}`;
 }
 
+/** Quita el "@5" o "@5:ana,pepe" de la nota antes de mostrarla. */
+function stripInline(t: string): string {
+  return (t || "").replace(/@\s?\d{1,2}(:[^\n]*)?/g, "").replace(/\s{2,}/g, " ").trim();
+}
+
+/** URLs de deep-link: al tocar la notificación se abre la app EN ese aviso. */
+function cardUrl(source: string, id: string, date: string): string {
+  return `/?fecha=${date}&card=${id}&t=${source}`;
+}
+
+/** Destinatarios inline "@5:ana,pepe": busca usuarios por nombre o email.
+ *  Sin ":…" (o si nadie coincide) → TODOS los usuarios de la empresa. */
+async function inlineRecipients(companyId: string, spec: string | null): Promise<string[]> {
+  const users = await db.user.findMany({
+    where: { companyId },
+    select: { id: true, name: true, email: true },
+  });
+  const tokens = (spec || "").split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+  if (tokens.length === 0) return users.map(u => u.id);
+  const matched = users.filter(u => {
+    const name = (u.name || "").toLowerCase();
+    const email = (u.email || "").toLowerCase();
+    return tokens.some(tk => name.includes(tk) || email.includes(tk));
+  }).map(u => u.id);
+  return matched.length > 0 ? matched : users.map(u => u.id);
+}
+
 /** Usuarios destinatarios de una regla: los elegidos o TODOS los de la empresa. */
 async function recipientsOf(rule: { companyId: string; recipients: string }): Promise<string[]> {
   const ids = (rule.recipients || "").split(",").map((s) => s.trim()).filter(Boolean);
@@ -89,12 +116,12 @@ export async function GET() {
       });
       if (dupe) continue;
       const title = `🔔 ${rule.keyword.toUpperCase()} — ${labelWhen(diff)}`;
-      const body = `${p.sede?.name || "sede"} · ${p.professionalAlias || "—"} · ${labelDate(p.date)} ${p.turn === "MANANA" ? "Mañana" : "Tarde"} — ${(p.notes || "").trim()}`.trim();
+      const body = `${p.sede?.name || "sede"} · ${p.professionalAlias || "—"} · ${labelDate(p.date)} ${p.turn === "MANANA" ? "Mañana" : "Tarde"} — ${stripInline(p.notes)}`.trim();
       let n = 0;
       if (doPush) {
         n += rule.recipients
-          ? await sendPushToUsers(userIds, { title, body, url: "/", tag: `alert-${rule.id}-${p.id}` })
-          : await sendPushToAll({ title, body, url: "/", tag: `alert-${rule.id}-${p.id}` });
+          ? await sendPushToUsers(userIds, { title, body, url: cardUrl("plan", p.id, p.date), tag: `alert-${rule.id}-${p.id}` })
+          : await sendPushToAll({ title, body, url: cardUrl("plan", p.id, p.date), tag: `alert-${rule.id}-${p.id}` });
       }
       if (doEmail) {
         const email = await sendEmailToUsers(userIds, {
@@ -133,12 +160,12 @@ export async function GET() {
       if (dupe) continue;
       const who = a.professional ? a.professional.alias : "Toda la sede";
       const title = `🔔 ${rule.keyword.toUpperCase()} — ${labelWhen(diff)}`;
-      const body = `${a.sede?.name || "sede"} · ${who} · ${labelDate(a.date)} ${a.turn === "M" ? "Mañana" : "Tarde"} — ${(a.note || "").trim()} (ausencia)`.trim();
+      const body = `${a.sede?.name || "sede"} · ${who} · ${labelDate(a.date)} ${a.turn === "M" ? "Mañana" : "Tarde"} — ${stripInline(a.note)} (ausencia)`.trim();
       let n = 0;
       if (doPush) {
         n += rule.recipients
-          ? await sendPushToUsers(userIds, { title, body, url: "/", tag: `alert-${rule.id}-${a.id}` })
-          : await sendPushToAll({ title, body, url: "/", tag: `alert-${rule.id}-${a.id}` });
+          ? await sendPushToUsers(userIds, { title, body, url: cardUrl("aviso", a.id, a.date), tag: `alert-${rule.id}-${a.id}` })
+          : await sendPushToAll({ title, body, url: cardUrl("aviso", a.id, a.date), tag: `alert-${rule.id}-${a.id}` });
       }
       if (doEmail) {
         const email = await sendEmailToUsers(userIds, {

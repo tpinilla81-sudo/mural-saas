@@ -142,6 +142,16 @@ export default function UserView() {
     else setView("mensual");
   }, [(session?.user as any)?.permissions]);
 
+  // Deep-link desde NOTIFICACIÓN: /?fecha=… → abre el mes de ese aviso
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    const f = sp.get("fecha");
+    if (f && /^\d{4}-\d{2}-\d{2}$/.test(f)) {
+      setYear(parseInt(f.slice(0, 4), 10));
+      setMonth(parseInt(f.slice(5, 7), 10) - 1);
+    }
+  }, []);
+
   // Print handler — uses the browser's native print dialog
   const handlePrint = () => {
     const title = `${view === "diario" ? "Diario" : "Mensual"} - ${MESES[month]} ${year}`;

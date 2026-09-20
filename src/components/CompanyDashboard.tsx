@@ -31,6 +31,16 @@ export default function CompanyDashboard() {
   const [voiceCarOpen, setVoiceCarOpen] = useState(false);
   const [voicePcOpen, setVoicePcOpen] = useState(false);
 
+  // Deep-link desde NOTIFICACIÓN: /?fecha=…&card=… → abre MENSUAL en esa fecha
+  // (MensualTab se encarga de situar el mes y desplegar la tarjeta).
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    if (sp.get("fecha") || sp.get("card")) {
+      setTab("diario");
+      setDiarioSub("mensual");
+    }
+  }, []);
+
   // ── MICRO: pedir permiso automáticamente AL ABRIR la app (una vez) ──
   // En Android, si se deja para el primer uso de voz, el reconocimiento
   // falla con "not-allowed" sin llegar a pedir permiso. Al cargar la app
