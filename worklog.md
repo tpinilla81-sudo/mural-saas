@@ -1311,3 +1311,28 @@ Stage Summary:
 - MI EMPRESA → Accesos · Permisos: panel ÚNICO y COMPLETO — se elige TODO por profesional (acceso+contraseña, 11 permisos, sedes y profesionales visibles del mensual, notas, vacaciones).
 - CONFIGURACIÓN: solo 🔔 Avisos programados, ahora con explicación clara de a qué móviles llega (todos los ACTIVAR AQUÍ), qué mensaje reciben (palabra+días, fecha, sede, turno, nota) y cuándo (10:00 diario, una vez por tarjeta).
 - Panel Envíos/Auditoría eliminado de la UI.
+
+---
+Task ID: 41
+Agent: main
+Task: "ACCESOS PERMISOS: lo que da permisos a ver tarjetas y notas de otras sedes y usuarios — llamarlo de otra forma y separar VER NOTAS. LO DEMAS BIEN" + "CONFIGURACION DE NOTIFICACIONES: incluir elegir A QUÉ USUARIO le llega la notificación y si es al MÓVIL o CORREO o AMBOS (en la BD lo tenemos todo)"
+
+Work Log:
+- SCHEMA (db push OK en Neon + generate): AlertRule + `recipients` (CSV de User.id, "" = TODOS los usuarios de la empresa) y `channel` ("push" | "email" | "both", default "both"); PushSub + `userId` (usuario dueño del dispositivo). Tablas vacías en producción: sin migración de datos.
+- lib/push.ts: nueva sendPushToUsers(userIds, payload) (filtra PushSub por userId; refactor compartido deliver() con limpieza de subs 404/410). sendPushToAll se mantiene (prueba).
+- lib/email.ts (NUEVO): emailConfigured() (= !!RESEND_API_KEY) + sendEmailToUsers(userIds, {companyId, subject, body}) → email a User.email de cada destinatario vía Resend; registra cada envío en OutboxNotification (sent/failed/pending); si no hay RESEND_API_KEY queda "pending" y NO sale (jamás bloquea el cron).
+- push/subscribe: guarda userId (update + create) — cada dispositivo queda vinculado al usuario que pulsa ACTIVAR AQUÍ.
+- alert-rules GET → { rules, users (10 con email/activo), emailConfigured }; POST y PATCH [id] aceptan recipients (valida que los ids sean de la empresa; [] = TODOS) y channel (validado).
+- cron/alerts: para cada regla calcula destinatarios (elegidos o TODOS los users de la empresa) y envía según canal: push → sendPushToUsers; email → sendEmailToUsers; dedupe AlertSent igual (un envío por tarjeta y regla); details incluye canal.
+- ConfigTab (UI): nuevo RecipientsPicker (TODOS / ELEGIR… con los 10 usuarios: nombre + email + estado) y ChannelPicker (📱 Móvil / ✉️ Correo / 📱+✉️ Ambos) — tanto en CREAR como en ✏️ CAMBIAR de cada regla (editor desplegable con días + destinatarios + canal + GUARDAR). Fila de regla muestra: días · canal · para: nombres/TODOS · estado. Caja "¿Cómo funciona?" reescrita (a quién / por dónde / qué mensaje) + aviso honesto del estado del correo en el servidor (emailConfigured).
+- AccessPanel (MI EMPRESA → Accesos · Permisos): el bloque "Vista Mensual" SEPARADO en dos: ① amber "👁️ VER TARJETAS DE OTRAS SEDES Y OTROS PROFESIONALES" (Tarjetas de estas sedes TODAS/ELEGIR + Tarjetas de estos profesionales TODOS/ELEGIR + 🏖️ vacaciones) y ② blue "📝 VER NOTAS — APARTE DE LAS TARJETAS" (Ver el texto de las notas, con explicación de que desactivado = tarjetas sin notas). Textos de cabecera actualizados. Sin cambios de lógica ni API (mismos campos allowedSedes/allowedPros/showNotes/showVacaciones).
+- Build limpio. Commit a6e371a → push → Vercel 200.
+- E2E PRODUCCIÓN (412×915, login julio1974@):
+  * CONFIGURACIÓN → panel nuevo visible con TODOS/ELEGIR + 3 canales; ciclo completo: crear "PRUEBAE2E" → fila "1 día(s) antes · 📱+✉️ Ambos · para: TODOS · activo" → ✏️ CAMBIAR → ELEGIR + check JULIO + días 3 + ✉️ Correo + GUARDAR → fila "3 día(s) antes · ✉️ Correo · para: JULIO MURILLO · activo"; BD verifica recipients=userId de Julio, channel=email; /api/cron/alerts → {"ok":true,"rules":1,"sent":0} sin errores; 🗑 borrada; DB rules=0. Selector muestra los 10 usuarios con email y "· inactivo".
+  * MI EMPRESA → Accesos · Permisos → expandir JM: bloque amber (TARJETAS DE ESTAS SEDES/TARJETAS DE ESTOS PROFESIONALES/🏖️) + bloque blue (📝 VER NOTAS — APARTE DE LAS TARJETAS) correctamente separados.
+  * Capturas: download/t41-config-avisos-nuevo.png, t41-accesos-bloques.png, t41-accesos-notas.png.
+
+Stage Summary:
+- 🔔 Avisos programados: cada aviso ahora elige ¿A QUIÉN? (TODOS o usuarios concretos de la BD) y ¿POR DÓNDE? (📱 móvil push — dispositivos vinculados a cada usuario al pulsar ACTIVAR AQUÍ —, ✉️ correo a su email, o 📱+✉️ ambos). El cron respeta esa configuración y dedupe igual que antes.
+- MI EMPRESA → Accesos · Permisos: la visibilidad ya NO se llama "permisos": bloque "👁️ VER TARJETAS DE OTRAS SEDES Y OTROS PROFESIONALES" y, SEPARADO, "📝 VER NOTAS — APARTE DE LAS TARJETAS".
+- ⚠️ PENDIENTE para que el ✉️ CORREO SALGA de verdad: añadir RESEND_API_KEY (y opcional EMAIL_FROM) en las variables de entorno de Vercel — la UI ya lo avisa ("El envío de correo NO está configurado aún en el servidor"); sin clave, los emails quedan en OutboxNotification "pending" y solo salen los push 📱.
