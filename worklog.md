@@ -1364,3 +1364,24 @@ Stage Summary:
 - Ahora se VE en todo momento qué móviles están registrados (y de quién): lista "📱 MÓVILES REGISTRADOS" + insignia 📱×N junto a cada usuario en el selector de destinatarios + aviso rojo cuando no hay ninguno.
 - El móvil se METE pulsando 🔔 ACTIVAR AQUÍ en el propio móvil (con su usuario dentro de la app); al conseguirlo, el mensaje dice "✅ MÓVIL REGISTRADO" y aparece en la lista al instante. Verificado de extremo a extremo contra el endpoint real (quedó vinculado a JULIO MURILLO).
 - Queda en manos del usuario: abrir CONFIGURACIÓN en SU móvil y pulsar 🔔 ACTIVAR AQUÍ (su móvil saldrá en la lista). El ✉️ correo sigue pendiente de RESEND_API_KEY en Vercel.
+
+---
+Task ID: 43
+Agent: main
+Task: "EL TEMA DE LAS NOTIFICACIONES ESTÁ MUY COMPLICADO — simplifica priorizando correcto funcionamiento a móvil, explica cómo se tiene que activar para que lleguen al móvil"
+
+Work Log:
+- ConfigTab REESCRITO (simplificado, mobile-first) en 3 PASOS numerados:
+  * ① ACTIVA TU MÓVIL (una sola vez, en cada móvil): estado de ESTE dispositivo (✅ ya recibe / ⚠️ aún no / ⛔ bloqueado / no soportado con pista iOS), botón GRANDE 🔔 ACTIVAR AQUÍ, instrucciones SIEMPRE visibles en 2 cajas (🤖 ANDROID 4 pasos / 🍎 IPHONE 4 pasos con Añadir a inicio), lista "Móviles activados: N" (rojo si 0) + 📤 ENVIAR PRUEBA (activa si hay ≥1 dispositivo).
+  * ② CREA UN AVISO: solo PALABRA + días + ➕ CREAR AVISO (canal por defecto = 📱 push, destinatarios = TODOS); resumen vivo "Llegará por 📱 Móvil · para: TODOS"; destinatarios/canal (Task 41) relegados a "▼ Cambiar a quién y por dónde" COLAPSADO por defecto.
+  * ③ TUS AVISOS (N): filas compactas (palabra · días · canal · quién · ⏸/▶/✏️/🗑); editor inline intacto.
+  * Pie de 1 línea con ejemplo de mensaje + nota de correo sin configurar. Eliminada la caja "¿Cómo funciona?" de 4 párrafos.
+- Sin cambios de API/servidor (mismos endpoints y campos; default UI channel=push).
+- Build limpio. Commit 2274326 → push → Vercel 200.
+- E2E PRODUCCIÓN (412×915, julio1974@): panel 3 pasos visible ✓; toggle avanzado abre TODOS/ELEGIR + 3 canales ✓; ciclo crear "PRUEBA43" (1 día · 📱 Móvil · TODOS por defecto) → borrar (confirm dialog) ✓; queda SOLO la regla real del usuario.
+- BD producción: RULES=[Blefaroplastias · 7 días · both · TODOS · activa] (creada por el usuario entre sesiones), PUSHSUBS=0 → la causa de "no envía" sigue siendo que NINGÚN móvil ha pulsado ACTIVAR AQUÍ.
+- Capturas: download/t43-avisos-paso1.png, t43-avisos-paso2.png.
+
+Stage Summary:
+- Panel de notificaciones reducido a 3 pasos con instrucciones de activación Android/iPhone siempre visibles; el flujo simple (palabra+días) crea avisos push a TODOS por defecto y las opciones de quién/canal quedan plegadas.
+- Verificado en producción: el "no llega al móvil" NO es de la app: hay 0 móviles registrados. Julio tiene su aviso "Blefaroplastias" (7 días, ambos) listo; solo falta que en SU móvil entre y pulse 🔔 ACTIVAR AQUÍ (en iPhone: primero Añadir a inicio).
