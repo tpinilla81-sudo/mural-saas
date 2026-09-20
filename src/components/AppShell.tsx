@@ -6,6 +6,7 @@ import LoginForm from "@/components/LoginForm";
 import SuperAdminDashboard from "@/components/SuperAdminDashboard";
 import CompanyDashboard from "@/components/CompanyDashboard";
 import UserView from "@/components/UserView";
+import PushOnboard from "@/components/PushOnboard";
 
 export default function AppShell() {
   const { data: session, status } = useSession();
@@ -136,6 +137,9 @@ export default function AppShell() {
         {role === "COMPANY_ADMIN" && <CompanyDashboard />}
         {role === "USER" && <UserView />}
       </main>
+
+      {/* Como el micrófono: al entrar, pregunta si este móvil quiere recibir avisos */}
+      {role !== "SUPER_ADMIN" && <PushOnboard />}
     </div>
   );
 }
