@@ -371,7 +371,7 @@ export default function SedesTab() {
       <div className="hidden sm:block bg-slate-800/50 border border-slate-700 rounded-xl overflow-auto max-h-[calc(100vh-320px)]">
         <div className="flex items-center gap-2 px-4 py-2 text-[10px] text-slate-400 border-b border-slate-700">
           <span className="text-amber-400 font-bold">ORDEN:</span>
-          <span>usa las flechas ↑ ↓ (en PC también puedes arrastrar) — se guarda y sale en Diario</span>
+          <span>usa las flechas ↑ ↓ de cada línea (en PC también puedes arrastrar) — se guarda y sale en Diario</span>
         </div>
         {loading && sedes.length === 0 ? (
           <div className="flex items-center justify-center py-12 text-slate-400 text-sm">Cargando sedes...</div>
@@ -381,7 +381,7 @@ export default function SedesTab() {
           <table className="w-full">
             <thead className="sticky top-0 z-10">
               <tr className="bg-slate-900 border-b border-slate-700">
-                {["Sede", "Ubicación", "Tarea", "Contacto", "M/T", "Color", "Acciones"].map(h => (
+                {["Orden", "Sede", "Ubicación", "Tarea", "Contacto", "M/T", "Color", "Acciones"].map(h => (
                   <th key={h} className="text-left px-4 py-3 text-xs font-extrabold text-blue-400 uppercase">{h}</th>
                 ))}
               </tr>
@@ -395,6 +395,15 @@ export default function SedesTab() {
                   onDragEnd={() => { dragIdx.current = null; setDragOverIdx(null); }}
                   className={`border-b border-slate-700/50 hover:bg-slate-700/30 transition ${dragOverIdx === idx && dragIdx.current !== null && dragIdx.current !== idx ? "border-t-2 border-t-amber-500" : ""}`}
                 >
+                  {/* Columna ORDEN: flechas grandes siempre visibles (como en móvil) */}
+                  <td className="px-2 sm:px-3 py-2">
+                    <div className="flex gap-1">
+                      <button onClick={(e) => { e.stopPropagation(); moveSede(idx, -1); }} disabled={idx === 0}
+                        className="w-9 h-9 rounded bg-amber-500/20 text-amber-300 hover:bg-amber-500 hover:text-black disabled:opacity-25 font-bold text-base transition" title="Subir">↑</button>
+                      <button onClick={(e) => { e.stopPropagation(); moveSede(idx, 1); }} disabled={idx === sedes.length - 1}
+                        className="w-9 h-9 rounded bg-amber-500/20 text-amber-300 hover:bg-amber-500 hover:text-black disabled:opacity-25 font-bold text-base transition" title="Bajar">↓</button>
+                    </div>
+                  </td>
                   <td className="px-4 py-2 text-sm font-bold cursor-move select-none">
                     <span className="text-slate-500 mr-2">⠿</span>{s.name}
                   </td>
@@ -409,11 +418,6 @@ export default function SedesTab() {
                   <td className="px-4 py-2"><div className="w-5 h-5 rounded border border-slate-600" style={{ background: s.color }} /></td>
                   <td className="px-4 py-2">
                     <div className="flex gap-1.5 items-center">
-                      <button onClick={() => moveSede(idx, -1)} disabled={idx === 0}
-                        className="bg-slate-600 hover:bg-amber-500 hover:text-black disabled:opacity-25 text-white font-bold px-3 py-2 rounded text-sm transition" title="Subir">↑</button>
-                      <button onClick={() => moveSede(idx, 1)} disabled={idx === sedes.length - 1}
-                        className="bg-slate-600 hover:bg-amber-500 hover:text-black disabled:opacity-25 text-white font-bold px-3 py-2 rounded text-sm transition" title="Bajar">↓</button>
-                      <span className="w-px h-6 bg-slate-600 mx-0.5" />
                       <button onClick={() => handleEdit(s)} className="bg-slate-700 hover:bg-slate-600 px-2 py-1.5 rounded text-xs transition" title="Editar sede">✏️</button>
                       <button onClick={() => setDeleteTarget(s)} className="bg-red-600/30 hover:bg-red-600/50 text-red-400 px-2 py-1.5 rounded text-xs transition" title="Eliminar sede">✖</button>
                     </div>
