@@ -1583,3 +1583,15 @@ Work Log:
 
 Stage Summary:
 - El orden de sedes se hace con flechas ↑↓ grandes en móvil/tablet/PC (arrastrar sigue disponible solo como extra en PC). Orden original del usuario restaurado y verificado en BD.
+
+---
+Task ID: 48c
+Agent: main
+Task: "que en el pc se ordene tambien con flechas"
+
+Work Log:
+- Las flechas existían en PC pero estaban al final (columna Acciones) — poco visibles. Nueva columna ORDEN como PRIMERA columna de la tabla: flechas ámbar 36×36 (bg-amber-500/20, hover ámbar sólido, disabled atenuada) en cada fila; Acciones queda solo con ✏️/✖. Cabecera añade "ORDEN"; hint actualizado.
+- Commit 8283ade → Vercel 200. E2E PC 1280×800: columna visible con flechas 36×36 ✓; ↓ en NAV → VIT primera ✓; ↑ restaura → API confirma 0:NAV 1:VIT 2:CONGRESO (orden elegido por el usuario, NO se toca) ✓. Captura t48c-sedes-pc.png.
+
+Stage Summary:
+- En PC/tablet la tabla de Sedes tiene ahora la columna ORDEN a la izquierda con flechas ↑↓ grandes y visibles en cada línea (mismo mecanismo que móvil); arrastrar sigue como extra. El orden actual lo está gestionando el usuario (NAV primera).
