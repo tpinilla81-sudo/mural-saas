@@ -1438,3 +1438,17 @@ Work Log:
 Stage Summary:
 - Ya no hay camino sin opción: SIEMPRE hay 🔔 arriba (admin y usuarios) que abre la activación bajo demanda, y cualquier bloqueo (Safari, iOS viejo, permiso denegado) muestra su motivo exacto y la salida.
 - Siguiente dato que falta del usuario: QUÉ mensaje le sale al tocar 🔔 en su iPhone → identifica iOS<16.4 vs Safari vs bloqueado.
+
+---
+Task ID: 43e-f
+Agent: main
+Task: "SIGUE DANDO FALLO" (tras ver su captura: modal ask + catch genérico "No se pudo completar")
+
+Work Log:
+- Verificado servidor entero: sw.js 200/1706B con push+notificationclick ✓; manifest.webmanifest 200 con display standalone + icon-192/512 ✓ (el 404 era /manifest.json, URL equivocada); public-key usa requireCompanyUser + getVapid (VAPID autogenerada en BD, sin env) ✓.
+- 43e (7186601): instrumentación en cliente — askPermission() compatible WebKit callback; SW ready con timeout 10s; retry único de subscribe en AbortError; catch muestra "Fallo real: {name} — {message}" + pista por tipo; ConfigTab enableNotif mismo tratamiento.
+- 43f (6aedbfe): REPORT REMOTO — tabla PushErrorLog (db push a Neon OK) + endpoint /api/company/push/log-error (requireCompanyUser); PushOnboard reporta fire-and-forget: apertura de modal (auto/manual + modo), permiso no concedido, fallo real (name+message) y éxito "OK registrado ✓"; device = diagnóstico + userAgent.
+- BD: PUSHSUBS sigue 0 — su activación aún no llega a registrar.
+
+Stage Summary:
+- El próximo toque de ACTIVAR en su móvil dejará en BD el fallo EXACTO + diagnóstico del dispositivo; podré responder con la solución concreta sin depender de capturas.
