@@ -1571,3 +1571,15 @@ Work Log:
 
 Stage Summary:
 - En el móvil el Diario ya muestra la TAREA de cada sede bajo el nombre (lo rodeado en rojo). En SEDES se pueden mover las líneas con flechas ↑↓ (móvil) o arrastrando las filas (PC); el orden se guarda en la BD y sale tanto en Diario como en el resto de la app.
+
+---
+Task ID: 48b
+Agent: main
+Task: "lo de reordenar sedes me gusta mas con flechas de subir y bajar asi se puede hacer en el mobil/tablet"
+
+Work Log:
+- Flechas ↑↓ como mecanismo PRINCIPAL de orden: móvil tarjetas 28→36px (w-9 h-9, text-base); escritorio/tablet px-3 py-2 text-sm con hover ámbar, separadas con divisor de ✏️/✖. Hints actualizados: "usa las flechas ↑ ↓ (en PC también puedes arrastrar)". Drag ⠿ queda como extra en PC.
+- Commit 6bfdc9d → Vercel 200. E2E 412×915: botones 36×36 ✓, ↓ VIT → NAV primera ✓, restaurado ↑ en 2ª tarjeta → API confirma 0:VIT 1:NAV 2:CONGRESO 3:OCIO ✓ (captura t48b-sedes-flechas.png).
+
+Stage Summary:
+- El orden de sedes se hace con flechas ↑↓ grandes en móvil/tablet/PC (arrastrar sigue disponible solo como extra en PC). Orden original del usuario restaurado y verificado en BD.
