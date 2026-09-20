@@ -1385,3 +1385,19 @@ Work Log:
 Stage Summary:
 - Panel de notificaciones reducido a 3 pasos con instrucciones de activación Android/iPhone siempre visibles; el flujo simple (palabra+días) crea avisos push a TODOS por defecto y las opciones de quién/canal quedan plegadas.
 - Verificado en producción: el "no llega al móvil" NO es de la app: hay 0 móviles registrados. Julio tiene su aviso "Blefaroplastias" (7 días, ambos) listo; solo falta que en SU móvil entre y pulse 🔔 ACTIVAR AQUÍ (en iPhone: primero Añadir a inicio).
+
+---
+Task ID: 43b
+Agent: main
+Task: "EL PASO 4 DE ACTIVAR EN SAFARI NO ME SALE" — el botón/prompt del paso 4 iPhone no aparece
+
+Work Log:
+- CAUSA: en iOS Safari "normal" (sin añadir a inicio) no existe PushManager → el panel marcaba "unsupported" y OCULTABA el botón 🔔 ACTIVAR AQUÍ → el usuario no veía el paso 4. Además iOS solo permite web push (16.4+) DENTRO de la app añadida a inicio.
+- ConfigTab: detección de entorno (ios + standalone vía display-mode/navigator.standalone); botón ACTIVAR AQUÍ ahora SIEMPRE visible (off/denied/unsupported); enableNotif con diagnóstico ANTES de intentar: iOS+no-standalone → "estás DENTRO de Safari, no se puede: Añadir a inicio y abre desde el ICONO"; iOS+standalone sin push → "necesitas iOS 16.4+ (Ajustes → General → Actualización)"; otros → Chrome/Edge.
+- Status "unsupported"/"denied" con texto específico iOS (Safari vs icono vs 16.4+; denied en standalone = resetear permiso borrando el icono).
+- Instrucciones iPhone ampliadas: paso 2 "→ Añadir", paso 3 "Cierra Safari y abre desde el ICONO nuevo 📲", paso 4 "Abajo toca ⚙️ CONFIGURACIÓN → 🔔 ACTIVAR AQUÍ → Permitir" + nota "¿No sale Permitir? Borra el icono, añádelo otra vez y reintenta".
+- Build limpio. Commit 210b769 → push → Vercel 200. Verificado en producción: instrucciones iPhone nuevas visibles; captura download/t43b-iphone-paso4.png.
+
+Stage Summary:
+- El paso 4 ya NO puede "no salir": el botón siempre está y, si algo falla, el propio botón dice EXACTAMENTE por qué (Safari vs icono de inicio vs iOS antiguo) y cómo salir del atasco.
+- Queda en manos del usuario: Compartir ⬆️ → Añadir a inicio → abrir desde el icono → CONFIGURACIÓN → ACTIVAR AQUÍ → Permitir (o actualizar iOS si <16.4).
