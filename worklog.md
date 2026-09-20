@@ -1537,3 +1537,21 @@ Work Log:
 Stage Summary:
 - La campana ya es el INTERRUPTOR de las notificaciones del móvil: un toque desactiva (queda tachada con raya roja, no llega nada) y otro toque reactiva. El sobre 📩 de al lado lleva el número de mensajes no leídos y al abrirlo se leen todos y el contador se limpia; cada mensaje además abre su aviso en la app.
 - El aviso queda en la bandeja AUNQUE la campana esté desactivada o el push no llegue: no se pierde nada.
+
+---
+Task ID: 47
+Agent: main
+Task: "no veo al generar entrada que me diga si quiero generar aviso, a quien y con que dias de antelacion" + "esto también lo tiene que hacer la entrada de avisos o tarjetas por voz (pregunta sí/no → a quién → días de antelación; si es no, se acaba)"
+
+Work Log:
+- AvisoPicker.tsx (NUEVO, compartido): sección "🔔 ¿Crear una notificación?" → SI: días antes (0-60, default 7) + ¿A quién? TODOS/ELEGIR (multi por usuario) → NO: nada más. Temas light (modales blancos) y dark (voz). Helpers exportados: parseAvisoToken/stripAvisoToken/buildAvisoNote/usersFromNames/clampAvisoDays + hook useAppUsers (/api/company/alert-rules).
+- MECHANISM: el aviso se guarda como TOKEN inline en la nota (@N = TODOS · @N:Nombre,Nombre = elegidos) — mismo motor que ya usa el cron (Task 45), cero migraciones. buildAvisoNote respeta tokens escritos a mano cuando el toggle está en NO (solo quita el token original cargado).
+- MensualTab: picker en los 3 diálogos — ALTA de turno (la pregunta siempre visible), nota de turno y nota de aviso (preload: token existente → toggle ON + días + elegidos; nota mostrada SIN el token). savePlanAdd crea el turno y luego PUT notes con el token. Tarjetas: preview limpia; si la nota es solo el token → "🔔 aviso programado".
+- VoiceAvisoButton (Modo PC / 🎙️): picker (dark) en la vista previa tras analizar el dictado; save integra el token en la nota de TODAS las tarjetas creadas (M y/o T).
+- HandsFreeOverlay (Modo Coche): conversación ampliada — tras la nota: "¿Quieres crear una notificación?" (sí/no voz o tap) → SI → "¿con cuántos días de antelación?" (voz: cinco/5, 0-60) → "¿a quién?" (voz "todos" o nombre — matchUserAnswer; lista numerada TODOS+usuarios en pantalla; sin lista de usuarios = TODOS directo) → confirmación que AHORA dice "te aviso N día(s) antes para X". NO → se acaba (va a confirmar sin aviso). stepLabel 6·AVISO.
+- Commit 17fd905 → Vercel 200.
+- E2E PRODUCCIÓN (scripts/verify-47.mjs): aviso-voz simulado con "@0" → cron: "aviso 2026-09-20 @0 → 1 envío(s) [push]" (push REAL) → bandeja: "🔔 RECORDATORIO — HOY | VIT · Toda la sede · 20/09/2026 Mañana — …" ✓ limpieza ✓.
+- E2E NAVEGADOR (412×915): alta muestra "¿Crear una notificación?" ✓; ON → días(7) + TODOS/ELEGIR ✓; guardar → Plan.notes="@3" ✓; tarjeta muestra "🔔 aviso programado" ✓; reabrir → picker preload (ON, 3 días) ✓; ELEGIR→JULIO→Guardar → notes="@3:JULIO MURILLO" ✓; tarjeta de prueba borrada. Capturas: download/t47-alta-aviso-si.png, t47-alta-aviso-elegir.png.
+
+Stage Summary:
+- Al generar CUALQUIER entrada (turno en Mensual, aviso por voz PC, manos libres Coche, notas de tarjetas) la app ahora PREGUNTA: ¿crear notificación? → ¿con qué días de antelación? → ¿a quién (TODOS o elegidos)? Si respondes que no, se acaba. El aviso viaja en la nota (@N[:nombres]) y lo dispara el cron diario 10:00 España con push + copia en el sobre 📩.
