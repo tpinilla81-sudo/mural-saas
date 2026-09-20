@@ -1467,3 +1467,20 @@ Work Log:
 
 Stage Summary:
 - El fallo nunca fue el móvil del usuario: era el servidor (500 en public-key). Su iPhone ya estaba en el estado perfecto (icono ✓ push ✓ permiso concedido ✓). Al reintentar 🔔 → ACTIVAR → Permitir debería registrarse por fin (PushSub > 0) y 📤 PRUEBA debe llegar.
+
+---
+Task ID: 43h
+Agent: main
+Task: "DA ERROR EN LA PRUEBA DICE ERROR AL ENVIAR" — botón 📤 ENVIAR PRUEBA roto
+
+Work Log:
+- Telemetría 43f confirmó la ACTIVACIÓN del usuario: "OK registrado ✓" (iPhone iOS 18.7, desde-icono, push-ok, perm=granted) → PushSub pasó de 0 a 1. El fix 43g funcionó.
+- "Error al enviar": ConfigTab llamaba POST /api/company/push/test — endpoint que NUNCA existió → 404 sin JSON → mensaje genérico.
+- Primer intento de crear push/test/route.ts falló al commitear: .gitignore tenía 'test' desnudo (línea 49) que ignoraba la carpeta. Renombrado a /api/company/push/prueba + fetch actualizado.
+- POST prueba: requireCompanyUser → sendPushToAll({title:"🔔 Prueba de MURAL", body:"¡Funciona!...", tag:"prueba"}); sent=0 → 409 con mensaje claro; excepción → 500 con fallo real.
+- Build OK. Commit cfcfc89 → Vercel.
+- VERIFICADO EN PRODUCCIÓN: login real → POST /api/company/push/prueba → 200 {"sent":1} — Apple aceptó el push hacia su iPhone (llegará aunque la app esté cerrada).
+
+Stage Summary:
+- Cadena completa OPERATIVA: activación ✓ registro en BD ✓ envío ✓. El botón 📤 ENVIAR PRUEBA ya funciona y el cron diario (08:00 UTC) también queda desbloqueado (usa sendPushToAll/sendPushToUsers).
+- Pendiente usuario: confirmar que la notificación de prueba apareció en la pantalla del móvil.
