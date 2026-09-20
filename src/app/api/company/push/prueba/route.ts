@@ -14,9 +14,13 @@ export async function POST() {
   if (error) return NextResponse.json({ error }, { status });
 
   try {
+    // Muestra EXACTA de cómo llegará un aviso real:
+    // sede · profesional · fecha · turno — nota
+    const in7 = new Date(Date.now() + 7 * 86400000);
+    const fecha = `${String(in7.getDate()).padStart(2, "0")}/${String(in7.getMonth() + 1).padStart(2, "0")}/${in7.getFullYear()}`;
     const sent = await sendPushToAll({
-      title: "🔔 Prueba de MURAL",
-      body: "¡Funciona! Así te avisaremos de los eventos programados.",
+      title: "🔔 BLEFAROPLASTIAS — en 7 días",
+      body: `Sede Parsen · Dr. García · ${fecha} Tarde — Blefaroplastias, quirófano 2 (ejemplo)`,
       url: "/",
       tag: "prueba",
     });

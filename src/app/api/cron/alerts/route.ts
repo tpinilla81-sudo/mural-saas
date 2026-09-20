@@ -89,7 +89,7 @@ export async function GET() {
       });
       if (dupe) continue;
       const title = `🔔 ${rule.keyword.toUpperCase()} — ${labelWhen(diff)}`;
-      const body = `TARJETA ${labelDate(p.date)} · ${p.sede?.name || "sede"} · ${p.turn === "MANANA" ? "Mañana" : "Tarde"} — ${p.notes || ""}`.trim();
+      const body = `${p.sede?.name || "sede"} · ${p.professionalAlias || "—"} · ${labelDate(p.date)} ${p.turn === "MANANA" ? "Mañana" : "Tarde"} — ${(p.notes || "").trim()}`.trim();
       let n = 0;
       if (doPush) {
         n += rule.recipients
@@ -133,7 +133,7 @@ export async function GET() {
       if (dupe) continue;
       const who = a.professional ? a.professional.alias : "Toda la sede";
       const title = `🔔 ${rule.keyword.toUpperCase()} — ${labelWhen(diff)}`;
-      const body = `AVISO ${labelDate(a.date)} · ${a.sede?.name || "sede"} · ${who} · ${a.turn === "M" ? "Mañana" : "Tarde"} — ${a.note || ""}`.trim();
+      const body = `${a.sede?.name || "sede"} · ${who} · ${labelDate(a.date)} ${a.turn === "M" ? "Mañana" : "Tarde"} — ${(a.note || "").trim()} (ausencia)`.trim();
       let n = 0;
       if (doPush) {
         n += rule.recipients
