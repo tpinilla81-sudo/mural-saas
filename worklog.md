@@ -1497,3 +1497,20 @@ Work Log:
 Stage Summary:
 - Avisos programados OPERATIVOS: cron diario 08:00 UTC (10:00 España) → AlertRule "Blefaroplastias" 7 días antes → push a los móviles de los destinatarios.
 - Pendientes fuera de Task 43: RESEND_API_KEY/EMAIL_FROM en Vercel para el canal ✉email real; Task 38 (MODO COCHE voz) aparcada.
+
+---
+Task ID: 45
+Agent: main
+Task: recordatorios inline "@N" con destinatarios + deep-link de notificaciones + FIX TDZ del cron
+
+Work Log:
+- Usuario pidió: (1) al meter una nota, poder pedir aviso en X días; (2) elegir a quién le avisa; (3) que al tocar la notificación se abra el aviso, no solo la app.
+- FORMATO AVISO (Task 44, 5be4a51): sede · profesional · fecha turno — nota (tarjetas ahora incluyen profesionalAlias; ausencias marcadas). ENVIAR PRUEBA envía muestra EXACTA del formato.
+- INLINE "@N" en notas: @5 → aviso 5 días antes a todo el equipo; @5:ana,pepe → solo a esos usuarios (match por nombre o email; si nadie coincide → TODOS). Cron sección 3 + inlineRecipients() + stripInline() en los bodies. Sin migración (AlertSent.ruleId="inline"). Dedupe por (source, sourceId, "inline", targetDate).
+- DEEP-LINK: pushes llevan /?fecha=…&card=…&t=plan|aviso. MensualTab (admin): monta el mes del enlace y despliega la tarjeta (openNoteEditor/openAvisoNoteEditor) con loadedMonthRef para esperar al mes correcto y desistir si no existe; CompanyDashboard fuerza tab diario→mensual; UserView monta year/month; URL se limpia al abrir (history.replaceState).
+- BUG CRÍTICO encontrado y resuelto: el auto-commit intermedio (ddd6058) dejó un `const stripInline` DENTRO de GET que sombreaba la función de módulo → TDZ "Cannot access 'r' before initialization" en TODO el cron (HTTP 500 también en Vercel). Diagnóstico: servidor local con env completo + stack en .next chunks. FIX: eliminar el duplicado y completar la sección inline v2.
+- VERIFICADO LOCAL (build + next start + Neon): cron 200 {"ok":true,"sent":4,"details":["plan 2026-09-25 blefaroplastias → 2","plan 2026-09-20 @0 → 2"]} — PushSub=2 (usuario activó 2 dispositivos). Pushes REALES enviados: regla Blefaroplastias (25/09) + tarjeta de prueba @0 (HOY, VIT Mañana, Dr. García, borrable).
+
+Stage Summary:
+- Avisos programados con formato completo (sede·profesional·fecha·nota), recordatorios inline @N[:nombres] y deep-link a la tarjeta. Cron desbloqueado también en producción (el fix vale para Vercel).
+- Pendiente: confirmar del usuario que al TOCAR la notificación se abre la app EN la tarjeta; tarjeta de prueba en el calendario de hoy para borrar.
