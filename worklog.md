@@ -1514,3 +1514,26 @@ Work Log:
 Stage Summary:
 - Avisos programados con formato completo (sede·profesional·fecha·nota), recordatorios inline @N[:nombres] y deep-link a la tarjeta. Cron desbloqueado también en producción (el fix vale para Vercel).
 - Pendiente: confirmar del usuario que al TOCAR la notificación se abre la app EN la tarjeta; tarjeta de prueba en el calendario de hoy para borrar.
+
+---
+Task ID: 46
+Agent: main
+Task: "icono al lado de la campana para ver los mensajes no leidos + campana que desactiva notificaciones (tachada con raya roja) + sobre con número de no leídos que al pulsarlo los marca leídos"
+
+Work Log:
+- SCHEMA (db push a Neon OK): PushSub.enabled (Boolean, default true) + modelo nuevo InboxMessage (companyId, userId, title, body, url, source, readAt, createdAt, índice userId+readAt).
+- src/lib/push.ts: deliver() ahora SOLO envía a PushSub con enabled=true (campana desactivada en ese dispositivo = no llega nada). Cada envío (sendPushToAll → usuarios activos no SUPER_ADMIN; sendPushToUsers → destinatarios) deja COPIA en InboxMessage → la bandeja existe aunque el push no llegue o la campana esté desactivada. PushPayload gana source (plan|aviso|inline|prueba).
+- APIS NUEVAS: GET/POST /api/company/push/state (estado de la campana por endpoint; POST solo el dueño del dispositivo), GET /api/company/inbox ({unread, messages últimos 50}), POST /api/company/inbox/read (marca todos o por ids).
+- NotificationCenter.tsx (NUEVO, en AppShell desktop + móvil):
+  * 🔔 CAMPANA = INTERRUPTOR de ESTE dispositivo: activada normal; desactivada TACHADA CON RAYA ROJA (barra rotate-45); sin activar también tachada → el toque abre el asistente PushOnboard. on→POST enabled:false, off→POST enabled:true. Refresca con evento push-state:changed.
+  * 📩 SOBRE al lado con badge rojo del número de NO LEÍDOS (pequeño, esquina). Al pulsarlo: abre panel con los mensajes (título, cuerpo, fecha) → los marca LEÍDOS y el contador se limpia. Mensaje con url≠"/" abre la app EN ese aviso (deep-link Task 45). Poll 60s + focus + evento inbox:refresh.
+- PushOnboard: evaluate() consulta /push/state → si el dispositivo existe pero enabled=false NO molesta (auto-banner silencio; manual dice "🔕 DESACTIVADAS: toca la campana"). Tras activar dispara push-state:changed (campana pasa a activada sola).
+- ConfigTab: "Móviles activados: N" cuenta SOLO enabled; dispositivos desactivados se listan con 🔕 + "DESACTIVADO (toque la campana para activar)"; ENVIAR PRUEBA se desactiva si no queda ninguno activo.
+- Cron + prueba: payloads con source para etiquetar la bandeja.
+- Commit 42bfd1c → Vercel OK.
+- VERIFICADO EN PRODUCCIÓN (scripts/verify-46.mjs): login real → state GET {exists:true,enabled:true} → POST off → GET {enabled:false} → POST ON restaurado ✓; inbox 0/0 → PRUEBA real {"sent":2} → inbox unread=1 (🔔 BLEFAROPLASTIAS — en 7 días | Sede Parsen · Dr. García · 27/09/2026 Tarde…) → read marked=1 → unread=0 ✓; cron idempotente sent=0 ✓.
+- E2E NAVEGADOR (412×915): barra muestra 🔔 tachada en rojo (sin activar) + 📩 con badge "1"; al pulsar el sobre: panel con los mensajes y el badge SE LIMPIA solo (leídos) ✓. Capturas: download/t46-barra-sobre-badge.png, t46-panel-mensajes.png. Fila de prueba UI borrada de BD.
+
+Stage Summary:
+- La campana ya es el INTERRUPTOR de las notificaciones del móvil: un toque desactiva (queda tachada con raya roja, no llega nada) y otro toque reactiva. El sobre 📩 de al lado lleva el número de mensajes no leídos y al abrirlo se leen todos y el contador se limpia; cada mensaje además abre su aviso en la app.
+- El aviso queda en la bandeja AUNQUE la campana esté desactivada o el push no llegue: no se pierde nada.
