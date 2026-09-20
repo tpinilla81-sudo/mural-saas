@@ -21,6 +21,7 @@ import {
   type ProLike,
   type SedeLike,
 } from "@/lib/voice-dialog";
+import { buildAvisoNote, clampAvisoDays, useAppUsers } from "@/components/AvisoPicker";
 import { warmUpMicWithTimeout } from "@/lib/mic";
 
 // ═══════════════════════════════════════════════════════════════
@@ -45,7 +46,7 @@ interface SRInstance {
 }
 type SRConstructor = new () => SRInstance;
 
-type Step = "date" | "sede" | "pro" | "turn" | "note" | "noteText" | "confirm" | "saving" | "again";
+type Step = "date" | "sede" | "pro" | "turn" | "note" | "noteText" | "notif" | "notifDays" | "notifWho" | "confirm" | "saving" | "again";
 
 interface ListItem { n: number; label: string; sub?: string }
 
@@ -62,6 +63,8 @@ interface Draft {
   professionalId: string;
   turn: "M" | "T" | "ALL";
   note: string;
+  notifDays: number | null; // 🔔 días de antelación (null = SIN notificación)
+  notifWho: string;         // 🔔 nombre del usuario elegido ("" = TODOS)
 }
 
 interface HandsFreeOverlayProps {
@@ -74,8 +77,31 @@ interface HandsFreeOverlayProps {
 }
 
 const emptyDraft = (): Draft => ({
-  date: "", sedeId: "", professionalId: "", turn: "ALL", note: "",
+  date: "", sedeId: "", professionalId: "", turn: "ALL", note: "", notifDays: null, notifWho: "",
 });
+
+// 🔔 ¿A quién aviso? — match por voz del nombre del usuario
+const escRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function matchUserAnswer(raw: string, users: { id: string; name: string }[]): { name: string; label: string } | null {
+  const t = norm(raw);
+  if (/\b(todos|todo el equipo|todo el mundo|equipo)\b/.test(t)) return { name: "", label: "TODOS" };
+  let best = 0;
+  let hit: { name: string; label: string } | null = null;
+  for (const u of users) {
+    const un = norm(u.name || "");
+    if (un.length < 3) continue;
+    const cands = [un, ...un.split(" ").filter(p => p.length >= 3)];
+    for (const cand of cands) {
+      const isWord = new RegExp(`\\b${escRe(cand)}\\b`).test(t);
+      const isIncl = t.length >= 3 && (t.includes(cand) || cand.includes(t));
+      if ((isWord || isIncl) && cand.length > best) {
+        best = cand.length;
+        hit = { name: u.name, label: u.name };
+      }
+    }
+  }
+  return hit;
+}
 
 // Sin pregunta de motivo: la tarjeta ya dice quién/dónde/cuándo.
 // Valor genérico que la app ya usa como fallback en todas las vistas.
@@ -95,6 +121,7 @@ export default function HandsFreeOverlay({
   const [listening, setListening] = useState(false);
   const [fatal, setFatal] = useState("");
   const [log, setLog] = useState<string[]>([]);
+  const appUsers = useAppUsers(); // 🔔 lista de usuarios para ¿a quién?
 
   const draftRef = useRef<Draft>(emptyDraft());
   const stepRef = useRef<Step>("date");
@@ -289,6 +316,14 @@ export default function HandsFreeOverlay({
     { n: 1, label: "SÍ", sub: "dictar una nota" },
     { n: 2, label: "NO", sub: "guardar sin nota" },
   ];
+  const notifOptions = (): ListItem[] => [
+    { n: 1, label: "SÍ", sub: "crear notificación" },
+    { n: 2, label: "NO", sub: "guardar sin aviso" },
+  ];
+  const whoOptions = (): ListItem[] => [
+    { n: 1, label: "TODOS", sub: "todo el equipo" },
+    ...appUsers.map((u, i) => ({ n: i + 2, label: (u.name || "").toUpperCase(), sub: "solo él/ella" })),
+  ];
   const againOptions = (): ListItem[] => [
     { n: 1, label: "IGUAL", sub: "misma sede y profesional" },
     { n: 2, label: "NUEVO", sub: "empezar de cero" },
@@ -302,6 +337,12 @@ export default function HandsFreeOverlay({
     const proName = d.professionalId
       ? (() => { const p = professionals.find(x => x.id === d.professionalId); return p ? proLabel(p) : ""; })()
       : "toda la sede";
+    const notifSpoken = d.notifDays != null
+      ? `te aviso ${d.notifDays} día(s) antes${d.notifWho ? ` para ${d.notifWho}` : " para todo el equipo"}`
+      : "";
+    const notifPart = d.notifDays != null
+      ? `🔔 ${d.notifDays}d antes${d.notifWho ? ` · ${d.notifWho}` : " · TODOS"}`
+      : "";
     return {
       spoken: [
         `El ${dateLabel(d.date)}`,
@@ -309,6 +350,7 @@ export default function HandsFreeOverlay({
         `para ${proName}`,
         turnPhrase(d.turn),
         d.note ? `nota: ${d.note}` : "",
+        notifSpoken,
       ].filter(Boolean).join(", "),
       parts: [
         d.date ? dateLabel(d.date) : "",
@@ -316,8 +358,34 @@ export default function HandsFreeOverlay({
         proName,
         turnPhrase(d.turn),
         d.note ? `📝 ${d.note}` : "",
+        notifPart,
       ].filter(Boolean),
     };
+  };
+
+  // 🔔 PREGUNTA 1: ¿crear una notificación? (si NO → se acaba, va a confirmar)
+  const askNotif = () => {
+    gotoRef.current("notif", {
+      title: "¿Crear notificación?",
+      say: "¿Quieres crear una notificación? Di sí o no.",
+      items: notifOptions(),
+    });
+  };
+  // 🔔 PREGUNTA 2 (si SÍ): ¿con cuántos días de antelación?
+  const askNotifDays = () => {
+    gotoRef.current("notifDays", {
+      title: "¿Cuántos días antes?",
+      say: "¿Con cuántos días de antelación te aviso?",
+    });
+  };
+  // 🔔 PREGUNTA 3 (si SÍ): ¿a quién?
+  const askNotifWho = (echo: string) => {
+    gotoRef.current("notifWho", {
+      title: "¿A quién aviso?",
+      say: "¿A quién? Di todos, o elige de la lista.",
+      items: whoOptions(),
+      echo,
+    });
   };
 
   const askConfirm = () => {
@@ -347,7 +415,7 @@ export default function HandsFreeOverlay({
             professionalId: d.professionalId || null,
             turn: t,
             reason: DEFAULT_REASON,
-            note: d.note,
+            note: buildAvisoNote(d.note, d.notifDays != null, clampAvisoDays(d.notifDays ?? 0), d.notifWho ? [d.notifWho] : null),
           }),
         });
         if (!res.ok) {
@@ -525,7 +593,7 @@ export default function HandsFreeOverlay({
         }
         if (yn === false) {
           setDraftField({ note: "" });
-          askConfirm();
+          askNotif(); // 🔔 siguiente pregunta: ¿notificación?
           return;
         }
         gotoRef.current("note", {
@@ -540,6 +608,66 @@ export default function HandsFreeOverlay({
         const t = norm(raw);
         if (/\b(sin nota|ninguna nota|salta|saltear)\b/.test(t)) setDraftField({ note: "" });
         else setDraftField({ note: raw.replace(/^nota[:\s]+/i, "").trim() });
+        askNotif(); // 🔔 siguiente pregunta: ¿notificación?
+        return;
+      }
+      case "notif": {
+        // 🔔 ¿Crear una notificación? — estricto: sí o no (voz o número)
+        let yn = parseYesNo(raw);
+        if (yn === null) {
+          const n = parseListNumber(raw, 2);
+          yn = n === 1 ? true : n === 2 ? false : null;
+        }
+        if (yn === true) { askNotifDays(); return; }
+        if (yn === false) {
+          setDraftField({ notifDays: null, notifWho: "" }); // sin notificación: se acaba
+          askConfirm();
+          return;
+        }
+        gotoRef.current("notif", {
+          title: "¿Crear notificación?",
+          say: "No he entendido. ¿Quieres crear una notificación? Di sí o no.",
+          items: notifOptions(),
+        });
+        return;
+      }
+      case "notifDays": {
+        // 🔔 días de antelación hablados: "cinco", "5", "una semana" → no, número 0-60
+        const n = parseListNumber(raw, 60);
+        if (!n) {
+          gotoRef.current("notifDays", {
+            title: "¿Cuántos días antes?",
+            say: "No lo he pillado. ¿Con cuántos días de antelación? Por ejemplo: cinco.",
+          });
+          return;
+        }
+        setDraftField({ notifDays: n });
+        if (appUsers.length > 0) askNotifWho(`avisar ${n} día(s) antes`);
+        else askConfirm(); // sin lista de usuarios: avisa a TODOS
+        return;
+      }
+      case "notifWho": {
+        // 🔔 ¿a quién? — número de la lista, o el nombre hablado
+        const maxN = appUsers.length + 1;
+        const n = parseListNumber(raw, maxN);
+        let who = "";
+        let label = "TODOS";
+        if (n === 1) { who = ""; label = "TODOS"; }
+        else if (n) { who = appUsers[n - 2].name; label = who; }
+        else {
+          const hit = matchUserAnswer(raw, appUsers);
+          if (!hit) {
+            gotoRef.current("notifWho", {
+              title: "¿A quién aviso?",
+              say: "No he entendido. ¿A quién? Di todos, o el número de la lista.",
+              items: whoOptions(),
+            });
+            return;
+          }
+          who = hit.name;
+          label = hit.label;
+        }
+        setDraftField({ notifWho: who });
         askConfirm();
         return;
       }
@@ -671,7 +799,10 @@ export default function HandsFreeOverlay({
     turn: "4 · TURNO",
     note: "5 · ¿NOTA?",
     noteText: "5 · NOTA",
-    confirm: "6 · CONFIRMAR",
+    notif: "6 · ¿AVISO?",
+    notifDays: "6 · AVISO · DÍAS",
+    notifWho: "6 · AVISO · ¿QUIÉN?",
+    confirm: "7 · CONFIRMAR",
     saving: "GUARDANDO…",
     again: "¿OTRO AVISO?",
   };

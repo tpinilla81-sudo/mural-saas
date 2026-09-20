@@ -2,6 +2,13 @@
 
 import { useState, useEffect, useRef } from "react";
 import HandsFreeOverlay from "@/components/HandsFreeOverlay";
+import AvisoPicker, {
+  buildAvisoNote,
+  clampAvisoDays,
+  parseAvisoToken,
+  useAppUsers,
+  usersFromNames,
+} from "@/components/AvisoPicker";
 import { warmUpMic, warmUpMicWithTimeout } from "@/lib/mic";
 
 // ═══════════════════════════════════════════════════════════
@@ -272,6 +279,23 @@ export function VoiceAvisoModal({ onClose, onSaved, sedes, professionals, contex
   const [savedOk, setSavedOk] = useState(false);
   const [support, setSupport] = useState<"checking" | "yes" | "no">("checking");
 
+  // 🔔 ¿Crear una notificación? → ¿a quién? ¿días antes? (igual que Mensual)
+  const appUsers = useAppUsers();
+  const [avisoOn, setAvisoOn] = useState(false);
+  const [avisoDays, setAvisoDays] = useState(7);
+  const [avisoAll, setAvisoAll] = useState(true);
+  const [avisoSel, setAvisoSel] = useState<Set<string>>(new Set());
+  const avisoRawTokenRef = useRef("");
+
+  const loadAvisoState = (note: string) => {
+    const av = parseAvisoToken(note || "");
+    setAvisoOn(av.on);
+    setAvisoDays(av.days);
+    setAvisoAll(av.all);
+    setAvisoSel(usersFromNames(av.names, appUsers));
+    avisoRawTokenRef.current = av.raw;
+  };
+
   const recRef = useRef<SRInstance | null>(null);
   const finalRef = useRef("");
 
@@ -356,7 +380,9 @@ export function VoiceAvisoModal({ onClose, onSaved, sedes, professionals, contex
   const analyze = (text?: string) => {
     const t = (text ?? transcript).trim();
     if (!t) return;
-    setParsed(parseAvisoText(t, sedes, professionals, contextYear, contextMonth));
+    const p = parseAvisoText(t, sedes, professionals, contextYear, contextMonth);
+    setParsed(p);
+    loadAvisoState(p.note || "");
   };
 
   const update = (patch: Partial<ParsedAviso>) => setParsed(p => (p ? { ...p, ...patch } : p));
@@ -367,6 +393,8 @@ export function VoiceAvisoModal({ onClose, onSaved, sedes, professionals, contex
     if (!parsed.date) { setMicError("Falta la fecha."); return; }
     setSaving(true);
     try {
+      const names = avisoAll ? null : appUsers.filter(u => avisoSel.has(u.id)).map(u => u.name);
+      const finalNote = buildAvisoNote(parsed.note, avisoOn, clampAvisoDays(avisoDays), names, avisoRawTokenRef.current);
       const turns = parsed.turn === "ALL" ? ["M", "T"] : [parsed.turn];
       let ok = true;
       for (const t of turns) {
@@ -379,7 +407,7 @@ export function VoiceAvisoModal({ onClose, onSaved, sedes, professionals, contex
             professionalId: parsed.professionalId || null,
             turn: t,
             reason: parsed.reason,
-            note: parsed.note,
+            note: finalNote,
           }),
         });
         if (!res.ok) ok = false;
@@ -533,6 +561,13 @@ export function VoiceAvisoModal({ onClose, onSaved, sedes, professionals, contex
                 className="w-full px-2 py-1.5 bg-slate-800 border border-slate-600 focus:border-amber-500 rounded text-white text-xs resize-none outline-none transition"
               />
             </div>
+            {/* 🔔 ¿Crear una notificación? → a quién + días antes */}
+            <AvisoPicker
+              users={appUsers}
+              on={avisoOn} days={avisoDays} all={avisoAll} sel={avisoSel}
+              setOn={setAvisoOn} setDays={setAvisoDays} setAll={setAvisoAll} setSel={setAvisoSel}
+              tone="dark"
+            />
             <div className="text-[10px] text-slate-400 font-bold text-center">
               {parsed.date && parsed.sedeId
                 ? `${turnLabel(parsed.turn)} · ${sedeName(parsed.sedeId)}${parsed.professionalId ? ` · ${proName(parsed.professionalId)}` : " · sin profesional"} · ${parsed.reason}`

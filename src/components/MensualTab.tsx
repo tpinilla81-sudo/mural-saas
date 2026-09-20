@@ -1,6 +1,15 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import AvisoPicker, {
+  AVISO_TOKEN_RE,
+  buildAvisoNote,
+  clampAvisoDays,
+  parseAvisoToken,
+  stripAvisoToken,
+  useAppUsers,
+  usersFromNames,
+} from "@/components/AvisoPicker";
 
 interface PlanEntry {
   id: string;
@@ -58,6 +67,16 @@ export default function MensualTab() {
   const [addTurn, setAddTurn] = useState<"MANANA" | "TARDE">("MANANA");
   const [addPro, setAddPro] = useState("");            // alias
   const [addSaving, setAddSaving] = useState(false);
+
+  // ── 🔔 Aviso (notificación) al generar/editar entrada: ¿sí? ¿a quién? ¿días? ──
+  // Compartido por los 3 diálogos (alta, nota de turno, nota de aviso).
+  const appUsers = useAppUsers();
+  const [avisoOn, setAvisoOn] = useState(false);
+  const [avisoDays, setAvisoDays] = useState(7);
+  const [avisoAll, setAvisoAll] = useState(true);
+  const [avisoSel, setAvisoSel] = useState<Set<string>>(new Set());
+  const [avisoRawNames, setAvisoRawNames] = useState<string[]>([]);
+  const avisoRawTokenRef = useRef(""); // token exacto que venía guardado en la nota
 
   // ── Compacto por JS (max-width 959px, NO por breakpoint sm:): así, al girar
   // el móvil a horizontal, los filtros NO se despliegan solos ──
@@ -199,6 +218,20 @@ export default function MensualTab() {
     return ((r * 299 + g * 587 + b * 114) / 1000) >= 140 ? "#000" : "#fff";
   };
 
+  // Carga el estado del 🔔 aviso desde una nota existente (token @N[:nombres])
+  const loadAvisoState = (text: string) => {
+    const av = parseAvisoToken(text || "");
+    setAvisoOn(av.on);
+    setAvisoDays(av.days);
+    setAvisoAll(av.all);
+    setAvisoSel(usersFromNames(av.names, appUsers));
+    setAvisoRawNames(av.names);
+    avisoRawTokenRef.current = av.raw;
+  };
+
+  const selectedNames = (): string[] | null =>
+    avisoAll ? null : appUsers.filter(u => avisoSel.has(u.id)).map(u => u.name);
+
   // Open the note editor for a specific plan card
   const openNoteEditor = (plan: PlanEntry, sede: any, proName: string) => {
     setNoteModal({
@@ -209,7 +242,8 @@ export default function MensualTab() {
       date: plan.date,
       turn: plan.turn,
     });
-    setNoteText(plan.notes || "");
+    loadAvisoState(plan.notes || "");
+    setNoteText(stripAvisoToken(plan.notes || ""));
     setPlanMoveDate(plan.date);
   };
 
@@ -222,10 +256,11 @@ export default function MensualTab() {
     if (!noteModal) return;
     setNoteSaving(true);
     try {
+      const finalNote = buildAvisoNote(noteText, avisoOn, clampAvisoDays(avisoDays), selectedNames(), avisoRawTokenRef.current);
       const res = await fetch(`/api/company/plan/${noteModal.planId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notes: noteText }),
+        body: JSON.stringify({ notes: finalNote }),
       });
       if (res.ok) {
         const updated = await res.json();
@@ -255,7 +290,8 @@ export default function MensualTab() {
       turn: a.turn,
       reason: (a.reason || "AUSENCIA").toUpperCase(),
     });
-    setNoteText(a.note || "");
+    loadAvisoState(a.note || "");
+    setNoteText(stripAvisoToken(a.note || ""));
     setAvisoMoveDate(a.date);
   };
 
@@ -263,10 +299,11 @@ export default function MensualTab() {
     if (!avisoNoteModal) return;
     setNoteSaving(true);
     try {
+      const finalNote = buildAvisoNote(noteText, avisoOn, clampAvisoDays(avisoDays), selectedNames(), avisoRawTokenRef.current);
       const res = await fetch(`/api/company/avisos/${avisoNoteModal.avisoId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ note: noteText }),
+        body: JSON.stringify({ note: finalNote }),
       });
       if (res.ok) {
         const updated = await res.json();
@@ -305,6 +342,9 @@ export default function MensualTab() {
     setAddSede(filteredSedes[0]?.id || sedes[0]?.id || "");
     setAddTurn("MANANA");
     setAddPro("");
+    // 🔔 la pregunta del aviso SIEMPRE visible, empezando en NO
+    setAvisoOn(false); setAvisoDays(7); setAvisoAll(true); setAvisoSel(new Set());
+    setAvisoRawNames([]); avisoRawTokenRef.current = "";
   };
 
   const savePlanAdd = async () => {
@@ -319,6 +359,17 @@ export default function MensualTab() {
       if (!res.ok) {
         alert("No se pudo guardar el turno.");
         return;
+      }
+      // 🔔 si quiere AVISO, la nota del turno nuevo lleva el token @N[:nombres]
+      if (avisoOn) {
+        try {
+          const created = await res.json();
+          await fetch(`/api/company/plan/${created.id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ notes: buildAvisoNote("", true, clampAvisoDays(avisoDays), selectedNames()) }),
+          });
+        } catch { /* el turno ya está creado: el aviso se puede añadir en la tarjeta */ }
       }
       setAddModal(null);
       await load();
@@ -425,7 +476,8 @@ export default function MensualTab() {
         const nombre = pro ? `${pro.firstName} ${pro.lastName}` : p.professionalAlias;
         const turnLabel = p.turn === "MANANA" ? "M" : "T";
         const hasNote = !!(p.notes && p.notes.trim());
-        const notePreview = hasNote ? p.notes!.trim() : "";
+        const cleanNote = stripAvisoToken(p.notes || "");
+        const notePreview = cleanNote || (AVISO_TOKEN_RE.test(p.notes || "") ? "🔔 aviso programado" : "");
         // Truncate tooltip preview
         const tooltipLines = [
           `${sede.name} / ${sede.task} · ${p.turn === "MANANA" ? "Mañana" : "Tarde"} · ${nombre}`,
@@ -468,7 +520,8 @@ export default function MensualTab() {
         const reason = (a.reason || "AUSENCIA").toUpperCase();
         const turnLabel = a.turn === "M" ? "M" : a.turn === "T" ? "T" : "";
         const hasNote = !!(a.note && a.note.trim());
-        const notePreview = hasNote ? a.note!.trim() : "";
+        const cleanNote = stripAvisoToken(a.note || "");
+        const notePreview = cleanNote || (AVISO_TOKEN_RE.test(a.note || "") ? "🔔 aviso programado" : "");
         assigns.push(
           <div
             key={`av-${a.id}`}
@@ -722,6 +775,11 @@ export default function MensualTab() {
                   title="Mover esta tarjeta de aviso al día elegido">→ MOVER</button>
               </div>
             </div>
+            <AvisoPicker
+              users={appUsers}
+              on={avisoOn} days={avisoDays} all={avisoAll} sel={avisoSel}
+              setOn={setAvisoOn} setDays={setAvisoDays} setAll={setAvisoAll} setSel={setAvisoSel}
+            />
             <div className="flex gap-2 pt-2">
               <button
                 onClick={deleteAviso}
@@ -793,6 +851,11 @@ export default function MensualTab() {
                   title="Mover esta tarjeta de turno al día elegido">→ MOVER</button>
               </div>
             </div>
+            <AvisoPicker
+              users={appUsers}
+              on={avisoOn} days={avisoDays} all={avisoAll} sel={avisoSel}
+              setOn={setAvisoOn} setDays={setAvisoDays} setAll={setAvisoAll} setSel={setAvisoSel}
+            />
             <div className="flex gap-2 pt-2">
               <button
                 onClick={deletePlan}
@@ -851,6 +914,12 @@ export default function MensualTab() {
                 {professionals.map(p => <option key={p.id} value={p.alias}>{p.alias} - {p.firstName} {p.lastName}</option>)}
               </select>
             </div>
+            {/* 🔔 LA PREGUNTA: ¿crear notificación? → a quién + días antes */}
+            <AvisoPicker
+              users={appUsers}
+              on={avisoOn} days={avisoDays} all={avisoAll} sel={avisoSel}
+              setOn={setAvisoOn} setDays={setAvisoDays} setAll={setAvisoAll} setSel={setAvisoSel}
+            />
             <div className="flex gap-2 pt-2">
               <button onClick={() => setAddModal(null)} disabled={addSaving} className="flex-1 py-2 px-4 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg font-bold text-sm transition disabled:opacity-50">Cancelar</button>
               <button onClick={savePlanAdd} disabled={addSaving || !addSede || !addPro} className="flex-1 py-2 px-4 bg-gray-900 hover:bg-black text-white rounded-lg font-bold text-sm transition disabled:opacity-50">{addSaving ? "Guardando…" : "Añadir turno"}</button>
