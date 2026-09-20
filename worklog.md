@@ -1401,3 +1401,24 @@ Work Log:
 Stage Summary:
 - El paso 4 ya NO puede "no salir": el botón siempre está y, si algo falla, el propio botón dice EXACTAMENTE por qué (Safari vs icono de inicio vs iOS antiguo) y cómo salir del atasco.
 - Queda en manos del usuario: Compartir ⬆️ → Añadir a inicio → abrir desde el icono → CONFIGURACIÓN → ACTIVAR AQUÍ → Permitir (o actualizar iOS si <16.4).
+
+---
+Task ID: 43c
+Agent: main
+Task: "NO CONSIGO HACER FUNCIONAR LAS NOTIFICACIONES — tienes que hacer como el micrófono: activar en inicio"
+
+Work Log:
+- Interpretación: quiere que la app PIDA las notificaciones al entrar, igual que hace el micrófono (los navegadores exigen un toque del usuario para mostrar el permiso; no puede ser 100% automático).
+- NUEVO componente PushOnboard.tsx, montado en AppShell (role != SUPER_ADMIN):
+  * 2,5 s tras entrar → si permiso "default" y sin suscripción → banner flotante: "🔔 ¿Recibir AVISOS de la agenda en este móvil? — Como el micrófono: se pregunta al entrar, UNA sola vez" con [🔔 ACTIVAR] [AHORA NO].
+  * ACTIVAR (gesto) → requestPermission → prompt del sistema "Permitir" → register SW → subscribe → POST push/subscribe → toast verde "✅ ¡LISTO! Este móvil ya recibe avisos" 6 s.
+  * AHORA NO → snooze 7 días (localStorage pushAskSnooze); denegado → snooze igual.
+  * iPhone DENTRO de Safari (sin standalone) → banner instrucciones (Añadir a inicio → icono → pregunta al entrar → Permitir), snooze 2 días (pushIosSnooze); iOS standalone pero sin PushManager → iOS 16.4+ (ya en ConfigTab).
+  * Ya suscrito o permiso granted → nunca aparece; denied → tampoco (ConfigTab explica reset del icono).
+- AppShell: import + render tras <main>.
+- Build limpio. Commit 7ccd1af → push → Vercel 200.
+- E2E PRODUCCIÓN (412×915 julio1974@): tras login el banner aparece ✓ ("¿Recibir AVISOS…? Como el micrófono…", ACTIVAR + AHORA NO); click ACTIVAR → headless deniega → banner se oculta (cableado correcto; el grant real ya se verificó en Task 42 contra el endpoint real). Captura: download/t43c-banner-inicio.png (directorio download fue recreado: se había perdido).
+
+Stage Summary:
+- Al ENTRAR en la app (admin y todos los usuarios) ahora se pregunta "¿recibir avisos en este móvil?" igual que el micrófono: un toque en ACTIVAR → "Permitir" → móvil registrado y listo. Sin buscar CONFIGURACIÓN ni pasos.
+- En iPhone/Safari la propia app enseña los 3 gestos (Añadir a inicio → abrir del icono → Permitir) sin tener que saber nada.
