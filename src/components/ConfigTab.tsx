@@ -271,7 +271,7 @@ function AlertRulesPanel() {
   const sendTest = async () => {
     setBusy(true); setMsg("");
     try {
-      const res = await fetch("/api/company/push/test", { method: "POST" });
+      const res = await fetch("/api/company/push/prueba", { method: "POST" });
       const j = await res.json().catch(() => ({}));
       setMsg(res.ok ? `📤 Prueba enviada a ${j.sent} dispositivo(s)` : (j.error || "Error al enviar"));
     } catch { setMsg("Error de conexión"); } finally { setBusy(false); }
