@@ -177,6 +177,8 @@ function AlertRulesPanel() {
   const [editChannel, setEditChannel] = useState<Channel>("both");
   // Estado de las notificaciones en ESTE dispositivo
   const [notif, setNotif] = useState<"checking" | "unsupported" | "denied" | "off" | "subscribed">("checking");
+  // Entorno del dispositivo (para dar la instrucción EXACTA en iPhone)
+  const [env, setEnv] = useState<{ ios: boolean; standalone: boolean }>({ ios: false, standalone: false });
 
   const load = async () => {
     try {
@@ -193,7 +195,13 @@ function AlertRulesPanel() {
 
   const checkNotif = async () => {
     try {
-      if (typeof window === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
+      if (typeof window === "undefined") return;
+      const ua = navigator.userAgent || "";
+      const ios = /iphone|ipad|ipod/i.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+      const standalone = (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches)
+        || (navigator as unknown as { standalone?: boolean }).standalone === true;
+      setEnv({ ios, standalone });
+      if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) {
         setNotif("unsupported");
         return;
       }
@@ -211,6 +219,19 @@ function AlertRulesPanel() {
 
   const enableNotif = async () => {
     setBusy(true); setMsg("");
+    // Diagnóstico ANTES de intentar nada: explica el porqué EXACTO en iPhone
+    if (typeof window === "undefined" || !("Notification" in window) || !("PushManager" in window)) {
+      if (env.ios && env.standalone) {
+        setMsg("⚠️ Tu iPhone necesita iOS 16.4 o superior: Ajustes → General → Actualización de software. Después vuelve aquí.");
+      } else if (env.ios) {
+        setMsg("📱 Estás DENTRO de Safari y ahí NO se puede. Hazlo así: Compartir ⬆️ → Añadir a inicio → abre MURAL desde el ICONO nuevo → CONFIGURACIÓN → 🔔 ACTIVAR AQUÍ");
+      } else {
+        setMsg("⚠️ Este navegador no soporta notificaciones. Usa Chrome (Android) o Chrome/Edge en PC.");
+      }
+      setNotif("unsupported");
+      setBusy(false);
+      return;
+    }
     try {
       const perm = await Notification.requestPermission();
       if (perm !== "granted") {
@@ -240,7 +261,9 @@ function AlertRulesPanel() {
       setMsg("✅ ¡LISTO! Este móvil ya recibe avisos.");
       await load();
     } catch {
-      setMsg("⚠️ No se pudo activar aquí. En iPhone: primero añade la app a la pantalla de inicio (ver instrucciones) y abre MURAL desde ese icono.");
+      setMsg(env.ios && !env.standalone
+        ? "📱 Estás DENTRO de Safari: añade la app a inicio (Compartir ⬆️ → Añadir a inicio) y abre MURAL desde el icono; ahí sí funciona 🔔 ACTIVAR AQUÍ."
+        : "⚠️ No se pudo activar. En iPhone: añade la app a inicio y abre desde el icono; ¿no sale «Permitir»? borra el icono, añádelo otra vez y reintenta.");
     } finally {
       setBusy(false);
     }
@@ -345,10 +368,18 @@ function AlertRulesPanel() {
     return namesOfSel(ids);
   };
 
+  const unsupportedText = env.ios
+    ? (env.standalone
+      ? "📱 App abierta desde el icono ✓, pero este iPhone necesita iOS 16.4+ para notificaciones (Ajustes → General → Actualización de software)"
+      : "📱 Estás DENTRO de Safari → ahí NO se puede activar. Añade la app a inicio (paso 2 ↓) y abre MURAL desde el ICONO nuevo")
+    : "Este navegador no permite notificaciones (Android: Chrome · PC: Chrome o Edge)";
+
   const notifLabel = {
     checking: "Comprobando este dispositivo…",
-    unsupported: "Este navegador no permite activarlo AQUÍ (en iPhone: añade la app a la pantalla de inicio y ábrela desde el icono; en PC: Chrome o Edge)",
-    denied: "⛔ BLOQUEADO en este navegador: Ajustes → Notificaciones → permitir esta web",
+    unsupported: unsupportedText,
+    denied: env.ios && env.standalone
+      ? "⛔ Notificaciones BLOQUEADAS: borra el icono de inicio, añádelo otra vez y reintenta (se resetea el permiso)"
+      : "⛔ BLOQUEADO en este navegador: Ajustes → Notificaciones → permitir esta web",
     off: "⚠️ Este dispositivo AÚN NO recibe avisos",
     subscribed: "✅ Este dispositivo YA recibe avisos",
   }[notif];
@@ -381,11 +412,16 @@ function AlertRulesPanel() {
               {notifLabel}
             </p>
 
-            {(notif === "off" || notif === "denied") && (
+            {(notif === "off" || notif === "denied" || notif === "unsupported") && (
               <button onClick={enableNotif} disabled={busy}
                 className="w-full bg-[#2E5D3A] hover:bg-[#3a7a4c] disabled:opacity-40 text-white text-sm font-black px-4 py-3 rounded-lg transition">
                 🔔 ACTIVAR AQUÍ
               </button>
+            )}
+            {notif === "unsupported" && env.ios && !env.standalone && (
+              <p className="text-[10px] font-bold text-amber-400 leading-snug">
+                El botón SOLO funciona desde el icono de inicio, no desde Safari. Si ya lo tienes en inicio: cierra esto y abre MURAL desde el icono 📲.
+              </p>
             )}
 
             {/* Instrucciones SIEMPRE visibles */}
@@ -403,10 +439,13 @@ function AlertRulesPanel() {
                 <div className="text-[10px] font-black text-slate-200 mb-1">🍎 IPHONE (Safari)</div>
                 <ol className="text-[10px] text-slate-400 leading-snug list-decimal ml-3.5 space-y-0.5">
                   <li>Abre la app en <b className="text-slate-200">Safari</b></li>
-                  <li>Compartir ⬆️ → <b className="text-slate-200">Añadir a inicio</b></li>
-                  <li>Abre MURAL <b className="text-slate-200">desde el icono nuevo</b></li>
-                  <li><b className="text-[#6BBE7A]">🔔 ACTIVAR AQUÍ</b> → Permitir</li>
+                  <li>Compartir ⬆️ → <b className="text-slate-200">Añadir a inicio</b> → Añadir</li>
+                  <li>Cierra Safari y abre MURAL <b className="text-slate-200">desde el ICONO nuevo</b> 📲</li>
+                  <li>Abajo toca <b className="text-slate-200">⚙️ CONFIGURACIÓN</b> → <b className="text-[#6BBE7A]">🔔 ACTIVAR AQUÍ</b> → Permitir</li>
                 </ol>
+                <p className="text-[9px] text-slate-500 leading-tight mt-1">
+                  ¿No sale «Permitir»? Borra el icono, añádelo otra vez (paso 2) y reintenta.
+                </p>
               </div>
             </div>
 
