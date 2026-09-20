@@ -651,7 +651,7 @@ export default function MensualTab() {
                 onChange={e => setNoteText(e.target.value)}
                 maxLength={2000}
                 rows={5}
-                placeholder="Escribe aquí la nota del aviso…"
+                placeholder="Escribe aquí la nota del aviso… (💡 @5 = te avisamos 5 días antes)"
                 className="w-full px-3 py-2 bg-gray-50 border-2 border-gray-300 focus:border-amber-500 focus:bg-white rounded-lg text-sm text-gray-900 font-medium resize-none outline-none transition"
               />
               <div className="flex justify-between items-center mt-1">

@@ -156,5 +156,64 @@ export async function GET() {
     }
   }
 
+  // ══ 3) RECORDATORIOS EN LÍNEA: "@N" dentro de la nota ══
+  // Cualquier tarjeta/aviso FUTURO cuya nota contiene @N (0-60) avisa a TODO el
+  // personal de su empresa (📱 push) cuando faltan ≤ N días — sin configurar nada.
+  // Dedupe propio con ruleId "inline". La nota se muestra SIN el "@N".
+  const stripInline = (t: string) => (t || "").replace(/@\s?\d{1,2}/g, "").replace(/\s{2,}/g, " ").trim();
+
+  const inlinePlans = await db.plan.findMany({
+    where: { date: { gte: today }, notes: { contains: "@" } },
+    include: { sede: true },
+  });
+  for (const p of inlinePlans) {
+    const m = (p.notes || "").match(/@(\d{1,2})/);
+    if (!m) continue;
+    const remDays = Math.min(60, parseInt(m[1], 10));
+    const diff = daysUntil(p.date, today);
+    if (diff < 0 || diff > remDays) continue;
+    const dupe = await db.alertSent.findUnique({
+      where: { source_sourceId_ruleId_targetDate: { source: "plan", sourceId: p.id, ruleId: "inline", targetDate: p.date } },
+    });
+    if (dupe) continue;
+    const userIds = (await db.user.findMany({ where: { companyId: p.companyId }, select: { id: true } })).map(u => u.id);
+    const nSent = await sendPushToUsers(userIds, {
+      title: `🔔 RECORDATORIO — ${labelWhen(diff)}`,
+      body: `${p.sede?.name || "sede"} · ${p.professionalAlias || "—"} · ${labelDate(p.date)} ${p.turn === "MANANA" ? "Mañana" : "Tarde"} — ${stripInline(p.notes)}`.trim(),
+      url: "/",
+      tag: `inline-${p.id}`,
+    });
+    await db.alertSent.create({ data: { source: "plan", sourceId: p.id, ruleId: "inline", targetDate: p.date } });
+    sent += nSent;
+    details.push(`plan ${p.date} @${remDays} → ${nSent} envío(s) [push]`);
+  }
+
+  const inlineAvisos = await db.aviso.findMany({
+    where: { date: { gte: today }, note: { contains: "@" } },
+    include: { sede: true, professional: true },
+  });
+  for (const a of inlineAvisos) {
+    const m = (a.note || "").match(/@(\d{1,2})/);
+    if (!m) continue;
+    const remDays = Math.min(60, parseInt(m[1], 10));
+    const diff = daysUntil(a.date, today);
+    if (diff < 0 || diff > remDays) continue;
+    const dupe = await db.alertSent.findUnique({
+      where: { source_sourceId_ruleId_targetDate: { source: "aviso", sourceId: a.id, ruleId: "inline", targetDate: a.date } },
+    });
+    if (dupe) continue;
+    const who = a.professional ? a.professional.alias : "Toda la sede";
+    const userIds = (await db.user.findMany({ where: { companyId: a.companyId }, select: { id: true } })).map(u => u.id);
+    const nSent = await sendPushToUsers(userIds, {
+      title: `🔔 RECORDATORIO — ${labelWhen(diff)}`,
+      body: `${a.sede?.name || "sede"} · ${who} · ${labelDate(a.date)} ${a.turn === "M" ? "Mañana" : "Tarde"} — ${stripInline(a.note)} (ausencia)`.trim(),
+      url: "/",
+      tag: `inline-${a.id}`,
+    });
+    await db.alertSent.create({ data: { source: "aviso", sourceId: a.id, ruleId: "inline", targetDate: a.date } });
+    sent += nSent;
+    details.push(`aviso ${a.date} @${remDays} → ${nSent} envío(s) [push]`);
+  }
+
   return NextResponse.json({ ok: true, today, rules: rules.length, sent, details });
 }
