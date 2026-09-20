@@ -1422,3 +1422,19 @@ Work Log:
 Stage Summary:
 - Al ENTRAR en la app (admin y todos los usuarios) ahora se pregunta "¿recibir avisos en este móvil?" igual que el micrófono: un toque en ACTIVAR → "Permitir" → móvil registrado y listo. Sin buscar CONFIGURACIÓN ni pasos.
 - En iPhone/Safari la propia app enseña los 3 gestos (Añadir a inicio → abrir del icono → Permitir) sin tener que saber nada.
+
+---
+Task ID: 43d
+Agent: main
+Task: "SIGUE SIN ACTIVARSE O DAR OPCIÓN" — el banner no aparecía / no daba opción en su dispositivo
+
+Work Log:
+- CAUSAS de silencio detectadas en PushOnboard anterior: (1) iOS standalone SIN PushManager (iOS <16.4) → return silencioso sin banner; (2) permiso "denied" → nada; (3) permiso "granted" sin suscripción → nada; (4) snoozes previos.
+- PushOnboard REHECHO con regla "NUNCA se calla": evaluate() (ios/standalone/hasPush/perm/subscribed) + decide() → 5 modos con motivo EXACTO: ask (ACTIVAR; también con granted-sin-suscripción, avisando "falta registrar el móvil"), ios-home (en Safari: Añadir a inicio → icono → Permitir), ios-old (app de inicio pero sin push: "necesitas iOS 16.4+ → Ajustes → General → Actualización de software"), ios-denied (bloqueado: borrar icono y re-añadir para resetear), nopush (usa Chrome/Edge). Snoozes por modo (1-7 días). requestPermission denegado → mensaje de reset inline; error → instrucción icono.
+- Botón 🔔 PERMANENTE en AppShell (desktop junto a 🚗 y móvil junto a ☰) → evento "push-onboard:open" → PushOnboard abre MODAL central ignorando snooze; si ya suscrito → toast "✅ YA recibe avisos". Modal con ✕ y click-fuera para cerrar.
+- Build limpio. Commit 6b0cdea → push → Vercel 200.
+- E2E PRODUCCIÓN (412×915 julio1974@): banner auto visible ✓; AHORA NO (snooze) → campana 🔔 de la barra abre el modal IGUALMENTE ✓ ("¿Recibir AVISOS…?"); captura download/t43d-campana-modal.png.
+
+Stage Summary:
+- Ya no hay camino sin opción: SIEMPRE hay 🔔 arriba (admin y usuarios) que abre la activación bajo demanda, y cualquier bloqueo (Safari, iOS viejo, permiso denegado) muestra su motivo exacto y la salida.
+- Siguiente dato que falta del usuario: QUÉ mensaje le sale al tocar 🔔 en su iPhone → identifica iOS<16.4 vs Safari vs bloqueado.
