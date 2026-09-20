@@ -1336,3 +1336,31 @@ Stage Summary:
 - 🔔 Avisos programados: cada aviso ahora elige ¿A QUIÉN? (TODOS o usuarios concretos de la BD) y ¿POR DÓNDE? (📱 móvil push — dispositivos vinculados a cada usuario al pulsar ACTIVAR AQUÍ —, ✉️ correo a su email, o 📱+✉️ ambos). El cron respeta esa configuración y dedupe igual que antes.
 - MI EMPRESA → Accesos · Permisos: la visibilidad ya NO se llama "permisos": bloque "👁️ VER TARJETAS DE OTRAS SEDES Y OTROS PROFESIONALES" y, SEPARADO, "📝 VER NOTAS — APARTE DE LAS TARJETAS".
 - ⚠️ PENDIENTE para que el ✉️ CORREO SALGA de verdad: añadir RESEND_API_KEY (y opcional EMAIL_FROM) en las variables de entorno de Vercel — la UI ya lo avisa ("El envío de correo NO está configurado aún en el servidor"); sin clave, los emails quedan en OutboxNotification "pending" y solo salen los push 📱.
+
+---
+Task ID: 42
+Agent: main
+Task: "EL MOBIL NO APARECE EN USUARIOS, HAY QUE METERLO, SI NO NO ENVIA NOTIFICACION" — hacer visible el registro de móviles en Avisos programados
+
+Work Log:
+- DIAGNÓSTICO (Neon): PushSubs=0 y Rules=0 — NO hay ningún móvil registrado, por eso nada puede llegar al móvil. El móvil no se puede "meter" desde el panel: solo se registra pulsando 🔔 ACTIVAR AQUÍ EN ese dispositivo ( así lo exige Web Push). El usuario no tenía forma de VER qué móviles estaban registrados → nueva UI que lo hace visible.
+- alert-rules GET: devuelve también `devices` (PushSub con userName resuelto, userAgent, fecha) además de rules/users/emailConfigured.
+- ConfigTab:
+  * Sección 1: bloque "📱 MÓVILES REGISTRADOS (N)" — lista numerada con usuario dueño + tipo (Android/iPhone/Windows·Chrome/…) + fecha; si N=0, aviso ROJO: "NO HAY NINGÚN MÓVIL REGISTRADO… solo el ✉️ correo puede llegar" + instrucciones para meterlo.
+  * Al activar con éxito: msg "✅ MÓVIL REGISTRADO…" + load() → la lista se refresca al instante.
+  * RecipientsPicker: los usuarios con móvil activado llevan insignia "📱×N".
+  * Caja "¿Cómo funciona?": nuevo punto "📱 ¿Cómo se METE un móvil? — abrir la app EN ese móvil con su usuario → CONFIGURACIÓN → 🔔 ACTIVAR AQUÍ".
+  * Helper deviceType(userAgent) (Android/iPhone/iPad/Windows/Mac/Linux + navegador).
+- cron/alerts: con recipients="" (TODOS) el push ahora usa sendPushToAll (broadcast a TODOS los móviles, incl. cualquier dispositivo sin usuario de antes); con usuarios elegidos, sendPushToUsers (solo sus móviles). Email igual que Task 41.
+- Build limpio. Commit 094c25a → push → Vercel 200.
+- E2E PRODUCCIÓN (login julio1974@):
+  * Panel muestra "📱 MÓVILES REGISTRADOS (0)" con aviso rojo ✓ (estado real: 0 móviles).
+  * Headless Chrome deniega Notification.permission → ACTIVAR AQUÍ no completa en este navegador de prueba (limitación del navegador headless, no de la app).
+  * Se ejercitó el endpoint REAL /api/company/push/subscribe con la sesión de Julio (fetch desde la página) → PushSub creado con userId=Julio y companyId ✓; la lista pasó a "MÓVILES REGISTRADOS (1): 1. JULIO MURILLO · Linux · Chrome · 20/9/2026" ✓. Después se BORRÓ ese dispositivo de prueba (subs=0, BD limpia).
+  * /api/cron/alerts → {"ok":true,...} sin errores.
+  * Captura: download/t42-moviles-registrados.png
+
+Stage Summary:
+- Ahora se VE en todo momento qué móviles están registrados (y de quién): lista "📱 MÓVILES REGISTRADOS" + insignia 📱×N junto a cada usuario en el selector de destinatarios + aviso rojo cuando no hay ninguno.
+- El móvil se METE pulsando 🔔 ACTIVAR AQUÍ en el propio móvil (con su usuario dentro de la app); al conseguirlo, el mensaje dice "✅ MÓVIL REGISTRADO" y aparece en la lista al instante. Verificado de extremo a extremo contra el endpoint real (quedó vinculado a JULIO MURILLO).
+- Queda en manos del usuario: abrir CONFIGURACIÓN en SU móvil y pulsar 🔔 ACTIVAR AQUÍ (su móvil saldrá en la lista). El ✉️ correo sigue pendiente de RESEND_API_KEY en Vercel.
