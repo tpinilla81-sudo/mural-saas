@@ -511,3 +511,12 @@ model VapidKey {
   publicKey  String
   privateKey String
 }
+
+// Log de errores/fallos de activación de notificaciones (soporte remoto)
+model PushErrorLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  device    String   @default("") // diagnóstico del dispositivo + userAgent
+  error     String   @default("") // fallo real (name — message) o "OK"
+  createdAt DateTime @default(now())
+}

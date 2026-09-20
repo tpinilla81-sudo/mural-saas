@@ -103,6 +103,32 @@ export default function PushOnboard() {
   const [toast, setToast] = useState("");
   const [envInfo, setEnvInfo] = useState<EnvInfo | null>(null);
 
+  const diagText = (e: EnvInfo | null, extra: string): string => {
+    const parts: string[] = [];
+    if (e) {
+      parts.push(e.ios ? "iPhone/iPad" : "no-iOS");
+      parts.push(e.standalone ? "desde-icono" : "en-navegador");
+      parts.push(e.hasPush ? "push-ok" : "sin-push");
+      parts.push(`perm=${e.perm}`);
+      if (e.subscribed) parts.push("suscrito");
+    }
+    parts.push((navigator.userAgent || "").slice(0, 120));
+    if (extra) parts.push(extra);
+    return parts.join(" | ");
+  };
+
+  // Soporte remoto: el fallo real llega a la BD (fire-and-forget)
+  const report = (e: EnvInfo | null, error: string) => {
+    try {
+      fetch("/api/company/push/log-error", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ device: diagText(e, ""), error: error.slice(0, 600) }),
+        keepalive: true,
+      }).catch(() => {});
+    } catch { /* noop */ }
+  };
+
   // ── Mostrar un modo concreto (manual ignora snooze) ──
   const open = useCallback(async (manual: boolean) => {
     try {
@@ -123,6 +149,7 @@ export default function PushOnboard() {
       setInline("");
       setAsModal(manual);
       setMode(m);
+      report(e, `modal ${manual ? "manual" : "auto"}: ${m}`);
     } catch { /* noop */ }
   }, []);
 
@@ -149,6 +176,7 @@ export default function PushOnboard() {
       }
       const perm = await askPermission();
       if (perm !== "granted") {
+        report(envInfo, `permiso NO concedido: ${perm}`);
         setInline(perm === "denied"
           ? "⛔ Has pulsado «No permitir». Para revertirlo: borra el icono de inicio y vuelve a añadirlo."
           : "Sin permiso no puede llegar nada. Vuelve a tocar ACTIVAR y pulsa «Permitir». (Di abajo qué dice permiso)");
@@ -190,6 +218,7 @@ export default function PushOnboard() {
         body: JSON.stringify(sub.toJSON()),
       });
       if (!res.ok) throw new Error(`el servidor rechazó el registro (HTTP ${res.status})`);
+      report(envInfo, "OK registrado ✓");
       setToast("✅ ¡LISTO! Este móvil ya recibe avisos.");
       setTimeout(() => setToast(""), 6000);
       setMode("hidden"); setAsModal(false);
@@ -202,6 +231,7 @@ export default function PushOnboard() {
       else if (name === "AbortError") hint = "Se cortó a medias: vuelve a tocar ACTIVAR.";
       else if (name === "NotSupportedError") hint = "Este iPhone/navegador no soporta avisos web (hace falta iOS 16.4+).";
       else if (name === "InvalidStateError") hint = "Reabre la app desde el icono y vuelve a tocar ACTIVAR.";
+      report(envInfo, `${name} — ${msg}`);
       setInline(`⚠️ Fallo real: ${name} — ${msg}. ${hint}`);
     } finally {
       setBusy(false);
