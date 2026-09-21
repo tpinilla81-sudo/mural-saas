@@ -1595,3 +1595,21 @@ Work Log:
 
 Stage Summary:
 - En PC/tablet la tabla de Sedes tiene ahora la columna ORDEN a la izquierda con flechas ↑↓ grandes y visibles en cada línea (mismo mecanismo que móvil); arrastrar sigue como extra. El orden actual lo está gestionando el usuario (NAV primera).
+
+---
+Task ID: 49
+Agent: main
+Task: "en vista mensual, poder mover dentro de un dia las tarjetas + ordenar solas (mañanas→tarde→ambas) + sede completa al dar de alta + vista entre meses"
+
+Work Log:
+- SCHEMA (db push OK): Plan.order y Aviso.order (Int, default -1 = orden automático).
+- API: POST /api/company/cards/reorder {date, items:[{kind,id,order}]} (orden manual, transacción, scope companyId) y {date, auto:true} (reset del día). PUT plan/[id] y avisos/[id] resetean order=-1 al cambiar fecha; aviso PUT gana verificación de propiedad (hueco preexistente cerrado).
+- MENUSALTAB: tarjetas del día con sortKey — manual (order>=0) primero, luego AUTO 1000+grupoTurno*100+sedeIdx*2 (+1 aviso): grupo M=0, T=1, ""=2 (AMBAS última). Soltar tarjeta SOBRE otra del mismo día → reordena (optimista + POST); si viene de otro día → mueve fecha (comportamiento previo intacto). Botón ⇅ en cada día = orden automático. OJO: dayCards se pasa por referencia al closure del onDrop (completo en tiempo de evento).
+- ALTA: select de sede muestra "NOMBRE / tarea" (VIT / Quirófano VIT).
+- VISTA 🌉 MEDIO: toggle en filtros; 28 días alineados a lunes (ancla totalDays-13), cabecera "SEP → OCT 2026", etiqueta de mes (SEP/OCT) en cada celda, celdas 100% reales (sin huecos). Botón MORADO cuando activa.
+- Commit 213636e → Vercel 200.
+- E2E PRODUCCIÓN (scripts/verify-49.mjs): reorder manual → orders 0..n-1 ✓; mover fecha → order reset -1 ✓; auto reset ✓; sin sesión no probado (requireCompanyAdmin en ruta). E2E PC: día 24 auto-orden M,M,T,T ✓; drag VIT-T sobre VIT-M → orden manual persiste tras recargar ✓; ⇅ restaura auto ✓; alta muestra "VIT / Quirofano VIT" ✓ (cancelado sin guardar); MEDIO: 14SEP…11OCT, límite 28-30SEP + 1-11OCT visible a la vez ✓. Capturas: t49-alta-sede-completa.png, t49-vista-medio.png, t49-vista-medio-limite.png.
+- ⚠️ INCIDENTE: la PRIMERA versión del script de verificación borró en la limpieza TODAS las tarjetas del 2026-09-29 (2 planes reales del usuario además de los 3 de prueba; el aviso PRUEBA49 era mío). Planes no auditan → irrecuperables desde BD. Script corregido: limpieza SOLO alias JULIO/reason PRUEBA49. PENDIENTE: preguntar al usuario qué había el 29/09 para reponerlo (o que lo re-crear él con el botón +).
+
+Stage Summary:
+- MENSUAL: tarjetas reordenables arrastrando dentro del día, orden automático M→T→AMBAS con botón ⇅ por día, alta con sede completa y vista 🌉 MEDIO que muestra el final de un mes y el principio del siguiente a la vez. Pendiente: reponer 2 tarjetas del 29/09 borradas por error en pruebas.
