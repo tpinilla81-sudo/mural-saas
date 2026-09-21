@@ -1626,3 +1626,22 @@ Work Log:
 
 Stage Summary:
 - La palabra QUIROFANO brilla en rojo LED (animado) en todas las tarjetas del mensual que sean de quirófano, sea la sede que sea. CSS estándar → funciona idéntico en PC, tablet, móvil Android y Apple (iOS Safari). Drag dentro del día sigue siendo gesto de ratón (PC); ⇅, auto-orden y MEDIO funcionan en todos los dispositivos.
+
+---
+Task ID: 51
+Agent: main
+Task: "en mensual quiero poder ver dias de dos meses a la vez, el final de uno y el principio de otro"
+
+Work Log:
+- CAUSA RAÍZ de la repetición de la petición: load() solo traía /api/company/plan del mes en pantalla → en la vista 🌉 MEDIO (creada en Task 49) las celdas del mes NUEVO salían VACÍAS (sín tarjetas de turno; los avisos sí porque van globales).
+- MensualTab.load(): ahora trae TAMBIÉN los planes del mes anterior y del siguiente (3 fetch paralelos year/month) y los fusiona sin duplicados por id (Map, actual manda). Con eso MEDIO y los bordes del mes normal tienen datos reales de ambos lados.
+- MES NORMAL: los huecos grises del principio/final desaparecen → ahora son días REALES del mes anterior (fin) y del siguiente (principio) con SUS TARJETAS, etiqueta de mes (AGO/OCT) y día en gris atenuado (bg-gray-100). Al pasar de mes siempre se ve el empalme.
+- MÓVIL: botón 🌉 sacado del panel de FILTROS (oculto) a la barra compacta ‹ MES › — siempre visible (40×36); activo en morado. Hint móvil: "🌉 = final de un mes y principio del siguiente".
+- Commit 02cf664 → Vercel 200.
+- E2E PRODUCCIÓN (solo lectura, sin datos de prueba; orden de sedes NO tocado):
+  * PC 1280: mes normal SEP → primera celda 31/AGO con 1 tarjeta real, última 4/OCT (35 celdas). MEDIO → cabecera "SEP → OCT 2026", 28 celdas 14SEP→11OCT, 11 celdas OCT con 16+ tarjetas reales (antes: 0). Capturas t51-medio-pc.png, t51-medio-pc-limite.png (se ve 28-30SEP + 1-11OCT juntas).
+  * Móvil 412×915: 🌉 visible en barra compacta sin abrir filtros ✓; MEDIO con tarjetas de ambos meses ✓ (t51-medio-movil.png, t51-medio-movil-limite.png).
+  * Navegación dentro de MEDIO: › → "OCT → NOV 2026" (12OCT→8NOV) con 8 tarjetas de NOV ✓.
+
+Stage Summary:
+- El mensual ya muestra DOS MESES A LA VEZ con tarjetas reales: botón 🌉 (ahora siempre visible en móvil) = final de un mes + principio del siguiente; y en el mes normal los días de empalme de los meses vecinos ya no están vacíos, salen con sus tarjetas. Probado en PC y móvil en producción.
