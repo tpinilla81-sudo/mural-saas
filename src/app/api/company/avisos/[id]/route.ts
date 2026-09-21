@@ -12,21 +12,28 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   const body = await req.json();
 
   // Editable: note/reason/date (admin) y seenAt (swipe "visto", cualquier usuario)
-  const data: { note?: string; reason?: string; seenAt?: Date | null; date?: string } = {};
+  const data: { note?: string; reason?: string; seenAt?: Date | null; date?: string; order?: number } = {};
   if (typeof body.note === "string") data.note = body.note;
   if (typeof body.reason === "string") data.reason = body.reason;
   if (typeof body.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.date)) data.date = body.date;
   if (body.seenAt === "now") data.seenAt = new Date();
   else if (body.seenAt === "clear") data.seenAt = null;
+  // Al mover a otro día se resetea el orden manual (salvo que venga uno explícito)
+  if (data.date !== undefined) data.order = typeof body.order === "number" ? body.order : -1;
 
   if (Object.keys(data).length === 0) {
     return NextResponse.json({ error: "Nada que actualizar" }, { status: 400 });
   }
 
-  // Solo admin/editores cambian note/reason/date; seenAt lo marca cualquiera con sesión
-  if (data.note !== undefined || data.reason !== undefined || data.date !== undefined) {
+  // Solo admin/editores cambian note/reason/date/order; seenAt lo marca cualquiera con sesión
+  if (data.note !== undefined || data.reason !== undefined || data.date !== undefined || data.order !== undefined) {
     const { error, status } = await requireCompanyAdmin();
     if (error) return NextResponse.json({ error }, { status });
+    // Verificación de propiedad: el aviso debe ser de la empresa del usuario
+    const existing = await db.aviso.findUnique({ where: { id }, select: { companyId: true } });
+    if (!existing || existing.companyId !== user.companyId) {
+      return NextResponse.json({ error: "No encontrado" }, { status: 404 });
+    }
   }
 
   const aviso = await db.aviso.update({

@@ -18,16 +18,18 @@ interface PlanEntry {
   turn: string;
   professionalAlias: string;
   notes?: string;
+  order?: number; // orden manual dentro del día; -1/undefined = auto (M→T→ambas)
 }
 
 interface AvisoEntry {
   id: string;
   date: string;
   sedeId: string;
-  turn: string; // M | T
+  turn: string; // M | T | "" (ambas)
   professionalId: string | null;
   reason: string;
   note?: string;
+  order?: number;
   professional?: { alias: string; firstName: string; lastName: string } | null;
   sede?: { name: string } | null;
 }
@@ -140,6 +142,9 @@ export default function MensualTab() {
   // ── Month navigation: swipe táctil + flechas ‹ › ──
   const [slideDir, setSlideDir] = useState<"" | "next" | "prev">("");
   const touchStart = useRef<{ x: number; y: number } | null>(null);
+
+  // ── Vista 🌉 MEDIO: final de mes + principio del siguiente ──
+  const [midMode, setMidMode] = useState(false);
 
   const goMonth = (dir: 1 | -1) => {
     setSlideDir(dir === 1 ? "next" : "prev");
@@ -453,18 +458,90 @@ export default function MensualTab() {
     } catch { alert("Error de red al mover la tarjeta."); }
   };
 
-  const cells: React.ReactNode[] = [];
-  for (let i = 0; i < startWeekday; i++) cells.push(<td key={`e${i}`} className="border border-gray-300 bg-gray-100 h-[110px]" />);
+  // ── Orden de tarjetas DENTRO de un día (manual + auto M→T→ambas) ──
+  const saveDayOrder = async (date: string, list: Array<{ id: string; kind: "plan" | "aviso" }>) => {
+    const items = list.map((x, i) => ({ kind: x.kind, id: x.id, order: i }));
+    setPlans(prev => prev.map(p => { const it = items.find(x => x.kind === "plan" && x.id === p.id); return it ? { ...p, order: it.order } : p; }));
+    setAvisos(prev => prev.map(a => { const it = items.find(x => x.kind === "aviso" && x.id === a.id); return it ? { ...a, order: it.order } : a; }));
+    try {
+      const res = await fetch("/api/company/cards/reorder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date, items }),
+      });
+      if (!res.ok) await load();
+    } catch { await load(); }
+  };
 
-  for (let day = 1; day <= totalDays; day++) {
-    const dateObj = new Date(year, month, day);
-    const f = fmt(dateObj);
+  const autoSortDay = async (date: string) => {
+    setPlans(prev => prev.map(p => p.date === date ? { ...p, order: -1 } : p));
+    setAvisos(prev => prev.map(a => a.date === date ? { ...a, order: -1 } : a));
+    try {
+      const res = await fetch("/api/company/cards/reorder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date, auto: true }),
+      });
+      if (!res.ok) await load();
+    } catch { await load(); }
+  };
+
+  // Soltar una tarjeta SOBRE otra: si es del mismo día → reordenar; si viene de otro día → mover fecha
+  const reorderInDay = (e: React.DragEvent, date: string, targetId: string, targetKind: "plan" | "aviso", dayList: Array<{ id: string; kind: "plan" | "aviso" }>) => {
+    let data: { kind?: string; id?: string } = {};
+    try { data = JSON.parse(e.dataTransfer.getData("text/plain") || "{}"); } catch { return; }
+    if (!data?.id || !data?.kind || (data.kind !== "plan" && data.kind !== "aviso")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const dragged: PlanEntry | AvisoEntry | undefined = data.kind === "plan"
+      ? plans.find(p => p.id === data.id)
+      : avisos.find(a => a.id === data.id);
+    if (!dragged) return;
+    if (dragged.date !== date) { handleDrop(e, date); return; }
+    const from = dayList.findIndex(x => x.kind === data.kind && x.id === data.id);
+    const to = dayList.findIndex(x => x.kind === targetKind && x.id === targetId);
+    if (from < 0 || to < 0 || from === to) return;
+    const list = dayList.map(x => ({ id: x.id, kind: x.kind }));
+    const [moved] = list.splice(from, 1);
+    list.splice(to, 0, moved);
+    saveDayOrder(date, list);
+  };
+
+  // ── Días a renderizar: mes normal o ventana 🌉 MEDIO (28 días: final de mes + principio del siguiente) ──
+  const MESES_SHORT = ["ENE", "FEB", "MAR", "ABR", "MAY", "JUN", "JUL", "AGO", "SEP", "OCT", "NOV", "DIC"];
+  type ViewDay = { dateObj: Date; f: string; day: number; monthTag: string | null };
+  const viewDays: ViewDay[] = [];
+  if (midMode) {
+    const anchor = Math.max(1, totalDays - 13); // ~2 semanas antes de fin de mes
+    const back = (new Date(year, month, anchor).getDay() + 6) % 7; // días desde el lunes
+    const start = new Date(year, month, anchor - back);
+    for (let i = 0; i < 28; i++) {
+      const dObj = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+      viewDays.push({ dateObj: dObj, f: fmt(dObj), day: dObj.getDate(), monthTag: MESES_SHORT[dObj.getMonth()] });
+    }
+  } else {
+    for (let day = 1; day <= totalDays; day++) {
+      const dateObj = new Date(year, month, day);
+      viewDays.push({ dateObj, f: fmt(dateObj), day, monthTag: null });
+    }
+  }
+
+  const cells: React.ReactNode[] = [];
+  if (!midMode) for (let i = 0; i < startWeekday; i++) cells.push(<td key={`e${i}`} className="border border-gray-300 bg-gray-100 h-[110px]" />);
+
+  for (const vd of viewDays) {
+    const dateObj = vd.dateObj;
+    const day = vd.day;
+    const f = vd.f;
     const we = isWE(dateObj);
     const fest = isFestivo(f);
     const festProvs = getFestivoProvinces(f);
 
-    const assigns: React.ReactNode[] = [];
+    // Tarjetas del día con orden: manual (order>=0) primero; después AUTO mañanas → tardes → ambas
+    type DayCard = { id: string; kind: "plan" | "aviso"; sortKey: number; node: React.ReactNode };
+    const dayCards: DayCard[] = [];
     filteredSedes.forEach(sede => {
+      const sedeIdx = sedes.findIndex(x => x.id === sede.id);
       const dayPlans = plans.filter((p: PlanEntry) => p.sedeId === sede.id && p.date === f);
       dayPlans.forEach((p: PlanEntry) => {
         if (!selectedPros.has(p.professionalAlias)) return;
@@ -483,12 +560,21 @@ export default function MensualTab() {
           `${sede.name} / ${sede.task} · ${p.turn === "MANANA" ? "Mañana" : "Tarde"} · ${nombre}`,
           hasNote ? `📝 ${notePreview.length > 200 ? notePreview.slice(0, 200) + "…" : notePreview}` : "Click: nota · mover · borrar",
         ].join("\n");
-        assigns.push(
+        const turnGroup = p.turn === "MANANA" ? 0 : 1;
+        const order = typeof p.order === "number" && p.order >= 0 ? p.order : -1;
+        const sortKey = order >= 0 ? order : 1000 + turnGroup * 100 + Math.max(0, sedeIdx) * 2;
+        dayCards.push({
+          id: p.id,
+          kind: "plan",
+          sortKey,
+          node: (
           <div
             key={p.id}
             onClick={(e) => { e.stopPropagation(); openNoteEditor(p, sede, nombre); }}
             draggable
             onDragStart={(e) => { e.dataTransfer.setData("text/plain", JSON.stringify({ kind: "plan", id: p.id })); e.dataTransfer.effectAllowed = "move"; }}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => reorderInDay(e, f, p.id, "plan", dayCards)}
             className="text-[1em] px-1 py-0.5 rounded font-bold leading-tight border border-black/10 break-words cursor-pointer hover:ring-2 hover:ring-amber-500 hover:ring-offset-0 transition relative"
             style={{ background: sede.color, color: textColorFor(sede.color) }}
             title={tooltipLines}
@@ -502,7 +588,8 @@ export default function MensualTab() {
               >•</span>
             )}
           </div>
-        );
+          ),
+        });
       });
     });
 
@@ -522,12 +609,22 @@ export default function MensualTab() {
         const hasNote = !!(a.note && a.note.trim());
         const cleanNote = stripAvisoToken(a.note || "");
         const notePreview = cleanNote || (AVISO_TOKEN_RE.test(a.note || "") ? "🔔 aviso programado" : "");
-        assigns.push(
+        const turnGroupA = a.turn === "M" ? 0 : a.turn === "T" ? 1 : 2; // "" = ambas → última
+        const orderA = typeof a.order === "number" && a.order >= 0 ? a.order : -1;
+        const sedeIdxA = sedes.findIndex(x => x.id === a.sedeId);
+        const sortKeyA = orderA >= 0 ? orderA : 1000 + turnGroupA * 100 + Math.max(0, sedeIdxA) * 2 + 1;
+        dayCards.push({
+          id: a.id,
+          kind: "aviso",
+          sortKey: sortKeyA,
+          node: (
           <div
             key={`av-${a.id}`}
             onClick={(e) => { e.stopPropagation(); openAvisoNoteEditor(a); }}
             draggable
             onDragStart={(e) => { e.dataTransfer.setData("text/plain", JSON.stringify({ kind: "aviso", id: a.id })); e.dataTransfer.effectAllowed = "move"; }}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => reorderInDay(e, f, a.id, "aviso", dayCards)}
             className="text-[1em] px-1 py-0.5 rounded font-bold leading-tight border border-red-900/40 break-words cursor-pointer hover:ring-2 hover:ring-red-500 hover:ring-offset-0 transition relative"
             style={{
               background: "repeating-linear-gradient(45deg, #fee2e2, #fee2e2 5px, #fecaca 5px, #fecaca 10px)",
@@ -549,22 +646,37 @@ export default function MensualTab() {
               >•</span>
             )}
           </div>
-        );
+          ),
+        });
       });
     }
+
+    // Orden final del día: manual primero (por orden guardado), luego AUTO M→T→ambas
+    dayCards.sort((x, y) => x.sortKey - y.sortKey || x.id.localeCompare(y.id));
+    const assigns = dayCards.map(c => c.node);
 
     const tdClass = fest ? "bg-red-100" : we ? "bg-purple-50" : "bg-gray-50";
     cells.push(
       <td
-        key={day}
+        key={vd.f}
         className={`border border-gray-300 h-auto min-h-[96px] sm:min-h-[110px] p-1 align-top ${tdClass}`}
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => { e.preventDefault(); handleDrop(e, f); }}
       >
         <div className="font-black text-[13px] text-gray-900 flex justify-between items-center gap-1">
-          <span>{day}</span>
+          <span>{day}{vd.monthTag && <span className="ml-0.5 text-[8px] font-bold text-gray-500 align-top">{vd.monthTag}</span>}</span>
           <div className="flex items-center gap-1 min-w-0">
             {fest && <span className="text-[8px] font-black bg-red-700 text-white px-1 py-0.5 rounded truncate max-w-[70px] sm:max-w-none">FESTIVO · {festProvs.join(", ")}</span>}
+            <button
+              onClick={(e) => { e.stopPropagation(); autoSortDay(f); }}
+              className="no-print shrink-0 h-5 w-5 rounded-full bg-gray-200 text-gray-700 text-[11px] font-black leading-none items-center justify-center hover:bg-amber-500 hover:text-black active:scale-90 transition hidden sm:flex"
+              title="Ordenar automáticamente: mañanas → tardes → ambas"
+            >⇅</button>
+            <button
+              onClick={(e) => { e.stopPropagation(); autoSortDay(f); }}
+              className="no-print sm:hidden shrink-0 h-6 w-6 rounded-full bg-gray-200 text-gray-700 text-xs font-black leading-none flex items-center justify-center active:scale-90 transition"
+              title="Ordenar automáticamente: mañanas → tardes → ambas"
+            >⇅</button>
             <button
               onClick={(e) => { e.stopPropagation(); openAddDialog(f); }}
               className="no-print shrink-0 h-5 w-5 rounded-full bg-gray-900 text-white text-[13px] font-black leading-none items-center justify-center hover:bg-amber-500 hover:text-black active:scale-90 transition hidden sm:flex"
@@ -582,7 +694,7 @@ export default function MensualTab() {
     );
   }
 
-  while (cells.length % 7 !== 0) cells.push(<td key={`te${cells.length}`} className="border border-gray-300 bg-gray-100" />);
+  while (!midMode && cells.length % 7 !== 0) cells.push(<td key={`te${cells.length}`} className="border border-gray-300 bg-gray-100" />);
 
   const rows: React.ReactNode[] = [];
   for (let i = 0; i < cells.length; i += 7) rows.push(<tr key={i}>{cells.slice(i, i + 7)}</tr>);
@@ -594,7 +706,7 @@ export default function MensualTab() {
             Al girar el móvil a horizontal NO se despliegan solos. */}
         <div className={`${isCompact ? "flex" : "hidden"} items-center gap-2`}>
           <button onClick={() => goMonth(-1)} className="h-9 w-9 shrink-0 rounded-full bg-slate-900 border border-slate-600 text-white text-lg font-black flex items-center justify-center active:scale-90 transition" title="Mes anterior">‹</button>
-          <div className="flex-1 text-center font-black text-white text-sm truncate">{MESES[month].toUpperCase()} {year}</div>
+          <div className="flex-1 text-center font-black text-white text-sm truncate">{midMode ? `${MESES[month].slice(0, 3).toUpperCase()} → ${MESES[(month + 1) % 12].slice(0, 3).toUpperCase()}` : MESES[month].toUpperCase()} {year}</div>
           <button onClick={() => goMonth(1)} className="h-9 w-9 shrink-0 rounded-full bg-slate-900 border border-slate-600 text-white text-lg font-black flex items-center justify-center active:scale-90 transition" title="Mes siguiente">›</button>
           <button onClick={() => setFiltersOpen(o => !o)} className="shrink-0 bg-slate-700 hover:bg-slate-600 text-white font-black px-3 py-2 rounded-lg text-xs transition">
             {filtersOpen ? "✕ CERRAR" : "⚙️ FILTROS"}
@@ -679,6 +791,7 @@ export default function MensualTab() {
             <option value="sin">Sin nota</option>
           </select>
         </div>
+        <button onClick={() => setMidMode(m => !m)} className={`font-black px-3 py-2 rounded-lg text-xs transition ${midMode ? "bg-purple-600 hover:bg-purple-500 text-white" : "bg-slate-700 hover:bg-slate-600 text-white"}`} title="Ver el final del mes y el principio del siguiente">🌉 MEDIO</button>
         <button onClick={() => { setSlideDir(""); setYear(new Date().getFullYear()); setMonth(new Date().getMonth()); }} className="bg-amber-500 hover:bg-amber-400 text-black font-black px-3 py-2 rounded-lg text-xs transition">HOY</button>
         <button onClick={() => window.print()} className="bg-slate-700 hover:bg-slate-600 text-white font-bold px-3 py-2 rounded-lg text-xs transition">🖨️ PDF</button>
       </div>
@@ -698,14 +811,14 @@ export default function MensualTab() {
               className="no-print h-8 w-8 sm:h-9 sm:w-9 shrink-0 rounded-full bg-gray-100 hover:bg-amber-500 hover:text-black text-gray-700 text-xl font-black flex items-center justify-center transition"
               title="Mes anterior (desliza a la derecha)"
             >‹</button>
-            <h1 className="text-base sm:text-xl font-black text-gray-900 whitespace-nowrap">{MESES[month].toUpperCase()} {year}</h1>
+            <h1 className="text-base sm:text-xl font-black text-gray-900 whitespace-nowrap">{midMode ? `${MESES[month].slice(0, 3).toUpperCase()} → ${MESES[(month + 1) % 12].slice(0, 3).toUpperCase()}` : MESES[month].toUpperCase()} {year}</h1>
             <button
               onClick={() => goMonth(1)}
               className="no-print h-8 w-8 sm:h-9 sm:w-9 shrink-0 rounded-full bg-gray-100 hover:bg-amber-500 hover:text-black text-gray-700 text-xl font-black flex items-center justify-center transition"
               title="Mes siguiente (desliza a la izquierda)"
             >›</button>
           </div>
-          <span className="text-[10px] text-gray-500 font-bold hidden sm:block">+ en cada día: programar turno · click en tarjeta: nota, mover o borrar · arrastra a otro día</span>
+          <span className="text-[10px] text-gray-500 font-bold hidden sm:block">+ turno · ⇅ ordena el día (M→T→ambas) · arrastra sobre otra tarjeta: ordenar · arrastra a otro día: mover</span>
         </div>
         <div className="sm:hidden text-center text-[10px] text-gray-400 font-bold mb-2 no-print">
           Desliza el dedo ‹ › para cambiar de mes
@@ -896,7 +1009,7 @@ export default function MensualTab() {
               <div>
                 <label className="block text-[11px] font-extrabold text-gray-700 uppercase mb-1.5">SEDE</label>
                 <select value={addSede} onChange={e => setAddSede(e.target.value)} className="w-full px-2 py-2 bg-gray-50 border-2 border-gray-300 focus:border-amber-500 rounded-lg text-sm text-gray-900">
-                  {sedes.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  {sedes.map(s => <option key={s.id} value={s.id}>{s.name}{s.task ? ` / ${s.task}` : ""}</option>)}
                 </select>
               </div>
               <div>

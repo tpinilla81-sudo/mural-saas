@@ -29,7 +29,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     return NextResponse.json(plan);
   }
 
-  // Move card to another day (drag & drop o botón MOVER)
+  // Move card to another day (drag & drop o botón MOVER). Al cambiar de día se resetea el orden manual.
   if (body.date !== undefined) {
     const date = String(body.date);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
@@ -39,7 +39,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     if (!existing || existing.companyId !== user!.companyId) {
       return NextResponse.json({ error: "No encontrado" }, { status: 404 });
     }
-    const plan = await db.plan.update({ where: { id }, data: { date } });
+    const plan = await db.plan.update({ where: { id }, data: { date, order: -1 } });
     return NextResponse.json(plan);
   }
 
