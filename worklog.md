@@ -1613,3 +1613,16 @@ Work Log:
 
 Stage Summary:
 - MENSUAL: tarjetas reordenables arrastrando dentro del día, orden automático M→T→AMBAS con botón ⇅ por día, alta con sede completa y vista 🌉 MEDIO que muestra el final de un mes y el principio del siguiente a la vez. Pendiente: reponer 2 tarjetas del 29/09 borradas por error en pruebas.
+
+---
+Task ID: 50
+Agent: main
+Task: "en vista mensual, realizar la palabra QUIROFANO de la sede que sea, en rojo estilo LED — que funcione en PC/tablet/móvil Android y Apple"
+
+Work Log:
+- CSS (globals.css): clase .led-red — letras rojas #ff2626 con text-shadow en 3 capas + animación ledGlow (pulso de brillo 2.4s) sobre pastilla negra bg-black/82 con border-radius 2px (legible sobre CUALQUIER color de sede). @media print: animación off + print-color-adjust exact.
+- MensualTab: helper renderTaskLED(task) — split por /(quir[oó]fano)/i (acepta acento), la palabra en MAYÚSCULAS dentro del span.led-red, resto de la tarea normal. Aplicado a tarjetas de TURNO ({sede.name} / {task} - {nombre}) y también a las de AVISO, que ahora muestran la tarea: (VIT / QUIROFANO VIT). Tooltips quedan en texto plano.
+- Commit 770fed3 → Vercel 200. E2E PC 1280: 13 spans .led-red, color computado rgb(255,38,38), detecta "QUIRÓFANO" (BDZ, con acento) y "QUIROFANO" (VIT/CR) ✓. E2E móvil 412×915: 13/13 visibles ✓ (corta por ancho de celda, normal en móvil). Capturas t50-led-pc.png, t50-led-movil.png.
+
+Stage Summary:
+- La palabra QUIROFANO brilla en rojo LED (animado) en todas las tarjetas del mensual que sean de quirófano, sea la sede que sea. CSS estándar → funciona idéntico en PC, tablet, móvil Android y Apple (iOS Safari). Drag dentro del día sigue siendo gesto de ratón (PC); ⇅, auto-orden y MEDIO funcionan en todos los dispositivos.
