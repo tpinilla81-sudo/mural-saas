@@ -702,18 +702,18 @@ export default function MensualTab() {
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => { e.preventDefault(); handleDrop(e, f); }}
       >
-        <div className="font-black text-[13px] text-gray-900 flex justify-between items-center gap-1">
-          <span className={vd.adj ? "text-gray-400" : "text-gray-900"}>{day}{vd.monthTag && <span className="ml-0.5 text-[8px] font-bold text-gray-500 align-top">{vd.monthTag}</span>}</span>
+        <div className="font-black text-[11px] sm:text-[13px] text-gray-900 flex justify-between items-center gap-0.5 sm:gap-1">
+          <span className={vd.adj ? "text-gray-400" : "text-gray-900"}>{day}{vd.monthTag && <span className="ml-0.5 text-[7px] sm:text-[8px] font-bold text-gray-500 align-top">{vd.monthTag}</span>}</span>
           <div className="flex items-center gap-1 min-w-0">
-            {fest && <span className="text-[8px] font-black bg-red-700 text-white px-1 py-0.5 rounded truncate max-w-[70px] sm:max-w-none">FESTIVO · {festProvs.join(", ")}</span>}
+            {fest && (
+              <span title={`Festivo · ${festProvs.join(", ")}`} className="text-[7px] sm:text-[8px] font-black bg-red-700 text-white px-1 py-0.5 rounded truncate max-w-[30px] sm:max-w-none">
+                <span className="sm:hidden">FEST</span>
+                <span className="hidden sm:inline">FESTIVO · {festProvs.join(", ")}</span>
+              </span>
+            )}
             <button
               onClick={(e) => { e.stopPropagation(); autoSortDay(f); }}
               className="no-print shrink-0 h-5 w-5 rounded-full bg-gray-200 text-gray-700 text-[11px] font-black leading-none items-center justify-center hover:bg-amber-500 hover:text-black active:scale-90 transition hidden sm:flex"
-              title="Ordenar automáticamente: mañanas → tardes → ambas"
-            >⇅</button>
-            <button
-              onClick={(e) => { e.stopPropagation(); autoSortDay(f); }}
-              className="no-print sm:hidden shrink-0 h-6 w-6 rounded-full bg-gray-200 text-gray-700 text-xs font-black leading-none flex items-center justify-center active:scale-90 transition"
               title="Ordenar automáticamente: mañanas → tardes → ambas"
             >⇅</button>
             <button
@@ -723,7 +723,7 @@ export default function MensualTab() {
             >+</button>
             <button
               onClick={(e) => { e.stopPropagation(); openAddDialog(f); }}
-              className="no-print sm:hidden shrink-0 h-6 w-6 rounded-full bg-gray-900 text-white text-sm font-black leading-none flex items-center justify-center active:scale-90 transition"
+              className="no-print sm:hidden shrink-0 h-5 w-5 rounded-full bg-gray-900/85 text-white text-[12px] font-black leading-none flex items-center justify-center active:scale-90 transition"
               title="Programar turno este día"
             >+</button>
           </div>
