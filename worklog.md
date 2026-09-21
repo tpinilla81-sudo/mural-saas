@@ -1664,3 +1664,17 @@ Work Log:
 
 Stage Summary:
 - El mensual en móvil quedó limpio: cada día solo muestra el número y UN icono + pequeño (el ⇅ de ordenar queda para PC/tablet donde existe el arrastre). Las tarjetas ganan 1px de letra. En iPhone ya se puede hacer zoom con dos dedos (antes estaba bloqueado por la config del viewport).
+
+---
+Task ID: 53
+Agent: main
+Task: "que la primera vista cuando se abra la app sea la vista mensual y que salga más cuadrado no alargado así, como antes"
+
+Work Log:
+- APERTURA EN MENSUAL: CompanyDashboard tenía useState diarioSub="diario" → cambiado a "mensual" (tab principal sigue "diario", que es el contenedor de V.DIARIO/V.MENSUAL). El deep-link ?fecha/card ya forzaba mensual; ahora también la apertura normal. Verificado en producción: al entrar se ve directamente "SEPTIEMBRE 2026" (tabla del mensual).
+- MÁS CUADRADO (móvil): la letra de tarjetas que subí a 9.5px en Task 52 hacía envolver más texto → celdas alargadas. Revertido a 8.5px (clamp original, "como antes"). Además: celda min-h 96→72px, padding celda p-1→p-0.5, tarjetas px-1→px-0.5 (móvil; PC intacto), hint móvil acortado a una línea ("🌉 = empalme de dos meses").
+- Commit c05439b → Vercel 200.
+- E2E PRODUCCIÓN móvil 412×915: apertura directa en mensual ✓; tarjeta 8.77px ✓; fila más compacta (antes ~1 fila y media en pantalla, ahora ~2 filas y media) ✓. La altura de fila sigue mandada por el día con más tarjetas (53×174 en fila cargada) — es el límite natural con 7 columnas en 412px. Captura t53-apertura-mensual.png.
+
+Stage Summary:
+- La app abre SIEMPRE en la vista mensual. En el móvil las celdas volvieron a su forma compacta de antes (letra 8.5px, celdas menos altas), así que se ven más días de un vistazo. En PC no cambia nada.
