@@ -242,3 +242,28 @@ html[data-brand="1"] .to-\[\#2E5D3A\] { --tw-gradient-to: var(--brand) !importan
    ───────────────────────────────────────────────────────────── */
 .auto-text { font-size: clamp(8.5px, 0.55vw + 6.5px, 11px); }
 .auto-dow  { font-size: clamp(7px, 0.42vw + 5.2px, 11px); letter-spacing: 0.02em; }
+
+/* ─────────────────────────────────────────────────────────────
+   LED ROJO: resalta la palabra QUIROFANO en las tarjetas del
+   calendario mensual. Letras rojas con brillo tipo letrero LED,
+   sobre pastilla oscura para que se lean en CUALQUIER color de
+   sede (PC / tablet / móvil — Android y Apple: CSS estándar).
+   ───────────────────────────────────────────────────────────── */
+.led-red {
+  display: inline-block;
+  background: rgba(0, 0, 0, 0.82);
+  color: #ff2626;
+  border-radius: 2px;
+  padding: 0 2px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-shadow: 0 0 1px #ff0000, 0 0 4px #ff0000, 0 0 9px rgba(255, 0, 0, 0.85);
+  animation: ledGlow 2.4s ease-in-out infinite;
+}
+@keyframes ledGlow {
+  0%, 100% { text-shadow: 0 0 1px #ff0000, 0 0 4px #ff0000, 0 0 9px rgba(255, 0, 0, 0.85); }
+  50% { text-shadow: 0 0 2px #ff0000, 0 0 7px #ff0000, 0 0 13px rgba(255, 0, 0, 1); }
+}
+@media print {
+  .led-red { animation: none; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

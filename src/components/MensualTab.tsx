@@ -223,6 +223,17 @@ export default function MensualTab() {
     return ((r * 299 + g * 587 + b * 114) / 1000) >= 140 ? "#000" : "#fff";
   };
 
+  // Resalta la palabra QUIROFANO (con o sin acento) en ROJO ESTILO LED dentro de la tarea de la sede
+  const renderTaskLED = (task?: string): React.ReactNode => {
+    if (!task) return "";
+    const parts = task.split(/(quir[oó]fano)/i);
+    return parts.map((part, i) =>
+      /^quir[oó]fano$/i.test(part)
+        ? <span key={i} className="led-red">{part.toUpperCase()}</span>
+        : <span key={i}>{part}</span>
+    );
+  };
+
   // Carga el estado del 🔔 aviso desde una nota existente (token @N[:nombres])
   const loadAvisoState = (text: string) => {
     const av = parseAvisoToken(text || "");
@@ -580,7 +591,7 @@ export default function MensualTab() {
             title={tooltipLines}
           >
             <span className="inline-block font-black px-0.5 mr-0.5 bg-black/80 text-white rounded-[2px]">{turnLabel}</span>
-            {sede.name} / {sede.task} - {nombre}
+            {sede.name} / {renderTaskLED(sede.task)} - {nombre}
             {hasNote && (
               <span
                 className="absolute top-0 right-0 -mt-1 -mr-1 text-[10px] bg-amber-400 text-black rounded-full w-3.5 h-3.5 flex items-center justify-center font-bold border border-black/60 leading-none"
@@ -638,7 +649,9 @@ export default function MensualTab() {
             {turnLabel && <span className="inline-block font-black px-0.5 mr-0.5 bg-red-900 text-white rounded-[2px]">{turnLabel}</span>}
             <span className="font-black">🏖 {reason}</span>
             {proName ? ` - ${avisoProAlias || proName}` : ""}
-            {sede ? ` (${sede.name})` : ""}
+            {sede ? (
+              <> ({sede.name}{sede.task ? <> / {renderTaskLED(sede.task)}</> : null})</>
+            ) : ""}
             {hasNote && (
               <span
                 className="absolute top-0 right-0 -mt-1 -mr-1 text-[10px] bg-amber-400 text-black rounded-full w-3.5 h-3.5 flex items-center justify-center font-bold border border-black/60 leading-none"
