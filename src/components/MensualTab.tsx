@@ -173,10 +173,16 @@ export default function MensualTab() {
 
   async function load() {
     loadedMonthRef.current = { y: year, m: month };
-    const [sRes, pRes, plRes, hRes, aRes] = await Promise.all([
+    // Meses vecinos: la vista 🌉 MEDIO (y los días de borde del mes normal) necesitan
+    // tarjetas REALES del mes anterior y del siguiente, no solo del mes en pantalla.
+    const pm = month === 0 ? 11 : month - 1, py = month === 0 ? year - 1 : year;
+    const nm = month === 11 ? 0 : month + 1, ny = month === 11 ? year + 1 : year;
+    const [sRes, pRes, plRes, plPrev, plNext, hRes, aRes] = await Promise.all([
       fetch("/api/company/sedes"),
       fetch("/api/company/professionals"),
       fetch(`/api/company/plan?year=${year}&month=${month}`),
+      fetch(`/api/company/plan?year=${py}&month=${pm}`),
+      fetch(`/api/company/plan?year=${ny}&month=${nm}`),
       fetch("/api/company/holidays"),
       fetch("/api/company/avisos"),
     ]);
@@ -184,7 +190,14 @@ export default function MensualTab() {
     const p = pRes.ok ? await pRes.json() : [];
     setSedes(s);
     setProfessionals(p);
-    if (plRes.ok) setPlans(await plRes.json());
+    const [cur, prv, nxt] = await Promise.all([
+      plRes.ok ? plRes.json() : Promise.resolve([]),
+      plPrev.ok ? plPrev.json() : Promise.resolve([]),
+      plNext.ok ? plNext.json() : Promise.resolve([]),
+    ]);
+    const byId = new Map<string, PlanEntry>();
+    [...prv, ...nxt, ...cur].forEach((x: PlanEntry) => byId.set(x.id, x));
+    setPlans([...byId.values()]);
     if (hRes.ok) setHolidays(await hRes.json());
     if (aRes.ok) setAvisos(await aRes.json());
     if (!loaded) {
@@ -520,7 +533,7 @@ export default function MensualTab() {
 
   // ── Días a renderizar: mes normal o ventana 🌉 MEDIO (28 días: final de mes + principio del siguiente) ──
   const MESES_SHORT = ["ENE", "FEB", "MAR", "ABR", "MAY", "JUN", "JUL", "AGO", "SEP", "OCT", "NOV", "DIC"];
-  type ViewDay = { dateObj: Date; f: string; day: number; monthTag: string | null };
+  type ViewDay = { dateObj: Date; f: string; day: number; monthTag: string | null; adj?: boolean };
   const viewDays: ViewDay[] = [];
   if (midMode) {
     const anchor = Math.max(1, totalDays - 13); // ~2 semanas antes de fin de mes
@@ -531,14 +544,27 @@ export default function MensualTab() {
       viewDays.push({ dateObj: dObj, f: fmt(dObj), day: dObj.getDate(), monthTag: MESES_SHORT[dObj.getMonth()] });
     }
   } else {
+    // Mes normal + días REALES de los meses vecinos: al pasar de mes siempre se ve
+    // el final del anterior y el principio del siguiente (con sus tarjetas).
+    const pm2 = month === 0 ? 11 : month - 1, py2 = month === 0 ? year - 1 : year;
+    const nm2 = month === 11 ? 0 : month + 1, ny2 = month === 11 ? year + 1 : year;
+    const prevTotal = new Date(py2, pm2 + 1, 0).getDate();
+    for (let i = startWeekday - 1; i >= 0; i--) {
+      const dObj = new Date(py2, pm2, prevTotal - i);
+      viewDays.push({ dateObj: dObj, f: fmt(dObj), day: dObj.getDate(), monthTag: MESES_SHORT[pm2], adj: true });
+    }
     for (let day = 1; day <= totalDays; day++) {
       const dateObj = new Date(year, month, day);
       viewDays.push({ dateObj, f: fmt(dateObj), day, monthTag: null });
     }
+    const trail = (7 - ((startWeekday + totalDays) % 7)) % 7;
+    for (let day = 1; day <= trail; day++) {
+      const dObj = new Date(ny2, nm2, day);
+      viewDays.push({ dateObj: dObj, f: fmt(dObj), day, monthTag: MESES_SHORT[nm2], adj: true });
+    }
   }
 
   const cells: React.ReactNode[] = [];
-  if (!midMode) for (let i = 0; i < startWeekday; i++) cells.push(<td key={`e${i}`} className="border border-gray-300 bg-gray-100 h-[110px]" />);
 
   for (const vd of viewDays) {
     const dateObj = vd.dateObj;
@@ -668,7 +694,7 @@ export default function MensualTab() {
     dayCards.sort((x, y) => x.sortKey - y.sortKey || x.id.localeCompare(y.id));
     const assigns = dayCards.map(c => c.node);
 
-    const tdClass = fest ? "bg-red-100" : we ? "bg-purple-50" : "bg-gray-50";
+    const tdClass = vd.adj ? "bg-gray-100" : fest ? "bg-red-100" : we ? "bg-purple-50" : "bg-gray-50";
     cells.push(
       <td
         key={vd.f}
@@ -677,7 +703,7 @@ export default function MensualTab() {
         onDrop={(e) => { e.preventDefault(); handleDrop(e, f); }}
       >
         <div className="font-black text-[13px] text-gray-900 flex justify-between items-center gap-1">
-          <span>{day}{vd.monthTag && <span className="ml-0.5 text-[8px] font-bold text-gray-500 align-top">{vd.monthTag}</span>}</span>
+          <span className={vd.adj ? "text-gray-400" : "text-gray-900"}>{day}{vd.monthTag && <span className="ml-0.5 text-[8px] font-bold text-gray-500 align-top">{vd.monthTag}</span>}</span>
           <div className="flex items-center gap-1 min-w-0">
             {fest && <span className="text-[8px] font-black bg-red-700 text-white px-1 py-0.5 rounded truncate max-w-[70px] sm:max-w-none">FESTIVO · {festProvs.join(", ")}</span>}
             <button
@@ -721,6 +747,7 @@ export default function MensualTab() {
           <button onClick={() => goMonth(-1)} className="h-9 w-9 shrink-0 rounded-full bg-slate-900 border border-slate-600 text-white text-lg font-black flex items-center justify-center active:scale-90 transition" title="Mes anterior">‹</button>
           <div className="flex-1 text-center font-black text-white text-sm truncate">{midMode ? `${MESES[month].slice(0, 3).toUpperCase()} → ${MESES[(month + 1) % 12].slice(0, 3).toUpperCase()}` : MESES[month].toUpperCase()} {year}</div>
           <button onClick={() => goMonth(1)} className="h-9 w-9 shrink-0 rounded-full bg-slate-900 border border-slate-600 text-white text-lg font-black flex items-center justify-center active:scale-90 transition" title="Mes siguiente">›</button>
+          <button onClick={() => setMidMode(m => !m)} className={`shrink-0 h-9 px-2.5 rounded-lg text-base leading-none flex items-center transition ${midMode ? "bg-purple-600 hover:bg-purple-500 text-white" : "bg-slate-700 hover:bg-slate-600 text-white"}`} title="Fin de un mes + principio del siguiente">🌉</button>
           <button onClick={() => setFiltersOpen(o => !o)} className="shrink-0 bg-slate-700 hover:bg-slate-600 text-white font-black px-3 py-2 rounded-lg text-xs transition">
             {filtersOpen ? "✕ CERRAR" : "⚙️ FILTROS"}
           </button>
@@ -834,7 +861,7 @@ export default function MensualTab() {
           <span className="text-[10px] text-gray-500 font-bold hidden sm:block">+ turno · ⇅ ordena el día (M→T→ambas) · arrastra sobre otra tarjeta: ordenar · arrastra a otro día: mover</span>
         </div>
         <div className="sm:hidden text-center text-[10px] text-gray-400 font-bold mb-2 no-print">
-          Desliza el dedo ‹ › para cambiar de mes
+          Desliza ‹ › para cambiar de mes · 🌉 = final de un mes y principio del siguiente
         </div>
         <div key={`${year}-${month}`} className={slideDir === "next" ? "month-anim-next" : slideDir === "prev" ? "month-anim-prev" : ""}>
         <table className="w-full border-collapse table-fixed auto-text">
