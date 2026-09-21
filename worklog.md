@@ -1645,3 +1645,22 @@ Work Log:
 
 Stage Summary:
 - El mensual ya muestra DOS MESES A LA VEZ con tarjetas reales: botón 🌉 (ahora siempre visible en móvil) = final de un mes + principio del siguiente; y en el mes normal los días de empalme de los meses vecinos ya no están vacíos, salen con sus tarjetas. Probado en PC y móvil en producción.
+
+---
+Task ID: 52
+Agent: main
+Task: "en el movil, en la vista mensual hay mucho barullo de iconos, el mas, las flechas... reestructura o pon mas pequeños para que se lea todo bien" + "en iphone no se puede hacer zoom"
+
+Work Log:
+- ICONOS MÓVIL: cada celda del mensual tenía DOS botones de 24px (⇅ auto-orden + "+" añadir) y con 7 columnas en 412px eran barullo sobre las tarjetas. Ahora móvil (sm:hidden / hidden sm:flex):
+  * ⇅ QUITADO del móvil (era decorativo ahí: el drag manual solo existe en PC, el orden auto ya es el estado por defecto; PC/tablet lo conservan intacto — verificado: PC sigue con 2 botones/celda).
+  * "+" único icono por celda: 24→20px, bg-gray-900/85 (menos peso visual), sigue abriendo el alta con 1 toque.
+  * Nº de día 13→11px, etiqueta de mes 8→7px, FESTIVO → "FEST" compacto (30px, provincias en tooltip; PC mantiene "FESTIVO · provs").
+  * Texto de tarjetas .auto-text sube de 8.5→9.5px mínimo en el clamp (solo afecta <545px; tablet/PC sin cambio: 11px).
+- IPHONE ZOOM: src/app/layout.tsx viewport tenía maximumScale:1 + userScalable:false → pinch bloqueado en iOS. Eliminados ambos → meta final "width=device-width, initial-scale=1, viewport-fit=cover" (zoom libre en iPhone/Android).
+- Commit 92c4835 → Vercel 200. Verificado en HTML de producción: meta viewport sin maximum-scale.
+- E2E PRODUCCIÓN móvil 412×915 (sesión real julio1974@): 1 botón por celda 20×20 ✓, 0 flechas ⇅ visibles ✓, día 11px ✓, tarjeta 9.5px ✓, 🌉 puente sigue visible en barra compacta ✓. PC 1280: 2 botones/celda con ⇅ ✓. Capturas: t52-mensual-movil-limpio.png, t52-mensual-movil-final.png.
+- Nota: no se puede simular pinch en headless; la prueba real del zoom la hará el usuario en su iPhone (la meta ya no lo bloquea).
+
+Stage Summary:
+- El mensual en móvil quedó limpio: cada día solo muestra el número y UN icono + pequeño (el ⇅ de ordenar queda para PC/tablet donde existe el arrastre). Las tarjetas ganan 1px de letra. En iPhone ya se puede hacer zoom con dos dedos (antes estaba bloqueado por la config del viewport).
