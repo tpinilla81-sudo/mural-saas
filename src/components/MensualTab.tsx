@@ -612,7 +612,7 @@ export default function MensualTab() {
             onDragStart={(e) => { e.dataTransfer.setData("text/plain", JSON.stringify({ kind: "plan", id: p.id })); e.dataTransfer.effectAllowed = "move"; }}
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => reorderInDay(e, f, p.id, "plan", dayCards)}
-            className="text-[1em] px-1 py-0.5 rounded font-bold leading-tight border border-black/10 break-words cursor-pointer hover:ring-2 hover:ring-amber-500 hover:ring-offset-0 transition relative"
+            className="text-[1em] px-0.5 sm:px-1 py-0.5 rounded font-bold leading-tight border border-black/10 break-words cursor-pointer hover:ring-2 hover:ring-amber-500 hover:ring-offset-0 transition relative"
             style={{ background: sede.color, color: textColorFor(sede.color) }}
             title={tooltipLines}
           >
@@ -662,7 +662,7 @@ export default function MensualTab() {
             onDragStart={(e) => { e.dataTransfer.setData("text/plain", JSON.stringify({ kind: "aviso", id: a.id })); e.dataTransfer.effectAllowed = "move"; }}
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => reorderInDay(e, f, a.id, "aviso", dayCards)}
-            className="text-[1em] px-1 py-0.5 rounded font-bold leading-tight border border-red-900/40 break-words cursor-pointer hover:ring-2 hover:ring-red-500 hover:ring-offset-0 transition relative"
+            className="text-[1em] px-0.5 sm:px-1 py-0.5 rounded font-bold leading-tight border border-red-900/40 break-words cursor-pointer hover:ring-2 hover:ring-red-500 hover:ring-offset-0 transition relative"
             style={{
               background: "repeating-linear-gradient(45deg, #fee2e2, #fee2e2 5px, #fecaca 5px, #fecaca 10px)",
               color: "#7f1d1d",
@@ -698,7 +698,7 @@ export default function MensualTab() {
     cells.push(
       <td
         key={vd.f}
-        className={`border border-gray-300 h-auto min-h-[96px] sm:min-h-[110px] p-1 align-top ${tdClass}`}
+        className={`border border-gray-300 h-auto min-h-[72px] sm:min-h-[110px] p-0.5 sm:p-1 align-top ${tdClass}`}
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => { e.preventDefault(); handleDrop(e, f); }}
       >
@@ -861,7 +861,7 @@ export default function MensualTab() {
           <span className="text-[10px] text-gray-500 font-bold hidden sm:block">+ turno · ⇅ ordena el día (M→T→ambas) · arrastra sobre otra tarjeta: ordenar · arrastra a otro día: mover</span>
         </div>
         <div className="sm:hidden text-center text-[10px] text-gray-400 font-bold mb-2 no-print">
-          Desliza ‹ › para cambiar de mes · 🌉 = final de un mes y principio del siguiente
+          Desliza ‹ › para cambiar de mes · 🌉 = empalme de dos meses
         </div>
         <div key={`${year}-${month}`} className={slideDir === "next" ? "month-anim-next" : slideDir === "prev" ? "month-anim-prev" : ""}>
         <table className="w-full border-collapse table-fixed auto-text">

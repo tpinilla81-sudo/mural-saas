@@ -22,7 +22,8 @@ interface ProLike { id: string; alias: string; firstName: string; lastName: stri
 export default function CompanyDashboard() {
   const { data: session } = useSession();
   const [tab, setTab] = useState<MainTab>("diario");
-  const [diarioSub, setDiarioSub] = useState<DiarioSubTab>("diario");
+  // Al abrir la app la PRIMERA vista es el MENSUAL (el usuario entra a ver el calendario)
+  const [diarioSub, setDiarioSub] = useState<DiarioSubTab>("mensual");
 
   // Datos para los botones de voz de la barra principal (sedes + profesionales).
   // Los tabs internos cargan los suyos; estos alimentan los overlays globales.
