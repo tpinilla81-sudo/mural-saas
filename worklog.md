@@ -1708,3 +1708,31 @@ Work Log:
 
 Stage Summary:
 - Pendiente del 29/09 CERRADO por el usuario. Repositorio sincronizado sin código muerto. La app en producción incluye: apertura en mensual, vista 🌉 dos meses, móvil compacto, zoom iPhone y turno Mañana/Tarde/Ambos (M+T).
+
+---
+Task ID: 56
+Agent: main
+Task: "va muy lento en mi pc la carga de vista diario, es por la app o por mi pc o red" — diagnóstico + optimización
+
+Work Log:
+- DIAGNÓSTICO (medido en producción con agent-browser, sesión julio1974@, vista PC 1280):
+  * APIs (5 endpoints paralelos): latencia 230-500ms c/u, total transferido ~370KB → la red y el servidor van bien.
+  * DOM de V.DIARIO: 7320 <td> (366 días × 20 sedes), 29914 nodos totales → el navegador pinta ~30k elementos de golpe.
+  * Cada celda hacía plans.find() + avisos.find() + holidays.some() lineales → millones de comparaciones JS por render.
+  * CONCLUSIÓN: ni la red ni el PC del usuario eran el cuello; era el RENDER de la app (CPU del navegador saturada pintando 30k nodos y ejecutando miles de búsquedas lineales).
+- FIX 1 — Índices Map O(1) en lugar de .find()/.some() lineales:
+  * DiarioTab: planByKey (sedeId|date|turn), planAmbosByKey (sedeId|date para fallback AMBOS), avisoByKey (sedeId|date|turn), holidaySet (date|province), proByAlias y proById (lookup de profesional en tooltips). Todas las búsquedas por celda ahora son O(1).
+  * UserView: mismo patrón. filteredPlans ahora en useMemo + planByKey + planAmbosByKey + holidaySet. Render del grid diario también O(1) por celda.
+- FIX 2 — content-visibility: auto (CSS estándar, sin dependencias):
+  * globals.css: nueva clase .diario-cell { content-visibility: auto; contain-intrinsic-size: 50px 50px } (móvil 30×36). Aplicada a las <td> del grid (no a sticky headers ni a la columna sede-label).
+  * El navegador solo renderiza las celdas visibles en el viewport (~440 vs 7320) y salta el resto. Soporte: Chrome 85+, Safari 17+, Firefox 125+.
+- Commits: 59fb786 (Maps O(1)) + 80187da (content-visibility) → Vercel 200.
+- VERIFICACIÓN en producción (PC 1280):
+  * ANTES (sin cambios): 4149ms wall-clock desde click V.DIARIO hasta grid estable.
+  * DESPUÉS (con Maps + content-visibility): 1740ms → MEJORA 60%.
+  * Re-entrada (datos cacheados, mide solo render): 5376ms → 2082ms (60% más rápido también).
+  * Cabeceras sticky: 22 cabeceras visibles (15/9 a 5/10) correctamente alineadas con las columnas; hoy (M22/9) en ámbar ✓. 366 TH en DOM con offsetLeft correcto ✓. Subagente que inspeccionó el PNG dio un falso negativo; verificación directa con eval confirmó que el render es correcto.
+  * Captura: download/t55-diario-pc.png.
+
+Stage Summary:
+- La lentitud NO era ni tu red ni tu PC: era la vista DIARIO, que pintaba 30k nodos de golpe y hacía búsquedas lineales en cada celda. Tras indexar todo en Maps y activar content-visibility:auto, el render pasó de ~4s a ~1.5s (medido en producción). En PC viejo o móvil la mejora será proporcionalmente mayor porque era ahí donde más se notaba el cuello de render.
