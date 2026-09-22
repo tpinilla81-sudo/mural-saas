@@ -1736,3 +1736,27 @@ Work Log:
 
 Stage Summary:
 - La lentitud NO era ni tu red ni tu PC: era la vista DIARIO, que pintaba 30k nodos de golpe y hacía búsquedas lineales en cada celda. Tras indexar todo en Maps y activar content-visibility:auto, el render pasó de ~4s a ~1.5s (medido en producción). En PC viejo o móvil la mejora será proporcionalmente mayor porque era ahí donde más se notaba el cuello de render.
+
+---
+Task ID: 57
+Agent: main
+Task: "las logicas de la vista diario tienen que ser las mismas para vista mensual en cuanto a no poder poner un profesinal en una sede no adjudicada, o avisos en festivos que pregunta antes,...etc"
+
+Work Log:
+- DIAGNÓSTICO: V.DIARIO y V.MENSUAL tenían validaciones inconsistentes:
+  * V.DIARIO: solo preguntaba antes de ASIGNAR TURNO en festivo/finde (handleSlotClick). No validaba "pro no adjudicado a la sede" ni festivo en AVISOS.
+  * V.MENSUAL: NO tenía ninguna validación (savePlanAdd iba directo al POST).
+- NUEVO HELPER COMPARTIDO en src/lib/utils.ts: isProAssignedToSede(pro.assignedSedes, sedeName) — case-insensitive, tolera ", " o "," como separador. Si assignedSedes es vacío → sin restricción (devuelve true, no bloquea).
+- CAMBIOS:
+  * DiarioTab.handleSlotClick: añade validación "X no está adjudicado a Y. ¿Continuar?" antes del POST /api/company/plan (además del festivo/finde que ya tenía). Usa proByAlias.get(selectedPro) (lookup O(1) del Task 56).
+  * DiarioTab.confirmAviso: añade validación "Alguna fecha es festivo/fin de semana. ¿Continuar?" si alguna de las fechas del aviso cae en festivo o finde.
+  * MensualTab.savePlanAdd: añade AMBAS validaciones (festivo/finde + pro-no-adjudicado) antes del POST /api/company/plan. Compara contra el array holidays (no la helper isFestivo local, que usa selectedSedes y filtraría mal).
+- Commit f8da6dc → Vercel 200.
+- E2E PRODUCCIÓN (PC 1280, sesión julio1974@, confirm trap que devuelve false siempre → sin datos modificados):
+  * V.MENSUAL sábado 26 sept 2026: confirm "Es festivo/fin de semana. ¿Continuar?" ✓
+  * V.MENSUAL martes 22 sept 2026 (no festivo) + pro "AS" en sede "VIT": confirm "AS no está adjudicado a VIT. ¿Continuar?" ✓ (AS no está en el CSV de VIT en su assignedSedes)
+  * V.DIARIO sábado 3 enero 2026 + click en slot M vacío: confirm "Es festivo/fin de semana. ¿Continuar?" ✓
+  * Todos los confirm devolvieron false (cancelados) → no se guardó nada en producción. Capturas: ninguna necesaria, los textos de confirm son la prueba.
+
+Stage Summary:
+- Las dos vistas (DIARIO y MENSUAL) ahora comparten las mismas validaciones antes de crear turnos o avisos: (1) festivo/finde → "Es festivo/fin de semana. ¿Continuar?", (2) profesional no adjudicado a la sede → "X no está adjudicado a Y. ¿Continuar?". Si el usuario cancela el confirm, no se guarda nada. Si acepta, se guarda. Solo bloquea si assignedSedes del pro tiene contenido y la sede no está en la lista; si el pro tiene assignedSedes vacío (no rellenado) → sin restricción.
