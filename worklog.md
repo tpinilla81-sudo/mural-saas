@@ -1760,3 +1760,27 @@ Work Log:
 
 Stage Summary:
 - Las dos vistas (DIARIO y MENSUAL) ahora comparten las mismas validaciones antes de crear turnos o avisos: (1) festivo/finde → "Es festivo/fin de semana. ¿Continuar?", (2) profesional no adjudicado a la sede → "X no está adjudicado a Y. ¿Continuar?". Si el usuario cancela el confirm, no se guarda nada. Si acepta, se guarda. Solo bloquea si assignedSedes del pro tiene contenido y la sede no está en la lista; si el pro tiene assignedSedes vacío (no rellenado) → sin restricción.
+
+---
+Task ID: 58
+Agent: main
+Task: "en vista mensual en la tarjeta que no aparezca m+t, quita el + y que en la misma tarjeta se pueda poner o marcar m o t o ambos"
+
+Work Log:
+- API PUT /api/company/plan/[id]: nuevo bloque que acepta { turn } (MANANA|TARDE|AMBOS). Verifica propiedad (companyId) y captura P2002 (unique sedeId+date+turn) → 409 "conflict" si ya hay otra tarjeta con ese turno ese día.
+- MENSUAL tarjeta: el badge único "M+T" ha desaparecido. Ahora la tarjeta lleva DOS CHIPS "M" y "T" interactivos:
+  * Chip activo = bg-black/80 blanco; inactivo = blanco translúcido con borde (siempre clicables).
+  * Tocar M: marca/desmarca mañana. Tocar T: marca/desmarca tarde. Ambos marcados = AMBOS. Nunca se permite dejar la tarjeta sin turno (click en el único chip activo = no-op).
+  * stopPropagation → no abre el editor de notas. Cambio optimista + PUT; si 409 revierte y avisa "Ya existe otra tarjeta con ese turno en esta sede y día".
+  * Tooltip: "Click: nota · mover · borrar · toca M/T para cambiar el turno".
+- Textos "Mañana + Tarde" → "Mañana y Tarde" en MensualTab (tooltip), UserView (tooltip) y DiarioTab (diálogo de slot). Badge de UserView "M+T" → "MT".
+- Commit 993522d → Vercel 200.
+- E2E PRODUCCIÓN (PC 1280): tarjeta de PRUEBA creada 31-DIC-2026 VIT/AS:
+  * Creación: chips M activo + T apagado (MANANA) ✓
+  * Click T → M y T activos (AMBOS) ✓
+  * Click M → solo T activo (TARDE) ✓ y API confirma turn=TARDE en BD ✓
+  * BONUS: al crear la tarjeta saltó el confirm de Task 57 ("AS no está adjudicado a VIT") — validaciones conviviendo bien.
+  * Limpieza: DELETE por id → 31-DIC vuelve a 0 tarjetas ✓. Captura t58-chips-mt.png (mensual con chips).
+
+Stage Summary:
+- En el mensual, las tarjetas ya no muestran "M+T": llevan dos chips M y T que se marcan/desmarcan por separado directamente en la tarjeta (ambos marcados = cubre mañana y tarde). El cambio persiste en BD y respeta la unique de sede+fecha+turno. Funciona igual en PC y móvil (son spans clicables).
