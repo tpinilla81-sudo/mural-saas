@@ -240,11 +240,11 @@ export default function UserView() {
     const dayPlans = filteredPlans.filter((p: any) => p.date === f);
     const assigns = dayPlans.map((p: any) => {
       const sede = sedes.find((s: any) => s.id === p.sedeId);
-      const turnLabel = p.turn === "MANANA" ? "M" : "T";
+      const turnLabel = p.turn === "MANANA" ? "M" : p.turn === "TARDE" ? "T" : "M+T";
       const hasNote = showNotes && !!(p.notes && p.notes.trim());
       const notePreview = hasNote ? p.notes.trim() : "";
       const tooltip = [
-        `${sede?.name || ""} / ${sede?.task || ""} · ${p.turn === "MANANA" ? "Mañana" : "Tarde"} · ${p.professionalAlias || ""}`,
+        `${sede?.name || ""} / ${sede?.task || ""} · ${p.turn === "MANANA" ? "Mañana" : p.turn === "TARDE" ? "Tarde" : "Mañana + Tarde"} · ${p.professionalAlias || ""}`,
         ...(hasNote ? ["📝 " + (notePreview.length > 200 ? notePreview.slice(0, 200) + "…" : notePreview)] : []),
       ].join("\n");
       return (
@@ -482,8 +482,10 @@ export default function UserView() {
                     const f = fmt(d);
                     const we = isWE(d);
                     const fest = holidays.some((h: any) => h.date === f && h.province === sede.province);
-                    const planM = filteredPlans.find((p: any) => p.sedeId === sede.id && p.date === f && p.turn === "MANANA");
-                    const planT = filteredPlans.find((p: any) => p.sedeId === sede.id && p.date === f && p.turn === "TARDE");
+                    const planM = filteredPlans.find((p: any) => p.sedeId === sede.id && p.date === f && p.turn === "MANANA")
+                      || filteredPlans.find((p: any) => p.sedeId === sede.id && p.date === f && p.turn === "AMBOS");
+                    const planT = filteredPlans.find((p: any) => p.sedeId === sede.id && p.date === f && p.turn === "TARDE")
+                      || filteredPlans.find((p: any) => p.sedeId === sede.id && p.date === f && p.turn === "AMBOS");
                     return (
                       <td key={i} className={`border-b-2 border-white/90 h-[44px] min-w-[36px] sm:min-w-[50px] p-0.5 sm:p-1 text-center ${we ? "bg-purple-500/15" : ""} ${fest ? "bg-red-500/20" : ""}`}>
                         <div className="flex flex-col gap-0.5 items-center justify-center h-full">

@@ -116,7 +116,7 @@ export async function GET() {
       });
       if (dupe) continue;
       const title = `🔔 ${rule.keyword.toUpperCase()} — ${labelWhen(diff)}`;
-      const body = `${p.sede?.name || "sede"} · ${p.professionalAlias || "—"} · ${labelDate(p.date)} ${p.turn === "MANANA" ? "Mañana" : "Tarde"} — ${stripInline(p.notes)}`.trim();
+      const body = `${p.sede?.name || "sede"} · ${p.professionalAlias || "—"} · ${labelDate(p.date)} ${p.turn === "MANANA" ? "Mañana" : p.turn === "TARDE" ? "Tarde" : "Mañana y tarde"} — ${stripInline(p.notes)}`.trim();
       let n = 0;
       if (doPush) {
         n += rule.recipients
@@ -205,7 +205,7 @@ export async function GET() {
     const userIds = await inlineRecipients(p.companyId, m[2] || null);
     const nSent = await sendPushToUsers(userIds, {
       title: `🔔 RECORDATORIO — ${labelWhen(diff)}`,
-      body: `${p.sede?.name || "sede"} · ${p.professionalAlias || "—"} · ${labelDate(p.date)} ${p.turn === "MANANA" ? "Mañana" : "Tarde"} — ${stripInline(p.notes)}`.trim(),
+      body: `${p.sede?.name || "sede"} · ${p.professionalAlias || "—"} · ${labelDate(p.date)} ${p.turn === "MANANA" ? "Mañana" : p.turn === "TARDE" ? "Tarde" : "Mañana y tarde"} — ${stripInline(p.notes)}`.trim(),
       url: cardUrl("plan", p.id, p.date),
       tag: `inline-${p.id}`,
       source: "inline",

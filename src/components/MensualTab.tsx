@@ -66,7 +66,7 @@ export default function MensualTab() {
   // ── Añadir en Mensual: programar turno (el aviso/ausencia se retiró) ──
   const [addModal, setAddModal] = useState<{ date: string } | null>(null);
   const [addSede, setAddSede] = useState("");
-  const [addTurn, setAddTurn] = useState<"MANANA" | "TARDE">("MANANA");
+  const [addTurn, setAddTurn] = useState<"MANANA" | "TARDE" | "AMBOS">("MANANA");
   const [addPro, setAddPro] = useState("");            // alias
   const [addSaving, setAddSaving] = useState(false);
 
@@ -588,16 +588,16 @@ export default function MensualTab() {
         if (cardFilter === "sin" && hasNoteCard) return;
         const pro = professionals.find((x: any) => x.alias === p.professionalAlias);
         const nombre = pro ? `${pro.firstName} ${pro.lastName}` : p.professionalAlias;
-        const turnLabel = p.turn === "MANANA" ? "M" : "T";
+        const turnLabel = p.turn === "MANANA" ? "M" : p.turn === "TARDE" ? "T" : "M+T";
         const hasNote = !!(p.notes && p.notes.trim());
         const cleanNote = stripAvisoToken(p.notes || "");
         const notePreview = cleanNote || (AVISO_TOKEN_RE.test(p.notes || "") ? "🔔 aviso programado" : "");
         // Truncate tooltip preview
         const tooltipLines = [
-          `${sede.name} / ${sede.task} · ${p.turn === "MANANA" ? "Mañana" : "Tarde"} · ${nombre}`,
+          `${sede.name} / ${sede.task} · ${p.turn === "MANANA" ? "Mañana" : p.turn === "TARDE" ? "Tarde" : "Mañana + Tarde"} · ${nombre}`,
           hasNote ? `📝 ${notePreview.length > 200 ? notePreview.slice(0, 200) + "…" : notePreview}` : "Click: nota · mover · borrar",
         ].join("\n");
-        const turnGroup = p.turn === "MANANA" ? 0 : 1;
+        const turnGroup = p.turn === "MANANA" ? 0 : p.turn === "TARDE" ? 1 : 2; // AMBOS al final, como las ambas de avisos
         const order = typeof p.order === "number" && p.order >= 0 ? p.order : -1;
         const sortKey = order >= 0 ? order : 1000 + turnGroup * 100 + Math.max(0, sedeIdx) * 2;
         dayCards.push({
@@ -1057,6 +1057,7 @@ export default function MensualTab() {
                 <div className="flex gap-1.5">
                   <button onClick={() => setAddTurn("MANANA")} className={`flex-1 py-2 rounded-lg font-bold text-xs border transition ${addTurn === "MANANA" ? "bg-gray-900 text-white border-gray-900" : "bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200"}`}>Mañana</button>
                   <button onClick={() => setAddTurn("TARDE")} className={`flex-1 py-2 rounded-lg font-bold text-xs border transition ${addTurn === "TARDE" ? "bg-gray-900 text-white border-gray-900" : "bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200"}`}>Tarde</button>
+                  <button onClick={() => setAddTurn("AMBOS")} className={`flex-1 py-2 rounded-lg font-bold text-xs border transition ${addTurn === "AMBOS" ? "bg-amber-500 text-black border-amber-600" : "bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200"}`} title="El turno cubre mañana y tarde">Ambos</button>
                 </div>
               </div>
             </div>

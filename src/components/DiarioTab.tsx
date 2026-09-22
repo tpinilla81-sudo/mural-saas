@@ -159,8 +159,14 @@ export default function DiarioTab() {
   const todayStr = fmt(new Date());
   const isWE = (d: Date) => d.getDay() === 0 || d.getDay() === 6;
   const isFestivo = (f: string, prov: string) => holidays.some(h => h.date === f && h.province === prov);
-  const getPlan = useCallback((sedeId: string, date: string, turn: string) =>
-    plans.find(p => p.sedeId === sedeId && p.date === date && p.turn === turn), [plans]);
+  const getPlan = useCallback((sedeId: string, date: string, turn: string) => {
+    // Turno exacto primero; un plan AMBOS (mañana+tarde) sale en LAS DOS columnas
+    const exact = plans.find(p => p.sedeId === sedeId && p.date === date && p.turn === turn);
+    if (exact) return exact;
+    return turn === "MANANA" || turn === "TARDE"
+      ? plans.find(p => p.sedeId === sedeId && p.date === date && p.turn === "AMBOS")
+      : undefined;
+  }, [plans]);
   const getAviso = useCallback((sedeId: string, date: string, turn: string) => {
     const t = turn === "MANANA" ? "M" : "T";
     return avisos.find(a => a.sedeId === sedeId && a.date === date && a.turn === t);
@@ -310,7 +316,7 @@ export default function DiarioTab() {
         sedeId,
         sedeName: sede?.name || "",
         date,
-        turn: turn === "MANANA" ? "Mañana" : "Tarde",
+        turn: existing.turn === "TARDE" ? "Tarde" : existing.turn === "AMBOS" ? "Mañana + Tarde" : "Mañana",
         turnRaw: turn,
         main: existing.professionalAlias,
         detail: pro ? `${pro.firstName} ${pro.lastName}` : "",
