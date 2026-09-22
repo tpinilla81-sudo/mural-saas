@@ -1678,3 +1678,20 @@ Work Log:
 
 Stage Summary:
 - La app abre SIEMPRE en la vista mensual. En el móvil las celdas volvieron a su forma compacta de antes (letra 8.5px, celdas menos altas), así que se ven más días de un vistazo. En PC no cambia nada.
+
+---
+Task ID: 54
+Agent: main
+Task: "cuando metemos tarjeta en vista mensual, solo se puede elegir mañana o tarde, que se puedan los dos, marcar ambos, o uno de ellos indistintivamente"
+
+Work Log:
+- NUEVO TURNO "AMBOS" (mañana+tarde en UNA tarjeta). Plan.turn es String libre ("MANANA"|"TARDE") sin validación en POST/PUT/bulk → "AMBOS" pasa sin migración; la unique sedeId+date+turn le da su propio hueco.
+- MENSUAL: diálogo de alta con 3 botones — Mañana / Tarde / **Ambos** (ámbar al activarse). Tarjeta muestra insignia **M+T** (antes AMBOS caía en el "T" por defecto); orden auto del día: M(0) → T(1) → AMBOS(2), igual que las "ambas" de avisos; tooltip "Mañana + Tarde".
+- DIARIO: getPlan ahora devuelve primero el turno exacto y, si no hay, el plan AMBOS → una tarjeta AMBOS sale en LAS DOS columnas (M y T) del grid anual. El diálogo de slot muestra "Mañana + Tarde" cuando la tarjeta lo es (turnRaw sigue siendo el slot).
+- USERVIEW: misma lógica (planM/planT con fallback AMBOS, insignia M+T, tooltip).
+- CRON avisos: etiqueta del cuerpo "Mañana y tarde" para AMBOS (2 sitios).
+- Commit b39dd18 → Vercel 200.
+- E2E PRODUCCIÓN (PC 1280): diálogo muestra 3 botones con Ambos activo en ámbar ✓ (t54-dialogo-ambos.png); creada tarjeta de prueba 4-OCT VIT/Quirófano + JM + Ambos → insignia "M+T" en la celda ✓; en DIARIO la celda 2026-10-04 de la fila VIT/Quirofano VIT muestra "JM" en AMBAS cajas con color de sede ✓. Limpieza quirúrgica: DELETE por id exacto (1 tarjeta, la mía) → 4-OCT vuelve a 0 tarjetas ✓. Nada más tocado.
+
+Stage Summary:
+- Al programar un turno en el mensual se elige Mañana, Tarde o AMBOS. La tarjeta AMBOS se ve con la insignia M+T, se ordena después de las tardes y en el Diario (y en la vista del profesional) ocupa las dos columnas de ese día, como si cubriera mañana y tarde.
