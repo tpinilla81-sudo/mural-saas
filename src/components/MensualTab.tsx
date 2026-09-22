@@ -476,6 +476,33 @@ export default function MensualTab() {
     } catch { alert("Error de red al mover el aviso."); }
   };
 
+  // ── Cambiar el turno de una tarjeta tocando los chips M/T (Task 58) ──
+  // Chips independientes: M y T se marcan/desmarcan por separado; ambos = AMBOS.
+  // Nunca se permite dejar la tarjeta sin turno (click en el único chip activo = no-op).
+  const changePlanTurn = async (plan: PlanEntry, hasM: boolean, hasT: boolean) => {
+    if (!hasM && !hasT) return; // sin turno no tiene sentido
+    const newTurn = hasM && hasT ? "AMBOS" : hasM ? "MANANA" : "TARDE";
+    if (newTurn === plan.turn) return;
+    const prevTurn = plan.turn;
+    // optimista
+    setPlans(prev => prev.map(p => (p.id === plan.id ? { ...p, turn: newTurn } : p)));
+    try {
+      const res = await fetch(`/api/company/plan/${plan.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ turn: newTurn }),
+      });
+      if (res.ok) return;
+      // conflicto: ya hay otra tarjeta con ese turno en la misma sede y día
+      setPlans(prev => prev.map(p => (p.id === plan.id ? { ...p, turn: prevTurn } : p)));
+      if (res.status === 409) alert("Ya existe otra tarjeta con ese turno en esta sede y día. Borra o cambia esa primero.");
+      else { alert("No se pudo cambiar el turno."); load(); }
+    } catch {
+      setPlans(prev => prev.map(p => (p.id === plan.id ? { ...p, turn: prevTurn } : p)));
+      alert("Error de red al cambiar el turno.");
+    }
+  };
+
   // ── Mover tarjeta ARRASTRANDO a otro día (PC: drag & drop) ──
   const handleDrop = async (e: React.DragEvent, targetDate: string) => {
     let data: { kind?: string; id?: string } = {};
@@ -603,14 +630,15 @@ export default function MensualTab() {
         if (cardFilter === "sin" && hasNoteCard) return;
         const pro = professionals.find((x: any) => x.alias === p.professionalAlias);
         const nombre = pro ? `${pro.firstName} ${pro.lastName}` : p.professionalAlias;
-        const turnLabel = p.turn === "MANANA" ? "M" : p.turn === "TARDE" ? "T" : "M+T";
+        const hasM = p.turn === "MANANA" || p.turn === "AMBOS";
+        const hasT = p.turn === "TARDE" || p.turn === "AMBOS";
         const hasNote = !!(p.notes && p.notes.trim());
         const cleanNote = stripAvisoToken(p.notes || "");
         const notePreview = cleanNote || (AVISO_TOKEN_RE.test(p.notes || "") ? "🔔 aviso programado" : "");
         // Truncate tooltip preview
         const tooltipLines = [
-          `${sede.name} / ${sede.task} · ${p.turn === "MANANA" ? "Mañana" : p.turn === "TARDE" ? "Tarde" : "Mañana + Tarde"} · ${nombre}`,
-          hasNote ? `📝 ${notePreview.length > 200 ? notePreview.slice(0, 200) + "…" : notePreview}` : "Click: nota · mover · borrar",
+          `${sede.name} / ${sede.task} · ${hasM && hasT ? "Mañana y Tarde" : hasM ? "Mañana" : "Tarde"} · ${nombre}`,
+          hasNote ? `📝 ${notePreview.length > 200 ? notePreview.slice(0, 200) + "…" : notePreview}` : "Click: nota · mover · borrar · toca M/T para cambiar el turno",
         ].join("\n");
         const turnGroup = p.turn === "MANANA" ? 0 : p.turn === "TARDE" ? 1 : 2; // AMBOS al final, como las ambas de avisos
         const order = typeof p.order === "number" && p.order >= 0 ? p.order : -1;
@@ -631,7 +659,17 @@ export default function MensualTab() {
             style={{ background: sede.color, color: textColorFor(sede.color) }}
             title={tooltipLines}
           >
-            <span className="inline-block font-black px-0.5 mr-0.5 bg-black/80 text-white rounded-[2px]">{turnLabel}</span>
+            {/* Chips M/T interactivos: toca para marcar/desmarcar cada turno (ambos = AMBOS) */}
+            <span
+              onClick={(e) => { e.stopPropagation(); e.preventDefault(); changePlanTurn(p, !hasM, hasT); }}
+              className={`inline-block font-black px-0.5 mr-0.5 rounded-[2px] cursor-pointer select-none leading-normal ${hasM ? "bg-black/80 text-white" : "bg-white/50 text-black/35 border border-black/25"}`}
+              title={hasM ? "Mañana marcada — toca para quitarla" : "Toca para añadir Mañana"}
+            >M</span>
+            <span
+              onClick={(e) => { e.stopPropagation(); e.preventDefault(); changePlanTurn(p, hasM, !hasT); }}
+              className={`inline-block font-black px-0.5 mr-0.5 rounded-[2px] cursor-pointer select-none leading-normal ${hasT ? "bg-black/80 text-white" : "bg-white/50 text-black/35 border border-black/25"}`}
+              title={hasT ? "Tarde marcada — toca para quitarla" : "Toca para añadir Tarde"}
+            >T</span>
             {sede.name} / {renderTaskLED(sede.task)} - {nombre}
             {hasNote && (
               <span

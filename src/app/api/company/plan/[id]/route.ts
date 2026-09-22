@@ -17,6 +17,29 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     return NextResponse.json(plan);
   }
 
+  // Update turn only (MANANA | TARDE | AMBOS) — chips M/T interactivos de la tarjeta (Task 58)
+  if (body.turn !== undefined) {
+    const turn = String(body.turn);
+    if (!["MANANA", "TARDE", "AMBOS"].includes(turn)) {
+      return NextResponse.json({ error: "Turno inválido" }, { status: 400 });
+    }
+    // El plan debe pertenecer a la empresa del usuario (seguridad)
+    const existing = await db.plan.findUnique({ where: { id }, select: { companyId: true } });
+    if (!existing || existing.companyId !== user!.companyId) {
+      return NextResponse.json({ error: "No encontrado" }, { status: 404 });
+    }
+    try {
+      const plan = await db.plan.update({ where: { id }, data: { turn } });
+      return NextResponse.json(plan);
+    } catch (e: any) {
+      if (e.code === "P2002") {
+        // Ya existe otro plan con esa sede+fecha+turno (unique) → conflicto
+        return NextResponse.json({ error: "conflict" }, { status: 409 });
+      }
+      throw e;
+    }
+  }
+
   // Update notes only (string, max 2000 chars; empty string clears the note)
   if (body.notes !== undefined) {
     const notes = typeof body.notes === "string" ? body.notes.slice(0, 2000) : "";

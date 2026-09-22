@@ -258,11 +258,11 @@ export default function UserView() {
     const dayPlans = filteredPlans.filter((p: any) => p.date === f);
     const assigns = dayPlans.map((p: any) => {
       const sede = sedes.find((s: any) => s.id === p.sedeId);
-      const turnLabel = p.turn === "MANANA" ? "M" : p.turn === "TARDE" ? "T" : "M+T";
+      const turnLabel = p.turn === "MANANA" ? "M" : p.turn === "TARDE" ? "T" : "MT";
       const hasNote = showNotes && !!(p.notes && p.notes.trim());
       const notePreview = hasNote ? p.notes.trim() : "";
       const tooltip = [
-        `${sede?.name || ""} / ${sede?.task || ""} · ${p.turn === "MANANA" ? "Mañana" : p.turn === "TARDE" ? "Tarde" : "Mañana + Tarde"} · ${p.professionalAlias || ""}`,
+        `${sede?.name || ""} / ${sede?.task || ""} · ${p.turn === "MANANA" ? "Mañana" : p.turn === "TARDE" ? "Tarde" : "Mañana y Tarde"} · ${p.professionalAlias || ""}`,
         ...(hasNote ? ["📝 " + (notePreview.length > 200 ? notePreview.slice(0, 200) + "…" : notePreview)] : []),
       ].join("\n");
       return (

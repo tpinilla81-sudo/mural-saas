@@ -353,7 +353,7 @@ export default function DiarioTab() {
         sedeId,
         sedeName: sede?.name || "",
         date,
-        turn: existing.turn === "TARDE" ? "Tarde" : existing.turn === "AMBOS" ? "Mañana + Tarde" : "Mañana",
+        turn: existing.turn === "TARDE" ? "Tarde" : existing.turn === "AMBOS" ? "Mañana y Tarde" : "Mañana",
         turnRaw: turn,
         main: existing.professionalAlias,
         detail: pro ? `${pro.firstName} ${pro.lastName}` : "",
