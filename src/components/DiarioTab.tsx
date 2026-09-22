@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 
 const AVISO_REASONS = ["BAJA", "FORMACION", "PERMISO", "VACACIONES"] as const;
 type AvisoReason = (typeof AVISO_REASONS)[number];
@@ -158,22 +158,58 @@ export default function DiarioTab() {
   const fmt = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   const todayStr = fmt(new Date());
   const isWE = (d: Date) => d.getDay() === 0 || d.getDay() === 6;
-  const isFestivo = (f: string, prov: string) => holidays.some(h => h.date === f && h.province === prov);
+  // ── Índices en Map para lookup O(1) en cada celda (7320 celdas × 20 sedes × 366 días) ──
+  // Antes cada celda hacía plans.find() y avisos.find() lineales → millones de comparaciones
+  // por render. Ahora se construyen una sola vez (useMemo) y cada celda accede en O(1).
+  const planByKey = useMemo(() => {
+    const m = new Map<string, PlanEntry>();
+    for (const p of plans) m.set(`${p.sedeId}|${p.date}|${p.turn}`, p);
+    return m;
+  }, [plans]);
+  const planAmbosByKey = useMemo(() => {
+    // Mapa aparte de planes AMBOS para fallback rápido (tarjeta AMBOS sale en M y T)
+    const m = new Map<string, PlanEntry>();
+    for (const p of plans) if (p.turn === "AMBOS") m.set(`${p.sedeId}|${p.date}`, p);
+    return m;
+  }, [plans]);
+  const avisoByKey = useMemo(() => {
+    const m = new Map<string, AvisoEntry>();
+    for (const a of avisos) m.set(`${a.sedeId}|${a.date}|${a.turn}`, a);
+    return m;
+  }, [avisos]);
+  const holidaySet = useMemo(() => {
+    const s = new Set<string>();
+    for (const h of holidays) s.add(`${h.date}|${h.province}`);
+    return s;
+  }, [holidays]);
+  const isFestivo = useCallback((f: string, prov: string) => holidaySet.has(`${f}|${prov}`), [holidaySet]);
   const getPlan = useCallback((sedeId: string, date: string, turn: string) => {
     // Turno exacto primero; un plan AMBOS (mañana+tarde) sale en LAS DOS columnas
-    const exact = plans.find(p => p.sedeId === sedeId && p.date === date && p.turn === turn);
+    const exact = planByKey.get(`${sedeId}|${date}|${turn}`);
     if (exact) return exact;
     return turn === "MANANA" || turn === "TARDE"
-      ? plans.find(p => p.sedeId === sedeId && p.date === date && p.turn === "AMBOS")
+      ? planAmbosByKey.get(`${sedeId}|${date}`)
       : undefined;
-  }, [plans]);
+  }, [planByKey, planAmbosByKey]);
   const getAviso = useCallback((sedeId: string, date: string, turn: string) => {
     const t = turn === "MANANA" ? "M" : "T";
-    return avisos.find(a => a.sedeId === sedeId && a.date === date && a.turn === t);
-  }, [avisos]);
+    return avisoByKey.get(`${sedeId}|${date}|${t}`);
+  }, [avisoByKey]);
 
   // Compute unique filter values
   const uniqueColors = [...new Set(sedes.map(s => s.color))];
+
+  // Índices de profesionales (lookup O(1) por alias o por id, usado en cada celda)
+  const proByAlias = useMemo(() => {
+    const m = new Map<string, Professional>();
+    for (const p of professionals) m.set(p.alias, p);
+    return m;
+  }, [professionals]);
+  const proById = useMemo(() => {
+    const m = new Map<string, Professional>();
+    for (const p of professionals) m.set(p.id, p);
+    return m;
+  }, [professionals]);
 
   // Apply color filter to sedes
   const filteredSedes = sedes.filter(s => {
@@ -722,9 +758,11 @@ export default function DiarioTab() {
 
                     const dimCell = !visMatchM && !visMatchT;
 
-                    // Resolve pro names for tooltips
-                    const proNameM = planM ? (professionals.find(p => p.alias === planM.professionalAlias)?.firstName || '') + ' ' + (professionals.find(p => p.alias === planM.professionalAlias)?.lastName || '') : '';
-                    const proNameT = planT ? (professionals.find(p => p.alias === planT.professionalAlias)?.firstName || '') + ' ' + (professionals.find(p => p.alias === planT.professionalAlias)?.lastName || '') : '';
+                    // Resolve pro names for tooltips (Map O(1) en lugar de professionals.find() lineal × 7320 celdas)
+                    const proMObj = planM ? proByAlias.get(planM.professionalAlias) : null;
+                    const proNameM = proMObj ? `${proMObj.firstName || ''} ${proMObj.lastName || ''}`.trim() : '';
+                    const proTObj = planT ? proByAlias.get(planT.professionalAlias) : null;
+                    const proNameT = proTObj ? `${proTObj.firstName || ''} ${proTObj.lastName || ''}`.trim() : '';
 
                     return (
                       <td key={i} className={`border-b-2 border-white/90 ${cellH} ${cellW} p-0.5 sm:p-1 ${we ? "bg-purple-500/15" : ""} ${fest ? "bg-red-500/20" : ""} ${isToday && !we && !fest ? "ring-1 ring-amber-500/50" : ""} ${dimCell ? "opacity-20" : ""} ${dropCell === `${sede.id}-${f}` ? "!ring-2 !ring-inset !ring-amber-400 bg-amber-500/20" : ""}`}
@@ -751,7 +789,7 @@ export default function DiarioTab() {
                                 background: avisoM ? undefined : (planM ? sede.color : "transparent"),
                                 borderLeft: (avisoM || planM) ? undefined : "2px solid #3b82f6"
                               }}
-                              title={avisoM ? `${avisoM.reason || "Aviso"}${avisoM.professionalId ? " - " + (professionals.find(p => p.id === avisoM.professionalId)?.alias || "") : " (sede)"}${avisoM.note ? `\n📝 ${avisoM.note}` : ""}\nClick: borrar o mover · arrastra a otro día` : planM ? `${planM.professionalAlias} - ${proNameM}\nClick: borrar o mover · arrastra a otro día` : "Mañana (sin asignar)"}
+                              title={avisoM ? `${avisoM.reason || "Aviso"}${avisoM.professionalId ? " - " + (proById.get(avisoM.professionalId)?.alias || "") : " (sede)"}${avisoM.note ? `\n📝 ${avisoM.note}` : ""}\nClick: borrar o mover · arrastra a otro día` : planM ? `${planM.professionalAlias} - ${proNameM}\nClick: borrar o mover · arrastra a otro día` : "Mañana (sin asignar)"}
                             >
                               {avisoM ? getAvisoLabel(avisoM.reason) : (planM?.professionalAlias || "M")}
                             </div>
@@ -775,7 +813,7 @@ export default function DiarioTab() {
                                 background: avisoT ? undefined : (planT ? sede.color : "transparent"),
                                 borderLeft: (avisoT || planT) ? undefined : "2px solid #f59e0b"
                               }}
-                              title={avisoT ? `${avisoT.reason || "Aviso"}${avisoT.professionalId ? " - " + (professionals.find(p => p.id === avisoT.professionalId)?.alias || "") : " (sede)"}${avisoT.note ? `\n📝 ${avisoT.note}` : ""}\nClick: borrar o mover · arrastra a otro día` : planT ? `${planT.professionalAlias} - ${proNameT}\nClick: borrar o mover · arrastra a otro día` : "Tarde (sin asignar)"}
+                              title={avisoT ? `${avisoT.reason || "Aviso"}${avisoT.professionalId ? " - " + (proById.get(avisoT.professionalId)?.alias || "") : " (sede)"}${avisoT.note ? `\n📝 ${avisoT.note}` : ""}\nClick: borrar o mover · arrastra a otro día` : planT ? `${planT.professionalAlias} - ${proNameT}\nClick: borrar o mover · arrastra a otro día` : "Tarde (sin asignar)"}
                             >
                               {avisoT ? getAvisoLabel(avisoT.reason) : (planT?.professionalAlias || "T")}
                             </div>

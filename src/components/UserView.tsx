@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { VoiceButtons } from "@/components/VoiceAvisoButton";
 
@@ -181,7 +181,7 @@ export default function UserView() {
   };
 
   // Apply filters
-  const filteredPlans = plans.filter((p: any) => {
+  const filteredPlans = useMemo(() => plans.filter((p: any) => {
     // "Solo sus turnos": only show plans where the assigned pro matches my alias
     if (perms.view_own_only && myPro) {
       if (p.professionalAlias !== myPro.alias) return false;
@@ -204,7 +204,25 @@ export default function UserView() {
       if (!mySedes.includes((sede.name || "").toUpperCase())) return false;
     }
     return true;
-  });
+  }), [plans, perms.view_own_only, perms.view_assigned_sedes, myPro, allowedProAliases, allowedSedeNames, sedes]);
+
+  // ── Índices O(1) para el render del grid DIARIO (celdas × días × sedes) ──
+  // Antes cada celda hacía filteredPlans.find() × 4 + holidays.some() — millones de comparaciones
+  const planByKey = useMemo(() => {
+    const m = new Map<string, any>();
+    for (const p of filteredPlans) m.set(`${p.sedeId}|${p.date}|${p.turn}`, p);
+    return m;
+  }, [filteredPlans]);
+  const planAmbosByKey = useMemo(() => {
+    const m = new Map<string, any>();
+    for (const p of filteredPlans) if (p.turn === "AMBOS") m.set(`${p.sedeId}|${p.date}`, p);
+    return m;
+  }, [filteredPlans]);
+  const holidaySet = useMemo(() => {
+    const s = new Set<string>();
+    for (const h of holidays) s.add(`${h.date}|${h.province}`);
+    return s;
+  }, [holidays]);
 
   const MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
   const DOW_HEADER = ["LUNES", "MARTES", "MIÉRCOLES", "JUEVES", "VIERNES", "SÁBADO", "DOMINGO"];
@@ -234,7 +252,7 @@ export default function UserView() {
     const f = fmt(dateObj);
     const we = isWE(dateObj);
     const festProvs = new Set<string>();
-    sedes.forEach(s => { if (holidays.some(h => h.date === f && h.province === s.province)) festProvs.add(s.province); });
+    sedes.forEach(s => { if (holidaySet.has(`${f}|${s.province}`)) festProvs.add(s.province); });
     const fest = festProvs.size > 0;
 
     const dayPlans = filteredPlans.filter((p: any) => p.date === f);
@@ -481,11 +499,9 @@ export default function UserView() {
                   {daysArr.map((d, i) => {
                     const f = fmt(d);
                     const we = isWE(d);
-                    const fest = holidays.some((h: any) => h.date === f && h.province === sede.province);
-                    const planM = filteredPlans.find((p: any) => p.sedeId === sede.id && p.date === f && p.turn === "MANANA")
-                      || filteredPlans.find((p: any) => p.sedeId === sede.id && p.date === f && p.turn === "AMBOS");
-                    const planT = filteredPlans.find((p: any) => p.sedeId === sede.id && p.date === f && p.turn === "TARDE")
-                      || filteredPlans.find((p: any) => p.sedeId === sede.id && p.date === f && p.turn === "AMBOS");
+                    const fest = holidaySet.has(`${f}|${sede.province}`);
+                    const planM = planByKey.get(`${sede.id}|${f}|MANANA`) || planAmbosByKey.get(`${sede.id}|${f}`);
+                    const planT = planByKey.get(`${sede.id}|${f}|TARDE`) || planAmbosByKey.get(`${sede.id}|${f}`);
                     return (
                       <td key={i} className={`border-b-2 border-white/90 h-[44px] min-w-[36px] sm:min-w-[50px] p-0.5 sm:p-1 text-center ${we ? "bg-purple-500/15" : ""} ${fest ? "bg-red-500/20" : ""}`}>
                         <div className="flex flex-col gap-0.5 items-center justify-center h-full">
