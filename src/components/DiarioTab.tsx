@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { isProAssignedToSede } from "@/lib/utils";
 
 const AVISO_REASONS = ["BAJA", "FORMACION", "PERMISO", "VACACIONES"] as const;
 type AvisoReason = (typeof AVISO_REASONS)[number];
@@ -361,8 +362,14 @@ export default function DiarioTab() {
     }
     if (!selectedPro) return;
     const sede = sedes.find(s => s.id === sedeId);
+    const pro = proByAlias.get(selectedPro);
+    // Validación 1: festivo/finde (igual que V.MENSUAL) — pregunta antes de asignar
     if (isWE(new Date(date)) || (sede && isFestivo(date, sede.province))) {
       if (!confirm("Es festivo/fin de semana. ¿Continuar?")) return;
+    }
+    // Validación 2: profesional no adjudicado a la sede — pregunta antes
+    if (sede && pro && !isProAssignedToSede(pro.assignedSedes, sede.name)) {
+      if (!confirm(`${pro.alias} no está adjudicado a ${sede.name}. ¿Continuar?`)) return;
     }
     await fetch("/api/company/plan", {
       method: "POST",
@@ -470,6 +477,15 @@ export default function DiarioTab() {
   // Confirm aviso creation — GUARDADO OPTIMISTA + multi-día
   const confirmAviso = async () => {
     if (!avisoModal || savingAviso || avisoDates.length === 0) return;
+    // Validación: festivo/finde en cualquier fecha del aviso — pregunta antes (igual que V.MENSUAL)
+    const sede = sedes.find(s => s.id === avisoModal.sedeId);
+    const hayFestivoOFinde = avisoDates.some(d => {
+      const dt = new Date(d);
+      return isWE(dt) || (sede ? isFestivo(d, sede.province) : false);
+    });
+    if (hayFestivoOFinde) {
+      if (!confirm("Alguna fecha es festivo/fin de semana. ¿Continuar?")) return;
+    }
     setSavingAviso(true);
     const t = avisoModal.turn === "MANANA" ? "M" : "T";
     const alias = modalPro || selectedPro;

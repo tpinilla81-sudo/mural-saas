@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { isProAssignedToSede } from "@/lib/utils";
 import AvisoPicker, {
   AVISO_TOKEN_RE,
   buildAvisoNote,
@@ -378,6 +379,20 @@ export default function MensualTab() {
 
   const savePlanAdd = async () => {
     if (!addModal || !addSede || !addPro) return;
+    // Validaciones de negocio — mismas que V.DIARIO (Task 57):
+    //   1) festivo/finde → pregunta antes
+    //   2) profesional no adjudicado a la sede → pregunta antes
+    const sede = sedes.find(s => s.id === addSede);
+    const pro = professionals.find(p => p.alias === addPro);
+    const dateObj = new Date(addModal.date + "T00:00:00");
+    const we = isWE(dateObj);
+    const fest = sede ? holidays.some(h => h.date === addModal.date && h.province === sede.province) : false;
+    if (we || fest) {
+      if (!confirm("Es festivo/fin de semana. ¿Continuar?")) return;
+    }
+    if (sede && pro && !isProAssignedToSede(pro.assignedSedes, sede.name)) {
+      if (!confirm(`${pro.alias} no está adjudicado a ${sede.name}. ¿Continuar?`)) return;
+    }
     setAddSaving(true);
     try {
       const res = await fetch("/api/company/plan", {
