@@ -1695,3 +1695,16 @@ Work Log:
 
 Stage Summary:
 - Al programar un turno en el mensual se elige Mañana, Tarde o AMBOS. La tarjeta AMBOS se ve con la insignia M+T, se ordena después de las tardes y en el Diario (y en la vista del profesional) ocupa las dos columnas de ese día, como si cubriera mañana y tarde.
+
+---
+Task ID: 55
+Agent: main
+Task: Confirmación del usuario: tarjetas del 29/09 repuestas a mano + limpieza de commit huérfano
+
+Work Log:
+- El usuario confirma que repuso manualmente las 2 tarjetas del 2026-09-29 que se borraron por error en pruebas de la Task 49 → CIERRA el pendiente de esa task (no hay que reponer nada).
+- Commit auto-generado 66ce6f7 (sin push) re-introducía src/components/StatsTab.tsx (sub-pestaña "📊 Datos" que el usuario pidió QUITAR antes; worklog línea "StatsTab.tsx borrado; API stats se conserva"). Era código muerto: nadie lo importa. Borrado de nuevo + commit 0e66971 → push (main = origin). La API /api/company/stats se conserva intacta.
+- Task 54 (turno AMBOS en mensual) ya estaba terminada y desplegada (commit b39dd18 → Vercel 200, E2E en producción documentado en su entrada). Sin cambios funcionales en este push.
+
+Stage Summary:
+- Pendiente del 29/09 CERRADO por el usuario. Repositorio sincronizado sin código muerto. La app en producción incluye: apertura en mensual, vista 🌉 dos meses, móvil compacto, zoom iPhone y turno Mañana/Tarde/Ambos (M+T).
