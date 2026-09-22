@@ -503,7 +503,7 @@ export default function UserView() {
                     const planM = planByKey.get(`${sede.id}|${f}|MANANA`) || planAmbosByKey.get(`${sede.id}|${f}`);
                     const planT = planByKey.get(`${sede.id}|${f}|TARDE`) || planAmbosByKey.get(`${sede.id}|${f}`);
                     return (
-                      <td key={i} className={`border-b-2 border-white/90 h-[44px] min-w-[36px] sm:min-w-[50px] p-0.5 sm:p-1 text-center ${we ? "bg-purple-500/15" : ""} ${fest ? "bg-red-500/20" : ""}`}>
+                      <td key={i} className={`diario-cell border-b-2 border-white/90 h-[44px] min-w-[36px] sm:min-w-[50px] p-0.5 sm:p-1 text-center ${we ? "bg-purple-500/15" : ""} ${fest ? "bg-red-500/20" : ""}`}>
                         <div className="flex flex-col gap-0.5 items-center justify-center h-full">
                           {sede.morningEnabled && (
                             <div

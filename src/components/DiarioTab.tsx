@@ -765,7 +765,7 @@ export default function DiarioTab() {
                     const proNameT = proTObj ? `${proTObj.firstName || ''} ${proTObj.lastName || ''}`.trim() : '';
 
                     return (
-                      <td key={i} className={`border-b-2 border-white/90 ${cellH} ${cellW} p-0.5 sm:p-1 ${we ? "bg-purple-500/15" : ""} ${fest ? "bg-red-500/20" : ""} ${isToday && !we && !fest ? "ring-1 ring-amber-500/50" : ""} ${dimCell ? "opacity-20" : ""} ${dropCell === `${sede.id}-${f}` ? "!ring-2 !ring-inset !ring-amber-400 bg-amber-500/20" : ""}`}
+                      <td key={i} className={`diario-cell border-b-2 border-white/90 ${cellH} ${cellW} p-0.5 sm:p-1 ${we ? "bg-purple-500/15" : ""} ${fest ? "bg-red-500/20" : ""} ${isToday && !we && !fest ? "ring-1 ring-amber-500/50" : ""} ${dimCell ? "opacity-20" : ""} ${dropCell === `${sede.id}-${f}` ? "!ring-2 !ring-inset !ring-amber-400 bg-amber-500/20" : ""}`}
                         onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; if (dropCell !== `${sede.id}-${f}`) setDropCell(`${sede.id}-${f}`); }}
                         onDrop={(e) => handleDrop(e, f)}
                       >

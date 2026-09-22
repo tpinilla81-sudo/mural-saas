@@ -193,6 +193,24 @@
   pointer-events: none;
 }
 
+/* ── Render perezoso de celdas fuera del viewport (Task 55).
+   El grid del diario pinta 366 días × 20 sedes = 7320 <td> + ~30k nodos.
+   Sin esto, el navegador renderiza TODOS los nodos al entrar en la vista
+   (~4s en portátil normal). Con content-visibility:auto el navegador solo
+   renderiza las celdas visibles en el viewport; las demás se saltan hasta
+   que se hacen visibles al hacer scroll. Soporte: Chrome 85+, Safari 17+,
+   Firefox 125+. contain-intrinsic-size da un tamaño estimado para que el
+   scroll horizontal/vertical se mantenga correcto sin tener que renderizar
+   para medir. Solo se aplica al cuerpo (no a la columna sticky de sedes ni
+   a la cabecera sticky). ── */
+.diario-cell {
+  content-visibility: auto;
+  contain-intrinsic-size: 50px 50px;
+}
+@media (max-width: 640px) {
+  .diario-cell { contain-intrinsic-size: 30px 36px; }
+}
+
 /* ── Animaciones (mejoras Task 33) ── */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(2px) scale(0.96); }
