@@ -1928,3 +1928,28 @@ Work Log:
 
 Stage Summary:
 - Copiar ahora es: Ctrl+click en la tarjeta → diálogo → COPIAR → tocar el día destino. Nada de botones nuevos en las tarjetas (lo que julio rechazó en Task 62). Mover sigue igual que siempre: arrastrar. Click normal = editor.
+
+---
+Task ID: 65
+Agent: main
+Task: "CON EL MOBIL Y TABLET SALE DIALOGO COPIAR MANTENIENDO PULSADO 2 SEGUNDOS" — long-press táctil = mismo diálogo COPIAR que Ctrl+click.
+
+Work Log:
+- Long-press 2000 ms sobre CUALQUIER tarjeta (turnos y avisos) en móvil/tablet: abre el MISMO diálogo "📋 Copiar tarjeta" de Task 64 (touchStart arma temporizador; a los 2 s → setCopyPick + vibración de 60 ms).
+- Mientras se mantiene: la tarjeta muestra anillo ámbar (estado lpArmed) como feedback. Si el dedo se MUEVE más de 12 px (scroll o arrastre de mes) se cancela. Tap corto (<2 s) no hace nada especial.
+- Al soltar tras el long-press: preventDefault en touchend → el click sintético NO abre el editor. onContextMenu suprimido SOLO durante toque (Android no muestra su menú); en PC el click derecho queda intacto. CSS select-none + -webkit-touch-callout:none en tarjetas (sin lupa/selección iOS).
+- Guardas: no se arma si ya hay diálogo o modo copiar activo; cleanup del timer al desmontar.
+- Textos: diálogo añade "En móvil/tablet este diálogo se abre manteniendo pulsada la tarjeta 2 segundos"; tooltips de tarjetas y hint de cabecera actualizados.
+- Commit 6cf8dad → Vercel 200 (marker "manteniendo pulsada la tarjeta 2 segundos" en chunk 3962eb9072312b66.js).
+- E2E PRODUCCIÓN con TouchEvent sintéticos (scripts/verify-65.sh, tarjetas temp VIT/AS feb-2027 días 10/20, TODO borrado al final):
+  * Anillo ámbar a 0.8 s, sin diálogo antes de tiempo ✓
+  * A 2.3 s (dedo aún abajo): diálogo "📋 Copiar tarjeta" + nota móvil ✓
+  * Al soltar: diálogo sigue abierto y el editor NO se abre ✓
+  * COPIAR → banner + 28 días iluminados ✓
+  * Tap día 17 → copia MANANA creada, original se queda, banner cerrado ✓
+  * Negativos: movimiento 40 px cancela ✓; tap corto no abre ✓
+  * Regresión: Ctrl+click → diálogo ✓; click normal → editor ✓
+  * Limpieza: 3 borradas, 0 VIT/AS restantes. Captura t65-dialogo.png.
+
+Stage Summary:
+- En móvil/tablet copiar es: MANTENER PULSADA la tarjeta 2 segundos → diálogo → COPIAR → tocar el día destino. En PC sigue: Ctrl+click. MOVER intacto (arrastrar; click normal = editor). Mismo diálogo y mismas validaciones para ambos.
