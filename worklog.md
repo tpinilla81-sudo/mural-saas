@@ -1889,3 +1889,17 @@ Work Log:
 
 Stage Summary:
 - Copiar y mover tarjetas ahora es de 2 toques SIN entrar al editor y SIN arrastrar: 📋 (copiar, la original se queda) o ➡ (mover, se quita de donde está) en la propia tarjeta → tocar el día destino. Funciona igual en PC y móvil, con las mismas protecciones que arrastrar. El arrastre sigue vivo: sin ALT mueve, con ALT copia.
+
+---
+Task ID: 63
+Agent: main
+Task: "no me gusta el sistema de copiar y mover que has puesto, quitalo" — revertir Task 62 completa.
+
+Work Log:
+- Eliminado TODO el código de Task 62: estado pickAction, useEffect Esc, función pickDay, botones 📋/➡ en tarjetas (plan + aviso), banner fijo, clases animate-pulse en celdas, guards if(pickAction) return en +/⇅, onClick del td, tooltips e hint.
+- La tarjeta vuelve al estado Task 61: click = abre editor (con MOVER A OTRO DÍA y 📋 COPIAR A OTRO DÍA dentro), arrastrar = MOVER, ALT+arrastrar = COPIAR.
+- Commit f706e6d → Vercel 200.
+- Sin E2E adicional: es una reversión limpia de código ya verificado; el build confirma que no quedan referencias a pickAction/pickDay.
+
+Stage Summary:
+- Sistema de copiar/mover desde la tarjeta ELIMINADO por completo. La app vuelve a funcionar como en Task 61: para copiar o mover una tarjeta hay que entrar en su editor (click) o usar arrastrar (PC).
