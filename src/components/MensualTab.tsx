@@ -63,6 +63,12 @@ export default function MensualTab() {
   // Fecha destino para MOVER tarjetas a otro día
   const [planMoveDate, setPlanMoveDate] = useState("");
   const [avisoMoveDate, setAvisoMoveDate] = useState("");
+  // 📋 Copiar tarjeta a otro día (editor de nota; el arrastre en PC usa copyPlanToDate/copyAvisoToDate)
+  const [planCopyDate, setPlanCopyDate] = useState("");
+  const [avisoCopyDate, setAvisoCopyDate] = useState("");
+  // Resalta la celda destino mientras arrastras una tarjeta (PC)
+  const [dragOverDate, setDragOverDate] = useState<string | null>(null);
+  const draggingCardRef = useRef(false); // hay una tarjeta nuestra "en vuelo" (drag activo)
 
   // ── Añadir en Mensual: programar turno (el aviso/ausencia se retiró) ──
   const [addModal, setAddModal] = useState<{ date: string } | null>(null);
@@ -275,6 +281,7 @@ export default function MensualTab() {
     loadAvisoState(plan.notes || "");
     setNoteText(stripAvisoToken(plan.notes || ""));
     setPlanMoveDate(plan.date);
+    setPlanCopyDate("");
   };
 
   const closeNoteEditor = () => {
@@ -323,6 +330,7 @@ export default function MensualTab() {
     loadAvisoState(a.note || "");
     setNoteText(stripAvisoToken(a.note || ""));
     setAvisoMoveDate(a.date);
+    setAvisoCopyDate("");
   };
 
   const saveAvisoNote = async () => {
@@ -503,25 +511,102 @@ export default function MensualTab() {
     }
   };
 
-  // ── Mover tarjeta ARRASTRANDO a otro día (PC: drag & drop) ──
+  // ── Copiar tarjeta ARRASTRANDO a otro día (PC: drag & drop) ──
+  // La original SE QUEDA: se crea una tarjeta igualita en el destino (mismo pro, turno y nota).
+  // Para MOVER una tarjeta sigue habiendo "MOVER A OTRO DÍA" en su editor de nota.
+  const copyPlanToDate = async (src: PlanEntry, targetDate: string): Promise<boolean> => {
+    const sede = sedes.find(s => s.id === src.sedeId);
+    const pro = professionals.find(p => p.alias === src.professionalAlias);
+    // Validaciones de negocio — las mismas que al crear un turno (Task 57)
+    const we = isWE(new Date(targetDate + "T00:00:00"));
+    const fest = sede ? holidays.some(h => h.date === targetDate && h.province === sede.province) : false;
+    if ((we || fest) && !confirm("Es festivo/fin de semana. ¿Continuar?")) return false;
+    if (sede && pro && !isProAssignedToSede(pro.assignedSedes, sede.name)) {
+      if (!confirm(`${pro.alias} no está adjudicado a ${sede.name}. ¿Continuar?`)) return false;
+    }
+    // Conflicto: en la sede destino ya hay una tarjeta con el MISMO turno ese día
+    const clash = plans.find(p => p.sedeId === src.sedeId && p.date === targetDate && p.turn === src.turn);
+    const turnLabel = src.turn === "MANANA" ? "Mañana" : src.turn === "TARDE" ? "Tarde" : "Mañana y Tarde";
+    if (clash) {
+      if (clash.professionalAlias === src.professionalAlias) {
+        alert(`${src.professionalAlias} ya tiene esa tarjeta (${turnLabel}) el ${formatDateLabel(targetDate)}.`);
+        return false;
+      }
+      if (!confirm(`El ${formatDateLabel(targetDate)} ya hay una tarjeta de ${clash.professionalAlias} (${turnLabel}). ¿Reemplazarla?`)) return false;
+    }
+    try {
+      const res = await fetch("/api/company/plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sedeId: src.sedeId, date: targetDate, turn: src.turn, professionalAlias: src.professionalAlias }),
+      });
+      if (!res.ok) { alert("No se pudo copiar la tarjeta."); return false; }
+      const created = await res.json();
+      // La copia lleva la MISMA nota (incluido el 🔔 @N si la original lo tenía)
+      if (src.notes && src.notes.trim()) {
+        try {
+          await fetch(`/api/company/plan/${created.id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ notes: src.notes }),
+          });
+        } catch { /* la copia ya existe; la nota se puede añadir a mano */ }
+      }
+      await load();
+      return true;
+    } catch { alert("Error de red al copiar la tarjeta."); return false; }
+  };
+
+  const copyAvisoToDate = async (src: AvisoEntry, targetDate: string): Promise<boolean> => {
+    const sede = sedes.find(s => s.id === src.sedeId);
+    const we = isWE(new Date(targetDate + "T00:00:00"));
+    const fest = sede ? holidays.some(h => h.date === targetDate && h.province === sede.province) : false;
+    if ((we || fest) && !confirm("Es festivo/fin de semana. ¿Continuar?")) return false;
+    try {
+      const res = await fetch("/api/company/avisos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date: targetDate,
+          professionalId: src.professionalId || null,
+          sedeId: src.sedeId,
+          turn: src.turn,
+          reason: src.reason || "",
+          note: src.note || "",
+        }),
+      });
+      if (!res.ok) { alert("No se pudo copiar el aviso."); return false; }
+      await load();
+      return true;
+    } catch { alert("Error de red al copiar el aviso."); return false; }
+  };
+
   const handleDrop = async (e: React.DragEvent, targetDate: string) => {
     let data: { kind?: string; id?: string } = {};
     try { data = JSON.parse(e.dataTransfer.getData("text/plain") || "{}"); } catch { return; }
     if (!data?.id || !data?.kind) return;
-    const isPlan = data.kind === "plan";
-    const card: PlanEntry | AvisoEntry | undefined = isPlan
-      ? plans.find(p => p.id === data.id)
-      : avisos.find(a => a.id === data.id);
-    if (!card || card.date === targetDate) return;
-    try {
-      const res = await fetch(isPlan ? `/api/company/plan/${data.id}` : `/api/company/avisos/${data.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date: targetDate }),
-      });
-      if (res.ok) await load();
-      else alert("No se pudo mover la tarjeta.");
-    } catch { alert("Error de red al mover la tarjeta."); }
+    if (data.kind === "plan") {
+      const src = plans.find(p => p.id === data.id);
+      if (src && src.date !== targetDate) await copyPlanToDate(src, targetDate);
+    } else if (data.kind === "aviso") {
+      const src = avisos.find(a => a.id === data.id);
+      if (src && src.date !== targetDate) await copyAvisoToDate(src, targetDate);
+    }
+  };
+
+  // 📋 Copiar desde el editor de nota (es la vía en móvil, donde no hay arrastre)
+  const copyPlanFromModal = async () => {
+    if (!noteModal || !planCopyDate || planCopyDate === noteModal.date) return;
+    const src = plans.find(p => p.id === noteModal.planId);
+    if (!src) return;
+    if (await copyPlanToDate(src, planCopyDate)) setPlanCopyDate("");
+  };
+
+  const copyAvisoFromModal = async () => {
+    if (!avisoNoteModal || !avisoCopyDate || avisoCopyDate === avisoNoteModal.date) return;
+    const src = avisos.find(a => a.id === avisoNoteModal.avisoId);
+    if (!src) return;
+    if (await copyAvisoToDate(src, avisoCopyDate)) setAvisoCopyDate("");
   };
 
   // ── Orden de tarjetas DENTRO de un día (manual + auto M→T→ambas) ──
@@ -552,7 +637,7 @@ export default function MensualTab() {
     } catch { await load(); }
   };
 
-  // Soltar una tarjeta SOBRE otra: si es del mismo día → reordenar; si viene de otro día → mover fecha
+  // Soltar una tarjeta SOBRE otra: si es del mismo día → reordenar; si viene de otro día → COPIARLA ahí
   const reorderInDay = (e: React.DragEvent, date: string, targetId: string, targetKind: "plan" | "aviso", dayList: Array<{ id: string; kind: "plan" | "aviso" }>) => {
     let data: { kind?: string; id?: string } = {};
     try { data = JSON.parse(e.dataTransfer.getData("text/plain") || "{}"); } catch { return; }
@@ -638,7 +723,7 @@ export default function MensualTab() {
         // Truncate tooltip preview
         const tooltipLines = [
           `${sede.name} / ${sede.task} · ${hasM && hasT ? "Mañana y Tarde" : hasM ? "Mañana" : "Tarde"} · ${nombre}`,
-          hasNote ? `📝 ${notePreview.length > 200 ? notePreview.slice(0, 200) + "…" : notePreview}` : "Click: nota · mover · borrar · toca M/T para cambiar el turno",
+          hasNote ? `📝 ${notePreview.length > 200 ? notePreview.slice(0, 200) + "…" : notePreview}` : "Click: nota · borrar · toca M/T para cambiar el turno · arrastra a otro día: COPIA",
         ].join("\n");
         const turnGroup = p.turn === "MANANA" ? 0 : p.turn === "TARDE" ? 1 : 2; // AMBOS al final, como las ambas de avisos
         const order = typeof p.order === "number" && p.order >= 0 ? p.order : -1;
@@ -652,7 +737,8 @@ export default function MensualTab() {
             key={p.id}
             onClick={(e) => { e.stopPropagation(); openNoteEditor(p, sede, nombre); }}
             draggable
-            onDragStart={(e) => { e.dataTransfer.setData("text/plain", JSON.stringify({ kind: "plan", id: p.id })); e.dataTransfer.effectAllowed = "move"; }}
+            onDragStart={(e) => { draggingCardRef.current = true; e.dataTransfer.setData("text/plain", JSON.stringify({ kind: "plan", id: p.id })); e.dataTransfer.effectAllowed = "copyMove"; }}
+            onDragEnd={() => { draggingCardRef.current = false; setDragOverDate(null); }}
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => reorderInDay(e, f, p.id, "plan", dayCards)}
             className="text-[1em] px-0.5 sm:px-1 py-0.5 rounded font-bold leading-tight border border-black/10 break-words cursor-pointer hover:ring-2 hover:ring-amber-500 hover:ring-offset-0 transition relative"
@@ -712,7 +798,8 @@ export default function MensualTab() {
             key={`av-${a.id}`}
             onClick={(e) => { e.stopPropagation(); openAvisoNoteEditor(a); }}
             draggable
-            onDragStart={(e) => { e.dataTransfer.setData("text/plain", JSON.stringify({ kind: "aviso", id: a.id })); e.dataTransfer.effectAllowed = "move"; }}
+            onDragStart={(e) => { draggingCardRef.current = true; e.dataTransfer.setData("text/plain", JSON.stringify({ kind: "aviso", id: a.id })); e.dataTransfer.effectAllowed = "copyMove"; }}
+            onDragEnd={() => { draggingCardRef.current = false; setDragOverDate(null); }}
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => reorderInDay(e, f, a.id, "aviso", dayCards)}
             className="text-[1em] px-0.5 sm:px-1 py-0.5 rounded font-bold leading-tight border border-red-900/40 break-words cursor-pointer hover:ring-2 hover:ring-red-500 hover:ring-offset-0 transition relative"
@@ -722,7 +809,7 @@ export default function MensualTab() {
             }}
             title={[
               `${reason}${proName ? ` · ${proName}` : ""}${sede ? ` · ${sede.name}` : ""}${a.turn ? ` · ${a.turn === "M" ? "Mañana" : "Tarde"}` : ""}`,
-              hasNote ? `📝 ${notePreview.length > 200 ? notePreview.slice(0, 200) + "…" : notePreview}` : "Click: nota · mover · borrar el aviso",
+              hasNote ? `📝 ${notePreview.length > 200 ? notePreview.slice(0, 200) + "…" : notePreview}` : "Click: nota · borrar el aviso · arrastra a otro día: COPIA",
             ].join("\n")}
           >
             {turnLabel && <span className="inline-block font-black px-0.5 mr-0.5 bg-red-900 text-white rounded-[2px]">{turnLabel}</span>}
@@ -751,9 +838,10 @@ export default function MensualTab() {
     cells.push(
       <td
         key={vd.f}
-        className={`border border-gray-300 h-auto min-h-[72px] sm:min-h-[110px] p-0.5 sm:p-1 align-top ${tdClass}`}
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={(e) => { e.preventDefault(); handleDrop(e, f); }}
+        className={`border border-gray-300 h-auto min-h-[72px] sm:min-h-[110px] p-0.5 sm:p-1 align-top ${tdClass} ${dragOverDate === f ? "ring-2 ring-inset ring-amber-500" : ""}`}
+        onDragOver={(e) => { e.preventDefault(); if (draggingCardRef.current) { e.dataTransfer.dropEffect = "copy"; if (dragOverDate !== f) setDragOverDate(f); } }}
+        onDragLeave={() => { if (dragOverDate === f) setDragOverDate(null); }}
+        onDrop={(e) => { e.preventDefault(); setDragOverDate(null); handleDrop(e, f); }}
       >
         <div className="font-black text-[11px] sm:text-[13px] text-gray-900 flex justify-between items-center gap-0.5 sm:gap-1">
           <span className={vd.adj ? "text-gray-400" : "text-gray-900"}>{day}{vd.monthTag && <span className="ml-0.5 text-[7px] sm:text-[8px] font-bold text-gray-500 align-top">{vd.monthTag}</span>}</span>
@@ -911,7 +999,7 @@ export default function MensualTab() {
               title="Mes siguiente (desliza a la izquierda)"
             >›</button>
           </div>
-          <span className="text-[10px] text-gray-500 font-bold hidden sm:block">+ turno · ⇅ ordena el día (M→T→ambas) · arrastra sobre otra tarjeta: ordenar · arrastra a otro día: mover</span>
+          <span className="text-[10px] text-gray-500 font-bold hidden sm:block">+ turno · ⇅ ordena el día (M→T→ambas) · arrastra sobre otra tarjeta: ordenar · arrastra a otro día: copiar (la original se queda)</span>
         </div>
         <div className="sm:hidden text-center text-[10px] text-gray-400 font-bold mb-2 no-print">
           Desliza ‹ › para cambiar de mes · 🌉 = empalme de dos meses
@@ -979,6 +1067,15 @@ export default function MensualTab() {
                 <button onClick={moveAviso} disabled={noteSaving || !avisoMoveDate || avisoMoveDate === avisoNoteModal.date}
                   className="px-3 py-2 bg-gray-900 hover:bg-black disabled:opacity-40 text-white rounded-lg font-bold text-xs transition whitespace-nowrap"
                   title="Mover esta tarjeta de aviso al día elegido">→ MOVER</button>
+              </div>
+            </div>
+            <div>
+              <label className="block text-[11px] font-extrabold text-gray-700 uppercase mb-1.5">📋 COPIAR A OTRO DÍA (la original se queda)</label>
+              <div className="flex gap-2">
+                <input type="date" value={avisoCopyDate} onChange={e => setAvisoCopyDate(e.target.value)} className="flex-1 px-2 py-2 bg-gray-50 border-2 border-gray-300 focus:border-amber-500 rounded-lg text-sm text-gray-900" />
+                <button onClick={copyAvisoFromModal} disabled={noteSaving || !avisoCopyDate || avisoCopyDate === avisoNoteModal.date}
+                  className="px-3 py-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-black rounded-lg font-black text-xs transition whitespace-nowrap"
+                  title="Crea una copia de este aviso en el día elegido; este se queda igual">📋 COPIAR</button>
               </div>
             </div>
             <AvisoPicker
@@ -1055,6 +1152,15 @@ export default function MensualTab() {
                 <button onClick={movePlan} disabled={noteSaving || !planMoveDate || planMoveDate === noteModal.date}
                   className="px-3 py-2 bg-gray-900 hover:bg-black disabled:opacity-40 text-white rounded-lg font-bold text-xs transition whitespace-nowrap"
                   title="Mover esta tarjeta de turno al día elegido">→ MOVER</button>
+              </div>
+            </div>
+            <div>
+              <label className="block text-[11px] font-extrabold text-gray-700 uppercase mb-1.5">📋 COPIAR A OTRO DÍA (la original se queda)</label>
+              <div className="flex gap-2">
+                <input type="date" value={planCopyDate} onChange={e => setPlanCopyDate(e.target.value)} className="flex-1 px-2 py-2 bg-gray-50 border-2 border-gray-300 focus:border-amber-500 rounded-lg text-sm text-gray-900" />
+                <button onClick={copyPlanFromModal} disabled={noteSaving || !planCopyDate || planCopyDate === noteModal.date}
+                  className="px-3 py-2 bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-black rounded-lg font-black text-xs transition whitespace-nowrap"
+                  title="Crea una copia de esta tarjeta en el día elegido; esta se queda igual">📋 COPIAR</button>
               </div>
             </div>
             <AvisoPicker
