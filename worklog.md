@@ -1837,3 +1837,28 @@ Work Log:
 
 Stage Summary:
 - El turno de una tarjeta del mensual ahora se puede cambiar de DOS formas imposibles de ignorar: (1) tocando los botones M/T de la propia tarjeta (negro=marcado, blanco discontinuo=vacío) y (2) abriendo el editor de la tarjeta (click), que estrena fila TURNO con botones Mañana/Tarde/Ambos que se aplican al instante. Si el usuario aún ve un único badge "M+T", es caché del navegador: refresco fuerte (Ctrl+Shift+R) y listo.
+
+---
+Task ID: 61
+Agent: main
+Task: "se copian fácil pero no se pueden mover como antes sin copiar" + "en la tarjeta solo salga MAÑANA o TARDE" + "cuando elegimos AMBOS en la creación se generan dos tarjetas, una con mañana y otra con tarde" (modelo de datos: cada tarjeta = UN turno)
+
+Work Log:
+- MODELO NUEVO: cada tarjeta del mensual es de UN turno y lleva la PALABRA completa (etiqueta negra "MAÑANA" o "TARDE"; legacy AMBOS = "MAÑANA Y TARDE"). Eliminados los chips M/T interactivos y changePlanTurn.
+- CREAR con "Ambos" = DOS tarjetas: savePlanAdd hace POST de MANANA + POST de TARDE (misma sede/día/pro). Si un slot ya estaba ocupado crea la otra y avisa. El aviso 🔔 @N va en UNA sola tarjeta (Mañana; fallback Tarde) para no duplicar notificaciones del cron.
+- ARRASTRAR = MOVER (por defecto, como antes): nueva movePlanToDate() — validaciones Task 57 (festivo/finde + pro no adjudicado), conflicto mismo turno: mismo pro → alerta, otro pro → "¿Reemplazarla?" (DELETE + PUT). PUT {date} con actualización optimista. Para avisos 🏖 igual: moveAvisoToDate() (PUT date + confirm festivo).
+- ARRASTRAR CON ALT = COPIAR: handleDrop ramifica por e.altKey; anillo de la celda destino AZUL = mover, ÁMBAR = copiar; dropEffect copy/move.
+- Editor de tarjeta: botón "Ambos" ahora CREA LA OTRA tarjeta (si es de Mañana crea la de Tarde y viceversa, alerta 409 si ocupada; disabled en legacy AMBOS). Botones Mañana/Tarde siguen cambiando el turno de la tarjeta al instante.
+- MIGRACIÓN de legacy: encontradas 5 tarjetas AMBOS reales (2026-09-01 JM, 2026-09-09 AS, 2027-04-26 AS, 2027-06-07 JM, 2027-06-21 AS) → divididas en dos tarjetas cada una (nota completa a la de Mañana), AMBOS original borrado. Re-escaneo 2025-2027: 0 AMBOS restantes.
+- Avisos 🏖: etiqueta M/T → palabras MAÑANA/TARDE también. Tooltips y hint superior: "arrastra a otro día: MOVER · con ALT: COPIAR (la original se queda)".
+- Commit b0f0756 → Vercel 200.
+- E2E PRODUCCIÓN (PC 1280 + móvil 412×915, pruebas VIT/AS marzo 2027, todo borrado al final):
+  * Crear "Ambos" día 3 → BD: 2 registros MANANA+TARDE; tarjetas con palabras "MAÑANA"/"TARDE", 0 chips ✓ (confirm "AS no está adjudicado a VIT" vivo) — captura t61-dos-tarjetas-pc.png
+  * Drag 3→10 sin ALT: la tarjeta MANANA SE FUE del 3 y aparece en el 10 con el MISMO id (movida, no copiada) ✓
+  * Drag 10→17 con ALT: 10 conserva + 17 gana copia ✓
+  * Editor "Ambos" en tarjeta MANANA del 10 → crea TARDE hermana ✓
+  * Móvil: tarjetas con palabras visibles ✓ — captura t61-movil-palabras.png
+  * Limpieza: 0 tarjetas de prueba restantes; migración 5/5 OK, 0 AMBOS.
+
+Stage Summary:
+- Cada tarjeta del mensual es de UN turno con su palabra MAÑANA o TARDE. Crear con "Ambos" genera dos tarjetas (mañana + tarde) del mismo pro y día. Arrastrar vuelve a MOVER como antes; con ALT se COPIA (la original se queda). El editor tiene botones Mañana/Tarde (cambiar turno) y Ambos (crear la otra tarjeta). Las 5 tarjetas combinadas antiguas ya están divididas en dos.
