@@ -1784,3 +1784,33 @@ Work Log:
 
 Stage Summary:
 - En el mensual, las tarjetas ya no muestran "M+T": llevan dos chips M y T que se marcan/desmarcan por separado directamente en la tarjeta (ambos marcados = cubre mañana y tarde). El cambio persiste en BD y respeta la unique de sede+fecha+turno. Funciona igual en PC y móvil (son spans clicables).
+
+---
+Task ID: 59
+Agent: main
+Task: "cuando en vista mensual generamos una tarjeta con mañana y tarde (ambos) se genera dos tarjetas iguales, una de mañana y otra de tarde. que tengamos la posibilidad de copiar cualquier tarjeta y por medio de arrastrar con el raton dejarla en otro dia para no tener que estar generando lo mismo y ser mas eficiente"
+
+Work Log:
+- ACLARACIÓN del síntoma: una tarjeta AMBOS es UNA sola tarjeta en el mensual (chips M/T, Task 58); lo de "dos tarjetas iguales" es como la ve en el DIARIO, donde sale en la columna de mañana Y en la de tarde por diseño (Task 54). No había bug que arreglar; la petición real es COPIAR.
+- ANTES: arrastrar una tarjeta a otro día la MOVÍA (PUT {date}). El usuario quiere lo contrario: arrastrar = COPIAR (la original se queda) para no repetir altas.
+- MENSUAL (src/components/MensualTab.tsx):
+  * copyPlanToDate(src, fecha): POST /api/company/plan con misma sede/turno/profesional + PUT de la nota (la copia lleva la MISMA nota, incluido el 🔔 @N). Validaciones Task 57 antes de copiar: festivo/finde → confirm; pro no adjudicado → confirm "X no está adjudicado a Y. ¿Continuar?".
+  * Conflicto mismo turno en la sede destino: si es el MISMO pro → alert "ya tiene esa tarjeta (Mañana/Tarde) el ..." y NO duplica; si es OTRO pro → confirm "¿Reemplazarla?" (la API hace upsert). El check es por sede (no colisiona con tarjetas de otras sedes el mismo día).
+  * copyAvisoToDate: copia tarjetas 🏖 de aviso a otro día (POST /api/company/avisos con motivo/nota/pro) + confirm de festivo/finde.
+  * handleDrop ahora COPIA (antes movía). Soltar sobre otra tarjeta del mismo día sigue REORDENANDO. MOVER sigue disponible en el editor de la tarjeta ("MOVER A OTRO DÍA").
+  * Feedback visual: la celda destino se ilumina con anillo ámbar mientras arrastras (dragOverDate + draggingCardRef), effectAllowed copyMove.
+  * Editor de nota: nueva fila "📋 COPIAR A OTRO DÍA (la original se queda)" junto a MOVER en el editor de turnos Y de avisos — es la vía en MÓVIL, donde no hay arrastre. Tras copiar, el editor queda abierto (permite copiar a varios días seguidos).
+  * Tooltips de tarjetas y hint superior actualizados: "arrastra a otro día: copiar (la original se queda)".
+- Commit 1abad6d → Vercel 200.
+- E2E PRODUCCIÓN (PC 1280, sesión julio1974@, confirm-trap que graba y acepta):
+  * Tarjeta de prueba 2027-01-05 VIT/AS (Mañana) con nota "prueba t59". Drag simulado con DragEvent+DataTransfer de día 5 → día 12:
+    - Día 5 conserva la original ✓, día 12 gana copia idéntica (mismo turno, mismo pro, MISMA nota) ✓
+    - Durante la copia saltó "AS no está adjudicado a VIT. ¿Continuar?" ✓ (validaciones Task 57 vivas en la copia)
+  * Segundo drag 5→12 (conflicto): alert "AS ya tiene esa tarjeta (Mañana) el MAR 12/1/2027." y NO se duplicó ✓
+  * Modal COPIAR 5→19: copia creada, el editor sigue abierto para seguir copiando ✓
+  * Limpieza quirúrgica: 3 tarjetas de prueba borradas por id; las tarjetas reales de JM del día 12 intactas ✓
+  * Móvil 412×915: el editor muestra la fila "📋 COPIAR A OTRO DÍA" con su botón ✓
+  * Capturas: download/t59-copia-pc.png (original y copia en 5 y 12), download/t59-movil-mensual.png.
+
+Stage Summary:
+- Arrastrar una tarjeta del mensual a otro día ahora la COPIA (la original se queda donde está): mismo profesional, mismo turno (M/T/ambos) y misma nota, con las mismas preguntas que al crear (festivo/finde, pro no adjudicado). Si el día destino ya tiene ese turno ocupado avisa y no duplica (o pregunta si reemplazar). La celda destino se ilumina al arrastrar. En móvil (y por si acaso en PC) el editor de cada tarjeta tiene el botón 📋 COPIAR A OTRO DÍA. Mover sigue existiendo en el editor. Funciona con tarjetas de turno y con tarjetas 🏖 de aviso.
