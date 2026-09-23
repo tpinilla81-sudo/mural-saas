@@ -66,6 +66,10 @@ export default function MensualTab() {
   // 📋 Copiar tarjeta a otro día (editor de nota; el arrastre en PC usa copyPlanToDate/copyAvisoToDate)
   const [planCopyDate, setPlanCopyDate] = useState("");
   const [avisoCopyDate, setAvisoCopyDate] = useState("");
+  // 📋 COPIAR con Ctrl+click en la tarjeta (petición de julio): 1) sale un DIÁLOGO de copiar,
+  // 2) pulsas COPIAR y 3) tocas el día destino. MOVER sigue como siempre: arrastrando.
+  const [copyPick, setCopyPick] = useState<{ kind: "plan" | "aviso"; id: string; label: string } | null>(null);
+  const [pickAction, setPickAction] = useState<{ kind: "plan" | "aviso"; id: string; label: string } | null>(null);
   // Resalta la celda destino mientras arrastras una tarjeta (PC)
   const [dragOverDate, setDragOverDate] = useState<string | null>(null);
   const [dragOverCopy, setDragOverCopy] = useState(false); // ¿arrastrando con ALT? (copiar) — anillo ámbar; sin ALT = mover — anillo azul
@@ -98,6 +102,14 @@ export default function MensualTab() {
     mq.addEventListener("change", apply);
     return () => mq.removeEventListener("change", apply);
   }, []);
+
+  // Esc cancela el diálogo de copiar y el modo "toca el día destino"
+  useEffect(() => {
+    if (!pickAction && !copyPick) return;
+    const h = (e: KeyboardEvent) => { if (e.key === "Escape") { setPickAction(null); setCopyPick(null); } };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [pickAction, copyPick]);
 
   // ── Deep-link desde NOTIFICACIÓN: /?fecha=…&card=…&t=plan|aviso ──
   // Al tocar una push, la app abre MENSUAL en la fecha del aviso y despliega
@@ -739,6 +751,21 @@ export default function MensualTab() {
     if (await copyAvisoToDate(src, avisoCopyDate)) setAvisoCopyDate("");
   };
 
+  // ── Paso final del COPIAR con Ctrl+click: el usuario confirmó en el diálogo y ahora
+  // toca el DÍA destino (celda del día, día completo o cualquier tarjeta de ese día).
+  const pickDay = async (targetDate: string) => {
+    const pa = pickAction;
+    if (!pa) return;
+    const src: PlanEntry | AvisoEntry | undefined = pa.kind === "plan"
+      ? plans.find(p => p.id === pa.id)
+      : avisos.find(a => a.id === pa.id);
+    if (!src) { setPickAction(null); return; }
+    if (src.date === targetDate) { alert("Toca un día DISTINTO al de la tarjeta."); return; }
+    setPickAction(null); // el aviso desaparece en cuanto se elige el día
+    if (pa.kind === "plan") await copyPlanToDate(src as PlanEntry, targetDate);
+    else await copyAvisoToDate(src as AvisoEntry, targetDate);
+  };
+
   // ── Orden de tarjetas DENTRO de un día (manual + auto M→T→ambas) ──
   const saveDayOrder = async (date: string, list: Array<{ id: string; kind: "plan" | "aviso" }>) => {
     const items = list.map((x, i) => ({ kind: x.kind, id: x.id, order: i }));
@@ -854,7 +881,7 @@ export default function MensualTab() {
         // Truncate tooltip preview
         const tooltipLines = [
           `${sede.name} / ${sede.task} · ${hasM && hasT ? "Mañana y Tarde" : hasM ? "Mañana" : "Tarde"} · ${nombre}`,
-          hasNote ? `📝 ${notePreview.length > 200 ? notePreview.slice(0, 200) + "…" : notePreview}` : "Click: editor (turno, nota, mover, copiar) · arrastra a otro día: MOVER · con ALT: COPIAR (la original se queda)",
+          hasNote ? `📝 ${notePreview.length > 200 ? notePreview.slice(0, 200) + "…" : notePreview}` : "Click: editor (turno, nota, mover, copiar) · Ctrl+click: COPIAR (luego toca el día destino) · arrastra a otro día: MOVER · con ALT: COPIAR (la original se queda)",
         ].join("\n");
         const turnGroup = p.turn === "MANANA" ? 0 : p.turn === "TARDE" ? 1 : 2; // AMBOS al final, como las ambas de avisos
         const order = typeof p.order === "number" && p.order >= 0 ? p.order : -1;
@@ -866,7 +893,7 @@ export default function MensualTab() {
           node: (
           <div
             key={p.id}
-            onClick={(e) => { e.stopPropagation(); openNoteEditor(p, sede, nombre); }}
+            onClick={(e) => { e.stopPropagation(); if (pickAction) { if (!(pickAction.kind === "plan" && pickAction.id === p.id)) pickDay(p.date); return; } if (e.ctrlKey || e.metaKey) { e.preventDefault(); setCopyPick({ kind: "plan", id: p.id, label: `${turnWord} · ${p.professionalAlias}` }); return; } openNoteEditor(p, sede, nombre); }}
             draggable
             onDragStart={(e) => { draggingCardRef.current = true; e.dataTransfer.setData("text/plain", JSON.stringify({ kind: "plan", id: p.id })); e.dataTransfer.effectAllowed = "copyMove"; }}
             onDragEnd={() => { draggingCardRef.current = false; setDragOverDate(null); }}
@@ -918,7 +945,7 @@ export default function MensualTab() {
           node: (
           <div
             key={`av-${a.id}`}
-            onClick={(e) => { e.stopPropagation(); openAvisoNoteEditor(a); }}
+            onClick={(e) => { e.stopPropagation(); if (pickAction) { if (!(pickAction.kind === "aviso" && pickAction.id === a.id)) pickDay(a.date); return; } if (e.ctrlKey || e.metaKey) { e.preventDefault(); setCopyPick({ kind: "aviso", id: a.id, label: `${reason}${avisoProAlias ? ` · ${avisoProAlias}` : ""}` }); return; } openAvisoNoteEditor(a); }}
             draggable
             onDragStart={(e) => { draggingCardRef.current = true; e.dataTransfer.setData("text/plain", JSON.stringify({ kind: "aviso", id: a.id })); e.dataTransfer.effectAllowed = "copyMove"; }}
             onDragEnd={() => { draggingCardRef.current = false; setDragOverDate(null); }}
@@ -931,7 +958,7 @@ export default function MensualTab() {
             }}
             title={[
               `${reason}${proName ? ` · ${proName}` : ""}${sede ? ` · ${sede.name}` : ""}${a.turn ? ` · ${a.turn === "M" ? "Mañana" : "Tarde"}` : ""}`,
-              hasNote ? `📝 ${notePreview.length > 200 ? notePreview.slice(0, 200) + "…" : notePreview}` : "Click: nota · borrar el aviso · arrastra a otro día: MOVER · con ALT: COPIAR",
+              hasNote ? `📝 ${notePreview.length > 200 ? notePreview.slice(0, 200) + "…" : notePreview}` : "Click: nota · borrar el aviso · Ctrl+click: COPIAR (luego toca el día destino) · arrastra a otro día: MOVER · con ALT: COPIAR",
             ].join("\n")}
           >
             {turnLabel && <span className="inline-block font-black px-0.5 mr-0.5 bg-red-900 text-white rounded-[2px]">{turnLabel}</span>}
@@ -960,10 +987,11 @@ export default function MensualTab() {
     cells.push(
       <td
         key={vd.f}
-        className={`border border-gray-300 h-auto min-h-[72px] sm:min-h-[110px] p-0.5 sm:p-1 align-top ${tdClass} ${dragOverDate === f ? (dragOverCopy ? "ring-2 ring-inset ring-amber-500" : "ring-2 ring-inset ring-sky-600") : ""}`}
+        className={`border border-gray-300 h-auto min-h-[72px] sm:min-h-[110px] p-0.5 sm:p-1 align-top ${tdClass} ${dragOverDate === f ? (dragOverCopy ? "ring-2 ring-inset ring-amber-500" : "ring-2 ring-inset ring-sky-600") : ""} ${pickAction ? "ring-2 ring-inset ring-amber-400 cursor-pointer" : ""}`}
         onDragOver={(e) => { e.preventDefault(); if (draggingCardRef.current) { const copy = e.altKey; e.dataTransfer.dropEffect = copy ? "copy" : "move"; if (dragOverDate !== f || dragOverCopy !== copy) { setDragOverDate(f); setDragOverCopy(copy); } } }}
         onDragLeave={() => { if (dragOverDate === f) setDragOverDate(null); }}
         onDrop={(e) => { e.preventDefault(); setDragOverDate(null); handleDrop(e, f); }}
+        onClick={(e) => { if (pickAction) { e.stopPropagation(); pickDay(f); } }}
       >
         <div className="font-black text-[11px] sm:text-[13px] text-gray-900 flex justify-between items-center gap-0.5 sm:gap-1">
           <span className={vd.adj ? "text-gray-400" : "text-gray-900"}>{day}{vd.monthTag && <span className="ml-0.5 text-[7px] sm:text-[8px] font-bold text-gray-500 align-top">{vd.monthTag}</span>}</span>
@@ -975,17 +1003,17 @@ export default function MensualTab() {
               </span>
             )}
             <button
-              onClick={(e) => { e.stopPropagation(); autoSortDay(f); }}
+              onClick={(e) => { e.stopPropagation(); if (pickAction) return; autoSortDay(f); }}
               className="no-print shrink-0 h-5 w-5 rounded-full bg-gray-200 text-gray-700 text-[11px] font-black leading-none items-center justify-center hover:bg-amber-500 hover:text-black active:scale-90 transition hidden sm:flex"
               title="Ordenar automáticamente: mañanas → tardes → ambas"
             >⇅</button>
             <button
-              onClick={(e) => { e.stopPropagation(); openAddDialog(f); }}
+              onClick={(e) => { e.stopPropagation(); if (pickAction) return; openAddDialog(f); }}
               className="no-print shrink-0 h-5 w-5 rounded-full bg-gray-900 text-white text-[13px] font-black leading-none items-center justify-center hover:bg-amber-500 hover:text-black active:scale-90 transition hidden sm:flex"
               title="Programar turno este día"
             >+</button>
             <button
-              onClick={(e) => { e.stopPropagation(); openAddDialog(f); }}
+              onClick={(e) => { e.stopPropagation(); if (pickAction) return; openAddDialog(f); }}
               className="no-print sm:hidden shrink-0 h-5 w-5 rounded-full bg-gray-900/85 text-white text-[12px] font-black leading-none flex items-center justify-center active:scale-90 transition"
               title="Programar turno este día"
             >+</button>
@@ -1121,7 +1149,7 @@ export default function MensualTab() {
               title="Mes siguiente (desliza a la izquierda)"
             >›</button>
           </div>
-          <span className="text-[10px] text-gray-500 font-bold hidden sm:block">+ turno · ⇅ ordena el día (M→T→ambas) · arrastra sobre otra tarjeta: ordenar · arrastra a otro día: MOVER · con ALT: COPIAR (la original se queda)</span>
+          <span className="text-[10px] text-gray-500 font-bold hidden sm:block">+ turno · ⇅ ordena el día (M→T→ambas) · arrastra a otro día: MOVER · con ALT: COPIAR · Ctrl+click en la tarjeta: COPIAR (luego toca el día destino)</span>
         </div>
         <div className="sm:hidden text-center text-[10px] text-gray-400 font-bold mb-2 no-print">
           Desliza ‹ › para cambiar de mes · 🌉 = empalme de dos meses
@@ -1142,6 +1170,34 @@ export default function MensualTab() {
         </table>
         </div>
       </div>
+
+      {/* ═══ Diálogo 📋 COPIAR (Ctrl+click en la tarjeta) ═══ */}
+      {copyPick && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4" onClick={() => setCopyPick(null)}>
+          <div className="bg-white border-2 border-amber-500 rounded-xl p-5 w-full max-w-sm space-y-3 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <h3 className="text-gray-900 font-black text-lg">📋 Copiar tarjeta</h3>
+            <p className="text-xs text-gray-800 font-bold uppercase tracking-wide">{copyPick.label}</p>
+            <p className="text-sm text-gray-700 font-medium leading-snug">
+              1) Pulsa <b>COPIAR</b>.<br />
+              2) Toca el <b>día destino</b> en el calendario (la original se queda donde está).
+            </p>
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => setCopyPick(null)} className="flex-1 py-2 px-4 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg font-bold text-sm transition">Cancelar</button>
+              <button onClick={() => { setPickAction(copyPick); setCopyPick(null); }} className="flex-1 py-2 px-4 bg-amber-500 hover:bg-amber-400 text-black rounded-lg font-black text-sm transition" title="Pulsa y luego toca el día destino">📋 COPIAR</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ Banner modo 📋 copiar: toca el día destino ═══ */}
+      {pickAction && (
+        <div className="no-print fixed top-2 left-1/2 -translate-x-1/2 z-[80] max-w-[96vw] bg-gray-900 text-white rounded-full pl-4 pr-1.5 py-1.5 shadow-2xl border-2 border-amber-400 flex items-center gap-2">
+          <span className="text-[11px] sm:text-sm font-black leading-tight truncate">
+            📋 COPIAR <span className="text-amber-300">{pickAction.label}</span> — toca el DÍA destino (la original se queda)
+          </span>
+          <button onClick={() => setPickAction(null)} className="shrink-0 bg-red-600 hover:bg-red-500 text-white rounded-full px-3 py-1 text-[10px] sm:text-xs font-black transition" title="Cancelar: no copia nada">CANCELAR</button>
+        </div>
+      )}
 
       {/* ═══ Aviso note editor modal ═══ */}
       {avisoNoteModal && (
