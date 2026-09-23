@@ -511,6 +511,33 @@ export default function MensualTab() {
     }
   };
 
+  // ── Cambiar el turno desde el editor de la tarjeta (botones Mañana / Tarde / Ambos) ──
+  // Se aplica AL INSTANTE (no hace falta Guardar); mismo control de conflicto 409 que los chips.
+  const setPlanTurnFromModal = async (newTurn: "MANANA" | "TARDE" | "AMBOS") => {
+    if (!noteModal) return;
+    const plan = plans.find(p => p.id === noteModal.planId);
+    if (!plan || plan.turn === newTurn) return;
+    const prevTurn = plan.turn;
+    setPlans(prev => prev.map(p => p.id === plan.id ? { ...p, turn: newTurn } : p));
+    setNoteModal(m => m ? { ...m, turn: newTurn } : m);
+    try {
+      const res = await fetch(`/api/company/plan/${plan.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ turn: newTurn }),
+      });
+      if (res.ok) return;
+      setPlans(prev => prev.map(p => p.id === plan.id ? { ...p, turn: prevTurn } : p));
+      setNoteModal(m => m ? { ...m, turn: prevTurn } : m);
+      if (res.status === 409) alert("Ya existe otra tarjeta con ese turno en esta sede y día. Borra o cambia esa primero.");
+      else alert("No se pudo cambiar el turno.");
+    } catch {
+      setPlans(prev => prev.map(p => p.id === plan.id ? { ...p, turn: prevTurn } : p));
+      setNoteModal(m => m ? { ...m, turn: prevTurn } : m);
+      alert("Error de red al cambiar el turno.");
+    }
+  };
+
   // ── Copiar tarjeta ARRASTRANDO a otro día (PC: drag & drop) ──
   // La original SE QUEDA: se crea una tarjeta igualita en el destino (mismo pro, turno y nota).
   // Para MOVER una tarjeta sigue habiendo "MOVER A OTRO DÍA" en su editor de nota.
@@ -723,7 +750,7 @@ export default function MensualTab() {
         // Truncate tooltip preview
         const tooltipLines = [
           `${sede.name} / ${sede.task} · ${hasM && hasT ? "Mañana y Tarde" : hasM ? "Mañana" : "Tarde"} · ${nombre}`,
-          hasNote ? `📝 ${notePreview.length > 200 ? notePreview.slice(0, 200) + "…" : notePreview}` : "Click: nota · borrar · toca M/T para cambiar el turno · arrastra a otro día: COPIA",
+          hasNote ? `📝 ${notePreview.length > 200 ? notePreview.slice(0, 200) + "…" : notePreview}` : "Click: editor (turno, nota, mover, copiar) · toca M/T para cambiar el turno · arrastra a otro día: COPIA",
         ].join("\n");
         const turnGroup = p.turn === "MANANA" ? 0 : p.turn === "TARDE" ? 1 : 2; // AMBOS al final, como las ambas de avisos
         const order = typeof p.order === "number" && p.order >= 0 ? p.order : -1;
@@ -745,15 +772,15 @@ export default function MensualTab() {
             style={{ background: sede.color, color: textColorFor(sede.color) }}
             title={tooltipLines}
           >
-            {/* Chips M/T interactivos: toca para marcar/desmarcar cada turno (ambos = AMBOS) */}
+            {/* Botones M/T en la propia tarjeta: negro relleno = marcado, blanco discontinuo = vacío. Toca para marcar/desmarcar (ambos = AMBOS) */}
             <span
               onClick={(e) => { e.stopPropagation(); e.preventDefault(); changePlanTurn(p, !hasM, hasT); }}
-              className={`inline-block font-black px-0.5 mr-0.5 rounded-[2px] cursor-pointer select-none leading-normal ${hasM ? "bg-black/80 text-white" : "bg-white/50 text-black/35 border border-black/25"}`}
+              className={`inline-flex items-center justify-center min-w-[19px] px-1 mr-1 rounded-md font-black text-[0.95em] leading-[1.45] cursor-pointer select-none border-2 transition ${hasM ? "bg-gray-900 text-white border-gray-900 shadow-sm" : "bg-white/95 text-gray-400 border-dashed border-gray-500"}`}
               title={hasM ? "Mañana marcada — toca para quitarla" : "Toca para añadir Mañana"}
             >M</span>
             <span
               onClick={(e) => { e.stopPropagation(); e.preventDefault(); changePlanTurn(p, hasM, !hasT); }}
-              className={`inline-block font-black px-0.5 mr-0.5 rounded-[2px] cursor-pointer select-none leading-normal ${hasT ? "bg-black/80 text-white" : "bg-white/50 text-black/35 border border-black/25"}`}
+              className={`inline-flex items-center justify-center min-w-[19px] px-1 mr-1 rounded-md font-black text-[0.95em] leading-[1.45] cursor-pointer select-none border-2 transition ${hasT ? "bg-gray-900 text-white border-gray-900 shadow-sm" : "bg-white/95 text-gray-400 border-dashed border-gray-500"}`}
               title={hasT ? "Tarde marcada — toca para quitarla" : "Toca para añadir Tarde"}
             >T</span>
             {sede.name} / {renderTaskLED(sede.task)} - {nombre}
@@ -999,7 +1026,7 @@ export default function MensualTab() {
               title="Mes siguiente (desliza a la izquierda)"
             >›</button>
           </div>
-          <span className="text-[10px] text-gray-500 font-bold hidden sm:block">+ turno · ⇅ ordena el día (M→T→ambas) · arrastra sobre otra tarjeta: ordenar · arrastra a otro día: copiar (la original se queda)</span>
+          <span className="text-[10px] text-gray-500 font-bold hidden sm:block">+ turno · toca M/T de la tarjeta: marcar turno · ⇅ ordena el día (M→T→ambas) · arrastra sobre otra tarjeta: ordenar · arrastra a otro día: copiar (la original se queda)</span>
         </div>
         <div className="sm:hidden text-center text-[10px] text-gray-400 font-bold mb-2 no-print">
           Desliza ‹ › para cambiar de mes · 🌉 = empalme de dos meses
@@ -1118,11 +1145,34 @@ export default function MensualTab() {
             <div className="border-b-2 border-gray-900 pb-2">
               <h3 className="text-gray-900 font-black text-lg">Nota del turno</h3>
               <p className="text-[11px] text-gray-600 font-bold uppercase tracking-wide">
-                {formatDateLabel(noteModal.date)} · {noteModal.turn === "MANANA" ? "Mañana" : "Tarde"}
+                {formatDateLabel(noteModal.date)} · {noteModal.turn === "MANANA" ? "Mañana" : noteModal.turn === "TARDE" ? "Tarde" : "Mañana y Tarde"}
               </p>
               <p className="text-xs text-gray-800 font-bold mt-0.5">
                 {noteModal.sedeName}{noteModal.sedeTask ? ` / ${noteModal.sedeTask}` : ""} · {noteModal.proName}
               </p>
+            </div>
+            <div>
+              <label className="block text-[11px] font-extrabold text-gray-700 uppercase mb-1.5">TURNO — toca para cambiarlo (se aplica al instante)</label>
+              <div className="grid grid-cols-3 gap-1.5">
+                <button
+                  onClick={() => setPlanTurnFromModal("MANANA")}
+                  disabled={noteSaving}
+                  className={`py-2 rounded-lg font-black text-xs transition border-2 ${noteModal.turn === "MANANA" ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-600 border-gray-300 hover:border-gray-900"}`}
+                  title="Poner esta tarjeta solo por la Mañana"
+                >Mañana</button>
+                <button
+                  onClick={() => setPlanTurnFromModal("TARDE")}
+                  disabled={noteSaving}
+                  className={`py-2 rounded-lg font-black text-xs transition border-2 ${noteModal.turn === "TARDE" ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-600 border-gray-300 hover:border-gray-900"}`}
+                  title="Poner esta tarjeta solo por la Tarde"
+                >Tarde</button>
+                <button
+                  onClick={() => setPlanTurnFromModal("AMBOS")}
+                  disabled={noteSaving}
+                  className={`py-2 rounded-lg font-black text-xs transition border-2 ${noteModal.turn === "AMBOS" ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-600 border-gray-300 hover:border-gray-900"}`}
+                  title="Poner esta tarjeta Mañana y Tarde"
+                >Ambos</button>
+              </div>
             </div>
             <div>
               <label className="block text-[11px] font-extrabold text-gray-700 uppercase mb-1.5">NOTA</label>
