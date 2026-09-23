@@ -1862,3 +1862,30 @@ Work Log:
 
 Stage Summary:
 - Cada tarjeta del mensual es de UN turno con su palabra MAÑANA o TARDE. Crear con "Ambos" genera dos tarjetas (mañana + tarde) del mismo pro y día. Arrastrar vuelve a MOVER como antes; con ALT se COPIA (la original se queda). El editor tiene botones Mañana/Tarde (cambiar turno) y Ambos (crear la otra tarjeta). Las 5 tarjetas combinadas antiguas ya están divididas en dos.
+
+---
+Task ID: 62
+Agent: main
+Task: "SE PUEDE COPIAR DESDE LA TARJETA SIN ENTRAR" — copiar (y mover) directamente desde la tarjeta, sin abrir el editor y sin arrastrar.
+
+Work Log:
+- Botones 📋 COPIAR y ➡ MOVER en CADA tarjeta del mensual (turnos y avisos 🏖), junto al texto: negros translúcidos, hover ámbar (copiar) / azul (mover).
+- Flujo: tocas 📋 o ➡ en la tarjeta → banner fijo arriba "📋 COPIAR MAÑANA · AS — toca el DÍA destino" con botón CANCELAR → TODAS las celdas del calendario se iluminan y parpadean (ámbar=copiar, azul=mover, como los anillos de arrastre) → tocas el día destino (celda vacía, día completo o CUALQUIER tarjeta de ese día) y se ejecuta.
+- El botón origen queda parpadeando mientras eliges día. Esc y CANCELAR cancelan sin hacer nada. Mismo día tocado → aviso "Toca un día DISTINTO".
+- pickDay() reutiliza copyPlanToDate/movePlanToDate/copyAvisoToDate/moveAvisoToDate: MISMAS validaciones (confirm festivo/finde, pro no adjudicado, conflicto de turno con ¿Reemplazarla?).
+- Guardado el modo: click en + / ⇅ no abre nada durante el modo; click en la tarjeta origen no abre el editor hasta salir del modo.
+- Tooltips de tarjetas y hint superior actualizados.
+- Commit 0fbb24b → Vercel 200.
+- E2E PRODUCCIÓN (PC 1280 + móvil 412×915, tarjetas temp VIT/AS feb-2027 días 10/11/17/18/20/24/25, TODO borrado al final):
+  * Tarjeta con 2 botones (📋 títulos correctos) ✓ — captura t62-botones-pc.png
+  * Tocar 📋 → banner + CANCELAR + 28 días iluminados + botón origen parpadea ✓ — captura t62-banner-pc.png
+  * Tocar día 17 → copia creada (MANANA), original se queda, banner cerrado ✓
+  * Tocar ➡ en la copia (17) → día 24: MISMO id movido, día 17 vacío ✓
+  * 📋 y tocar OTRA TARJETA (C del día 20, sábado) → copia MANANA junto a TARDE, confirm festivo disparado ✓
+  * CANCELAR → no crea nada, banner cerrado ✓
+  * Móvil: mismo flujo completo (copiar 11→18, mover 11→25) ✓ — captura t62-movil.png
+  * Limpieza: 0 tarjetas de prueba; la única AS de feb-2027 restante es REAL (2027-02-22 CR).
+  * Nota de test: la 1ª pasada del test "tocar tarjeta destino" falló porque la tarjeta C se creó por API DESPUÉS de cargar la vista (el estado UI no la tenía) — retest con recarga pasó. No es bug de la app.
+
+Stage Summary:
+- Copiar y mover tarjetas ahora es de 2 toques SIN entrar al editor y SIN arrastrar: 📋 (copiar, la original se queda) o ➡ (mover, se quita de donde está) en la propia tarjeta → tocar el día destino. Funciona igual en PC y móvil, con las mismas protecciones que arrastrar. El arrastre sigue vivo: sin ALT mueve, con ALT copia.
