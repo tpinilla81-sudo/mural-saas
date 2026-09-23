@@ -1814,3 +1814,26 @@ Work Log:
 
 Stage Summary:
 - Arrastrar una tarjeta del mensual a otro día ahora la COPIA (la original se queda donde está): mismo profesional, mismo turno (M/T/ambos) y misma nota, con las mismas preguntas que al crear (festivo/finde, pro no adjudicado). Si el día destino ya tiene ese turno ocupado avisa y no duplica (o pregunta si reemplazar). La celda destino se ilumina al arrastrar. En móvil (y por si acaso en PC) el editor de cada tarjeta tiene el botón 📋 COPIAR A OTRO DÍA. Mover sigue existiendo en el editor. Funciona con tarjetas de turno y con tarjetas 🏖 de aviso.
+
+---
+Task ID: 60
+Agent: main
+Task: "en la tarjeta vista mensual solo pone M o T o M+T, no se puede seleccionar ahi" — los chips M/T existían (Task 58) pero no se percibían como seleccionables; hacer la selección IMPOSIBLE de perder.
+
+Work Log:
+- Diagnóstico: el código ya tenía chips M/T clicables (verificados E2E en Task 58) y el badge "M+T" ya no existe en la app. El problema era de PERCEPCIÓN: los chips eran tan pequeños y discretos que se leían como texto estático.
+- Chips M/T de la tarjeta rediseñados como BOTONES claros: activo = rectángulo negro relleno con borde y sombra; inactivo = blanco con borde DISCONTINUO (hueco vacío). min-w 19px, px-1, rounded-md, border-2 — se ven como botones sobre cualquier color de sede.
+- Editor de la tarjeta (click en la tarjeta): nueva fila "TURNO — toca para cambiarlo (se aplica al instante)" con 3 botones Mañana / Tarde / Ambos; el activo sale en negro. setPlanTurnFromModal(): cambio optimista + PUT + revierte con alert 409 si hay conflicto de turno en la sede/día. No hace falta pulsar Guardar (igual que MOVER/COPIAR).
+- Fix: el encabezado del editor mostraba "Tarde" en tarjetas AMBOS → ahora "Mañana y Tarde".
+- Tooltips y hint superior actualizados ("toca M/T de la tarjeta: marcar turno · click: editor (turno, nota, mover, copiar)").
+- Commit 6810d92 → Vercel 200.
+- E2E PRODUCCIÓN (PC 1280 + móvil 412×915, tarjeta temporal 2027-02-10 y 2027-02-11 VIT/AS, todo borrado al final):
+  * Chips: M activo bg-gray-900 ✓, T inactivo discontinuo blanco ✓ (captura t60-chips-pc.png)
+  * Click en chip T → BD turn=AMBOS, ambos chips rellenos ✓
+  * Click en tarjeta → editor con fila TURNO [Mañana/Tarde/Ambos], activo "Ambos", encabezado "MIÉ 10/2/2027 · Mañana y Tarde" ✓ (captura t60-editor-turno.png)
+  * Botón "Mañana" del editor → BD turn=MANANA al instante, highlight y encabezado actualizados, modal sigue abierto ✓
+  * Móvil: chips visibles como botones y fila TURNO presente ✓ (captura t60-chips-movil.png)
+  * Limpieza: 0 tarjetas de prueba restantes.
+
+Stage Summary:
+- El turno de una tarjeta del mensual ahora se puede cambiar de DOS formas imposibles de ignorar: (1) tocando los botones M/T de la propia tarjeta (negro=marcado, blanco discontinuo=vacío) y (2) abriendo el editor de la tarjeta (click), que estrena fila TURNO con botones Mañana/Tarde/Ambos que se aplican al instante. Si el usuario aún ve un único badge "M+T", es caché del navegador: refresco fuerte (Ctrl+Shift+R) y listo.
