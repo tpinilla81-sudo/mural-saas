@@ -68,6 +68,7 @@ export default function MensualTab() {
   const [avisoCopyDate, setAvisoCopyDate] = useState("");
   // Resalta la celda destino mientras arrastras una tarjeta (PC)
   const [dragOverDate, setDragOverDate] = useState<string | null>(null);
+  const [dragOverCopy, setDragOverCopy] = useState(false); // ¿arrastrando con ALT? (copiar) — anillo ámbar; sin ALT = mover — anillo azul
   const draggingCardRef = useRef(false); // hay una tarjeta nuestra "en vuelo" (drag activo)
 
   // ── Añadir en Mensual: programar turno (el aviso/ausencia se retiró) ──
@@ -403,6 +404,42 @@ export default function MensualTab() {
     }
     setAddSaving(true);
     try {
+      // "Ambos" = DOS tarjetas: una de MAÑANA y otra de TARDE (cada tarjeta es de UN turno)
+      if (addTurn === "AMBOS") {
+        const mk = async (turn: "MANANA" | "TARDE") => {
+          try {
+            const r = await fetch("/api/company/plan", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ sedeId: addSede, date: addModal.date, turn, professionalAlias: addPro }),
+            });
+            return r.ok ? await r.json() : null;
+          } catch { return null; }
+        };
+        const man = await mk("MANANA");
+        const tar = await mk("TARDE");
+        if (!man && !tar) {
+          alert("No se pudo guardar: ya existen las dos tarjetas (Mañana y Tarde) en esta sede y día.");
+          return;
+        }
+        // 🔔 el aviso @N va en UNA sola tarjeta (la de Mañana; si no se creó, en la de Tarde) para no duplicar el aviso
+        if (avisoOn) {
+          const host = man || tar;
+          if (host) {
+            try {
+              await fetch(`/api/company/plan/${host.id}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ notes: buildAvisoNote("", true, clampAvisoDays(avisoDays), selectedNames()) }),
+              });
+            } catch { /* el turno ya está creado: el aviso se puede añadir en la tarjeta */ }
+          }
+        }
+        if (!man || !tar) alert("Una de las dos tarjetas ya existía en esta sede y día; se ha creado solo la otra.");
+        setAddModal(null);
+        await load();
+        return;
+      }
       const res = await fetch("/api/company/plan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -484,31 +521,90 @@ export default function MensualTab() {
     } catch { alert("Error de red al mover el aviso."); }
   };
 
-  // ── Cambiar el turno de una tarjeta tocando los chips M/T (Task 58) ──
-  // Chips independientes: M y T se marcan/desmarcan por separado; ambos = AMBOS.
-  // Nunca se permite dejar la tarjeta sin turno (click en el único chip activo = no-op).
-  const changePlanTurn = async (plan: PlanEntry, hasM: boolean, hasT: boolean) => {
-    if (!hasM && !hasT) return; // sin turno no tiene sentido
-    const newTurn = hasM && hasT ? "AMBOS" : hasM ? "MANANA" : "TARDE";
-    if (newTurn === plan.turn) return;
-    const prevTurn = plan.turn;
+  // ── MOVER tarjeta ARRASTRANDO a otro día (comportamiento por defecto, como siempre) ──
+  // La tarjeta se levanta de su día y pasa al destino (mismo pro, turno y nota). Con ALT pulsado = COPIAR.
+  const movePlanToDate = async (src: PlanEntry, targetDate: string): Promise<boolean> => {
+    const sede = sedes.find(s => s.id === src.sedeId);
+    const pro = professionals.find(p => p.alias === src.professionalAlias);
+    // Validaciones de negocio — las mismas que al crear un turno (Task 57)
+    const we = isWE(new Date(targetDate + "T00:00:00"));
+    const fest = sede ? holidays.some(h => h.date === targetDate && h.province === sede.province) : false;
+    if ((we || fest) && !confirm("Es festivo/fin de semana. ¿Continuar?")) return false;
+    if (sede && pro && !isProAssignedToSede(pro.assignedSedes, sede.name)) {
+      if (!confirm(`${pro.alias} no está adjudicado a ${sede.name}. ¿Continuar?`)) return false;
+    }
+    // Conflicto: en la sede destino ya hay una tarjeta con el MISMO turno ese día
+    const clash = plans.find(p => p.sedeId === src.sedeId && p.date === targetDate && p.turn === src.turn && p.id !== src.id);
+    const turnLabel = src.turn === "MANANA" ? "Mañana" : src.turn === "TARDE" ? "Tarde" : "Mañana y Tarde";
+    if (clash) {
+      if (clash.professionalAlias === src.professionalAlias) {
+        alert(`${src.professionalAlias} ya tiene esa tarjeta (${turnLabel}) el ${formatDateLabel(targetDate)}.`);
+        return false;
+      }
+      if (!confirm(`El ${formatDateLabel(targetDate)} ya hay una tarjeta de ${clash.professionalAlias} (${turnLabel}). ¿Reemplazarla?`)) return false;
+      try {
+        const del = await fetch(`/api/company/plan/${clash.id}`, { method: "DELETE" });
+        if (!del.ok) { alert("No se pudo reemplazar la tarjeta existente."); return false; }
+        setPlans(prev => prev.filter(p => p.id !== clash.id));
+      } catch { alert("Error de red al reemplazar la tarjeta existente."); return false; }
+    }
     // optimista
-    setPlans(prev => prev.map(p => (p.id === plan.id ? { ...p, turn: newTurn } : p)));
+    const prevDate = src.date;
+    setPlans(prev => prev.map(p => (p.id === src.id ? { ...p, date: targetDate } : p)));
     try {
-      const res = await fetch(`/api/company/plan/${plan.id}`, {
+      const res = await fetch(`/api/company/plan/${src.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ turn: newTurn }),
+        body: JSON.stringify({ date: targetDate }),
       });
-      if (res.ok) return;
-      // conflicto: ya hay otra tarjeta con ese turno en la misma sede y día
-      setPlans(prev => prev.map(p => (p.id === plan.id ? { ...p, turn: prevTurn } : p)));
-      if (res.status === 409) alert("Ya existe otra tarjeta con ese turno en esta sede y día. Borra o cambia esa primero.");
-      else { alert("No se pudo cambiar el turno."); load(); }
+      if (res.ok) return true;
+      setPlans(prev => prev.map(p => (p.id === src.id ? { ...p, date: prevDate } : p)));
+      alert("No se pudo mover la tarjeta.");
+      return false;
     } catch {
-      setPlans(prev => prev.map(p => (p.id === plan.id ? { ...p, turn: prevTurn } : p)));
-      alert("Error de red al cambiar el turno.");
+      setPlans(prev => prev.map(p => (p.id === src.id ? { ...p, date: prevDate } : p)));
+      alert("Error de red al mover la tarjeta.");
+      return false;
     }
+  };
+
+  // ── MOVER aviso 🏖 ARRASTRANDO a otro día ──
+  const moveAvisoToDate = async (src: AvisoEntry, targetDate: string): Promise<boolean> => {
+    const sede = sedes.find(s => s.id === src.sedeId);
+    const we = isWE(new Date(targetDate + "T00:00:00"));
+    const fest = sede ? holidays.some(h => h.date === targetDate && h.province === sede.province) : false;
+    if ((we || fest) && !confirm("Es festivo/fin de semana. ¿Continuar?")) return false;
+    try {
+      const res = await fetch(`/api/company/avisos/${src.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ date: targetDate }),
+      });
+      if (!res.ok) { alert("No se pudo mover el aviso."); await load(); return false; }
+      await load();
+      return true;
+    } catch { alert("Error de red al mover el aviso."); return false; }
+  };
+
+  // ── "Ambos" en el editor: crea la OTRA tarjeta (la de Mañana o la de Tarde) ──
+  // Cada tarjeta es de UN turno: Mañana y Tarde = dos tarjetas del mismo pro y día.
+  const addSiblingTurnFromModal = async () => {
+    if (!noteModal) return;
+    const plan = plans.find(p => p.id === noteModal.planId);
+    if (!plan) return;
+    if (plan.turn === "AMBOS") { alert("Esta tarjeta ya cubre Mañana y Tarde."); return; }
+    const targetTurn = plan.turn === "MANANA" ? "TARDE" : "MANANA";
+    const targetLabel = targetTurn === "MANANA" ? "Mañana" : "Tarde";
+    try {
+      const res = await fetch("/api/company/plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sedeId: plan.sedeId, date: plan.date, turn: targetTurn, professionalAlias: plan.professionalAlias }),
+      });
+      if (res.ok) { await load(); return; }
+      if (res.status === 409) alert(`Ya existe otra tarjeta de ${targetLabel} en esta sede y día.`);
+      else alert("No se pudo crear la tarjeta.");
+    } catch { alert("Error de red al crear la tarjeta."); }
   };
 
   // ── Cambiar el turno desde el editor de la tarjeta (botones Mañana / Tarde / Ambos) ──
@@ -614,10 +710,17 @@ export default function MensualTab() {
     if (!data?.id || !data?.kind) return;
     if (data.kind === "plan") {
       const src = plans.find(p => p.id === data.id);
-      if (src && src.date !== targetDate) await copyPlanToDate(src, targetDate);
+      if (src && src.date !== targetDate) {
+        // Arrastrar = MOVER (la tarjeta se va al otro día) · Con ALT pulsado = COPIAR (la original se queda)
+        if (e.altKey) await copyPlanToDate(src, targetDate);
+        else await movePlanToDate(src, targetDate);
+      }
     } else if (data.kind === "aviso") {
       const src = avisos.find(a => a.id === data.id);
-      if (src && src.date !== targetDate) await copyAvisoToDate(src, targetDate);
+      if (src && src.date !== targetDate) {
+        if (e.altKey) await copyAvisoToDate(src, targetDate);
+        else await moveAvisoToDate(src, targetDate);
+      }
     }
   };
 
@@ -744,13 +847,14 @@ export default function MensualTab() {
         const nombre = pro ? `${pro.firstName} ${pro.lastName}` : p.professionalAlias;
         const hasM = p.turn === "MANANA" || p.turn === "AMBOS";
         const hasT = p.turn === "TARDE" || p.turn === "AMBOS";
+        const turnWord = p.turn === "MANANA" ? "MAÑANA" : p.turn === "TARDE" ? "TARDE" : "MAÑANA Y TARDE";
         const hasNote = !!(p.notes && p.notes.trim());
         const cleanNote = stripAvisoToken(p.notes || "");
         const notePreview = cleanNote || (AVISO_TOKEN_RE.test(p.notes || "") ? "🔔 aviso programado" : "");
         // Truncate tooltip preview
         const tooltipLines = [
           `${sede.name} / ${sede.task} · ${hasM && hasT ? "Mañana y Tarde" : hasM ? "Mañana" : "Tarde"} · ${nombre}`,
-          hasNote ? `📝 ${notePreview.length > 200 ? notePreview.slice(0, 200) + "…" : notePreview}` : "Click: editor (turno, nota, mover, copiar) · toca M/T para cambiar el turno · arrastra a otro día: COPIA",
+          hasNote ? `📝 ${notePreview.length > 200 ? notePreview.slice(0, 200) + "…" : notePreview}` : "Click: editor (turno, nota, mover, copiar) · arrastra a otro día: MOVER · con ALT: COPIAR (la original se queda)",
         ].join("\n");
         const turnGroup = p.turn === "MANANA" ? 0 : p.turn === "TARDE" ? 1 : 2; // AMBOS al final, como las ambas de avisos
         const order = typeof p.order === "number" && p.order >= 0 ? p.order : -1;
@@ -772,17 +876,8 @@ export default function MensualTab() {
             style={{ background: sede.color, color: textColorFor(sede.color) }}
             title={tooltipLines}
           >
-            {/* Botones M/T en la propia tarjeta: negro relleno = marcado, blanco discontinuo = vacío. Toca para marcar/desmarcar (ambos = AMBOS) */}
-            <span
-              onClick={(e) => { e.stopPropagation(); e.preventDefault(); changePlanTurn(p, !hasM, hasT); }}
-              className={`inline-flex items-center justify-center min-w-[19px] px-1 mr-1 rounded-md font-black text-[0.95em] leading-[1.45] cursor-pointer select-none border-2 transition ${hasM ? "bg-gray-900 text-white border-gray-900 shadow-sm" : "bg-white/95 text-gray-400 border-dashed border-gray-500"}`}
-              title={hasM ? "Mañana marcada — toca para quitarla" : "Toca para añadir Mañana"}
-            >M</span>
-            <span
-              onClick={(e) => { e.stopPropagation(); e.preventDefault(); changePlanTurn(p, hasM, !hasT); }}
-              className={`inline-flex items-center justify-center min-w-[19px] px-1 mr-1 rounded-md font-black text-[0.95em] leading-[1.45] cursor-pointer select-none border-2 transition ${hasT ? "bg-gray-900 text-white border-gray-900 shadow-sm" : "bg-white/95 text-gray-400 border-dashed border-gray-500"}`}
-              title={hasT ? "Tarde marcada — toca para quitarla" : "Toca para añadir Tarde"}
-            >T</span>
+            {/* Palabra del turno en la tarjeta: MAÑANA o TARDE (cada tarjeta = un turno; legacy AMBOS = MAÑANA Y TARDE) */}
+            <span className="inline-block font-black px-1 mr-1 rounded bg-black/80 text-white text-[0.78em] tracking-wider align-middle" title={p.turn === "MANANA" ? "Turno de Mañana — click en la tarjeta para cambiarlo" : p.turn === "TARDE" ? "Turno de Tarde — click en la tarjeta para cambiarlo" : "Mañana y Tarde — click en la tarjeta para cambiarlo"}>{turnWord}</span>
             {sede.name} / {renderTaskLED(sede.task)} - {nombre}
             {hasNote && (
               <span
@@ -808,7 +903,7 @@ export default function MensualTab() {
           ? `${a.professional.firstName || ""} ${a.professional.lastName || ""}`.trim() || avisoProAlias
           : "";
         const reason = (a.reason || "AUSENCIA").toUpperCase();
-        const turnLabel = a.turn === "M" ? "M" : a.turn === "T" ? "T" : "";
+        const turnLabel = a.turn === "M" ? "MAÑANA" : a.turn === "T" ? "TARDE" : "";
         const hasNote = !!(a.note && a.note.trim());
         const cleanNote = stripAvisoToken(a.note || "");
         const notePreview = cleanNote || (AVISO_TOKEN_RE.test(a.note || "") ? "🔔 aviso programado" : "");
@@ -836,7 +931,7 @@ export default function MensualTab() {
             }}
             title={[
               `${reason}${proName ? ` · ${proName}` : ""}${sede ? ` · ${sede.name}` : ""}${a.turn ? ` · ${a.turn === "M" ? "Mañana" : "Tarde"}` : ""}`,
-              hasNote ? `📝 ${notePreview.length > 200 ? notePreview.slice(0, 200) + "…" : notePreview}` : "Click: nota · borrar el aviso · arrastra a otro día: COPIA",
+              hasNote ? `📝 ${notePreview.length > 200 ? notePreview.slice(0, 200) + "…" : notePreview}` : "Click: nota · borrar el aviso · arrastra a otro día: MOVER · con ALT: COPIAR (la original se queda)",
             ].join("\n")}
           >
             {turnLabel && <span className="inline-block font-black px-0.5 mr-0.5 bg-red-900 text-white rounded-[2px]">{turnLabel}</span>}
@@ -865,8 +960,8 @@ export default function MensualTab() {
     cells.push(
       <td
         key={vd.f}
-        className={`border border-gray-300 h-auto min-h-[72px] sm:min-h-[110px] p-0.5 sm:p-1 align-top ${tdClass} ${dragOverDate === f ? "ring-2 ring-inset ring-amber-500" : ""}`}
-        onDragOver={(e) => { e.preventDefault(); if (draggingCardRef.current) { e.dataTransfer.dropEffect = "copy"; if (dragOverDate !== f) setDragOverDate(f); } }}
+        className={`border border-gray-300 h-auto min-h-[72px] sm:min-h-[110px] p-0.5 sm:p-1 align-top ${tdClass} ${dragOverDate === f ? (dragOverCopy ? "ring-2 ring-inset ring-amber-500" : "ring-2 ring-inset ring-sky-600") : ""}`}
+        onDragOver={(e) => { e.preventDefault(); if (draggingCardRef.current) { const copy = e.altKey; e.dataTransfer.dropEffect = copy ? "copy" : "move"; if (dragOverDate !== f || dragOverCopy !== copy) { setDragOverDate(f); setDragOverCopy(copy); } } }}
         onDragLeave={() => { if (dragOverDate === f) setDragOverDate(null); }}
         onDrop={(e) => { e.preventDefault(); setDragOverDate(null); handleDrop(e, f); }}
       >
@@ -1026,7 +1121,7 @@ export default function MensualTab() {
               title="Mes siguiente (desliza a la izquierda)"
             >›</button>
           </div>
-          <span className="text-[10px] text-gray-500 font-bold hidden sm:block">+ turno · toca M/T de la tarjeta: marcar turno · ⇅ ordena el día (M→T→ambas) · arrastra sobre otra tarjeta: ordenar · arrastra a otro día: copiar (la original se queda)</span>
+          <span className="text-[10px] text-gray-500 font-bold hidden sm:block">+ turno · ⇅ ordena el día (M→T→ambas) · arrastra sobre otra tarjeta: ordenar · arrastra a otro día: MOVER · con ALT: COPIAR (la original se queda)</span>
         </div>
         <div className="sm:hidden text-center text-[10px] text-gray-400 font-bold mb-2 no-print">
           Desliza ‹ › para cambiar de mes · 🌉 = empalme de dos meses
@@ -1167,10 +1262,10 @@ export default function MensualTab() {
                   title="Poner esta tarjeta solo por la Tarde"
                 >Tarde</button>
                 <button
-                  onClick={() => setPlanTurnFromModal("AMBOS")}
-                  disabled={noteSaving}
-                  className={`py-2 rounded-lg font-black text-xs transition border-2 ${noteModal.turn === "AMBOS" ? "bg-gray-900 text-white border-gray-900" : "bg-white text-gray-600 border-gray-300 hover:border-gray-900"}`}
-                  title="Poner esta tarjeta Mañana y Tarde"
+                  onClick={addSiblingTurnFromModal}
+                  disabled={noteSaving || noteModal.turn === "AMBOS"}
+                  className={`py-2 rounded-lg font-black text-xs transition border-2 ${noteModal.turn === "AMBOS" ? "bg-gray-900 text-white border-gray-900 opacity-60" : "bg-white text-gray-600 border-gray-300 hover:border-gray-900"}`}
+                  title="Crea la otra tarjeta (si esta es de Mañana crea la de Tarde, y al revés): Mañana y Tarde = dos tarjetas"
                 >Ambos</button>
               </div>
             </div>
@@ -1266,7 +1361,7 @@ export default function MensualTab() {
                 <div className="flex gap-1.5">
                   <button onClick={() => setAddTurn("MANANA")} className={`flex-1 py-2 rounded-lg font-bold text-xs border transition ${addTurn === "MANANA" ? "bg-gray-900 text-white border-gray-900" : "bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200"}`}>Mañana</button>
                   <button onClick={() => setAddTurn("TARDE")} className={`flex-1 py-2 rounded-lg font-bold text-xs border transition ${addTurn === "TARDE" ? "bg-gray-900 text-white border-gray-900" : "bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200"}`}>Tarde</button>
-                  <button onClick={() => setAddTurn("AMBOS")} className={`flex-1 py-2 rounded-lg font-bold text-xs border transition ${addTurn === "AMBOS" ? "bg-amber-500 text-black border-amber-600" : "bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200"}`} title="El turno cubre mañana y tarde">Ambos</button>
+                  <button onClick={() => setAddTurn("AMBOS")} className={`flex-1 py-2 rounded-lg font-bold text-xs border transition ${addTurn === "AMBOS" ? "bg-amber-500 text-black border-amber-600" : "bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200"}`} title="Crea DOS tarjetas: una de Mañana y otra de Tarde">Ambos</button>
                 </div>
               </div>
             </div>
