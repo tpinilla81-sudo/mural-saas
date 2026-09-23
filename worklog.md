@@ -1903,3 +1903,28 @@ Work Log:
 
 Stage Summary:
 - Sistema de copiar/mover desde la tarjeta ELIMINADO por completo. La app vuelve a funcionar como en Task 61: para copiar o mover una tarjeta hay que entrar en su editor (click) o usar arrastrar (PC).
+
+---
+Task ID: 64
+Agent: main
+Task: "si pinchamos en la tarjeta con botón izq del ratón + control sale diálogo copiar. copio y al pinchar de nuevo en un día se copia. mover como hasta ahora" — implementar COPIAR con Ctrl+click + diálogo.
+
+Work Log:
+- Ctrl+click (o Cmd+click) en cualquier tarjeta del mensual (turnos y avisos): NO abre el editor; abre un DIÁLOGO "📋 Copiar tarjeta" con el resumen de la tarjeta, instrucciones "1) Pulsa COPIAR · 2) Toca el día destino (la original se queda)" y botones Cancelar / 📋 COPIAR.
+- Tras pulsar COPIAR: banner fijo arriba "📋 COPIAR <tarjeta> — toca el DÍA destino (la original se queda)" + CANCELAR; las celdas del calendario se iluminan con anillo ámbar (estático, sin parpadeo). Tocar un día (celda vacía, día completo o CUALQUIER tarjeta de ese día) ejecuta la copia con las validaciones de siempre (festivo/finde, pro no adjudicado, conflicto 409 con ¿Reemplazarla?).
+- MOVER intacto como pidió julio: arrastrar a otro día sigue MOVIENDO (ALT+arrastrar sigue copiando). Click normal sigue abriendo el editor. En móvil, copiar sigue en el editor (no hay Ctrl).
+- Esc cancela diálogo y modo. +/⇅ ignorados durante el modo. Tocar la tarjeta origen no hace nada.
+- Tooltips e hint actualizados ("Ctrl+click en la tarjeta: COPIAR (luego toca el día destino)").
+- Commit 45a39e9 → Vercel 200.
+- E2E PRODUCCIÓN (tarjetas temp VIT/AS feb-2027 días 10/17/20, creadas ANTES de abrir la vista, TODO borrado al final):
+  * Ctrl+click → diálogo "📋 Copiar tarjeta" [Cancelar | 📋 COPIAR] ✓
+  * COPIAR → banner + 28 días iluminados ✓
+  * Tocar día 17 → copia MANANA creada, original se queda, banner cerrado ✓
+  * COPIAR + CANCELAR → nada creado (3 tarjetas antes y después) ✓
+  * COPIAR + tocar tarjeta C del día 20 (sábado) → 2 tarjetas (MANANA+TARDE), confirm festivo disparado, 0 alertas error ✓
+  * Regresión: click normal sigue abriendo el editor ✓
+  * Limpieza: 4 borradas, 0 restantes VIT/AS.
+  * (Captura t64-dialogo.png no se guardó; el diálogo quedó verificado por aserciones de DOM.)
+
+Stage Summary:
+- Copiar ahora es: Ctrl+click en la tarjeta → diálogo → COPIAR → tocar el día destino. Nada de botones nuevos en las tarjetas (lo que julio rechazó en Task 62). Mover sigue igual que siempre: arrastrar. Click normal = editor.
