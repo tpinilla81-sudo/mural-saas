@@ -66,10 +66,50 @@ export default function MensualTab() {
   // 📋 Copiar tarjeta a otro día (editor de nota; el arrastre en PC usa copyPlanToDate/copyAvisoToDate)
   const [planCopyDate, setPlanCopyDate] = useState("");
   const [avisoCopyDate, setAvisoCopyDate] = useState("");
-  // 📋 COPIAR con Ctrl+click en la tarjeta (petición de julio): 1) sale un DIÁLOGO de copiar,
-  // 2) pulsas COPIAR y 3) tocas el día destino. MOVER sigue como siempre: arrastrando.
+  // 📋 COPIAR con Ctrl+click en la tarjeta (PC) o manteniéndola PULSADA 2 segundos
+  // (móvil/tablet, petición de julio): 1) sale un DIÁLOGO de copiar, 2) pulsas COPIAR
+  // y 3) tocas el día destino. MOVER sigue como siempre: arrastrando.
   const [copyPick, setCopyPick] = useState<{ kind: "plan" | "aviso"; id: string; label: string } | null>(null);
   const [pickAction, setPickAction] = useState<{ kind: "plan" | "aviso"; id: string; label: string } | null>(null);
+
+  // 📱 Long-press táctil: MANTENER PULSADA la tarjeta 2 s → mismo diálogo 📋 COPIAR.
+  // Si el dedo se mueve más de 12 px (scroll / arrastre de mes) se cancela; al soltar
+  // tras el long-press se anula el click sintético para NO abrir el editor.
+  const LP_MS = 2000;
+  const lpTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lpStart = useRef<{ x: number; y: number } | null>(null);
+  const lpFired = useRef(false);
+  const [lpArmed, setLpArmed] = useState<string | null>(null); // tarjeta "armada": anillo ámbar mientras se mantiene
+  const clearLP = () => {
+    if (lpTimer.current) { clearTimeout(lpTimer.current); lpTimer.current = null; }
+    setLpArmed(null);
+  };
+  const lpTouchStart = (kind: "plan" | "aviso", id: string, open: () => void) => (e: React.TouchEvent) => {
+    if (copyPick || pickAction) return; // ya hay diálogo o modo copiar activo: no rearmar
+    const t = e.touches[0];
+    lpStart.current = { x: t.clientX, y: t.clientY };
+    lpFired.current = false;
+    setLpArmed(id);
+    if (lpTimer.current) clearTimeout(lpTimer.current);
+    lpTimer.current = setTimeout(() => {
+      lpFired.current = true;
+      setLpArmed(null);
+      if (typeof navigator !== "undefined" && "vibrate" in navigator) { try { navigator.vibrate(60); } catch {} }
+      open(); // setCopyPick(...) → mismo diálogo que Ctrl+click
+    }, LP_MS);
+  };
+  const lpTouchMove = (e: React.TouchEvent) => {
+    if (!lpStart.current || !lpTimer.current) return;
+    const t = e.touches[0];
+    if (Math.hypot(t.clientX - lpStart.current.x, t.clientY - lpStart.current.y) > 12) clearLP(); // scroll/drag: cancelar
+  };
+  const lpTouchEnd = (e: React.TouchEvent) => {
+    clearLP();
+    lpStart.current = null;
+    if (lpFired.current) { lpFired.current = false; e.preventDefault(); e.stopPropagation(); } // click sintético anulado
+  };
+  const lpTouchCancel = () => { clearLP(); lpStart.current = null; };
+  useEffect(() => () => { if (lpTimer.current) clearTimeout(lpTimer.current); }, []);
   // Resalta la celda destino mientras arrastras una tarjeta (PC)
   const [dragOverDate, setDragOverDate] = useState<string | null>(null);
   const [dragOverCopy, setDragOverCopy] = useState(false); // ¿arrastrando con ALT? (copiar) — anillo ámbar; sin ALT = mover — anillo azul
@@ -881,7 +921,7 @@ export default function MensualTab() {
         // Truncate tooltip preview
         const tooltipLines = [
           `${sede.name} / ${sede.task} · ${hasM && hasT ? "Mañana y Tarde" : hasM ? "Mañana" : "Tarde"} · ${nombre}`,
-          hasNote ? `📝 ${notePreview.length > 200 ? notePreview.slice(0, 200) + "…" : notePreview}` : "Click: editor (turno, nota, mover, copiar) · Ctrl+click: COPIAR (luego toca el día destino) · arrastra a otro día: MOVER · con ALT: COPIAR (la original se queda)",
+          hasNote ? `📝 ${notePreview.length > 200 ? notePreview.slice(0, 200) + "…" : notePreview}` : "Click: editor (turno, nota, mover, copiar) · Ctrl+click: COPIAR (luego toca el día destino) · táctil: mantener pulsada 2 s: COPIAR · arrastra a otro día: MOVER · con ALT: COPIAR (la original se queda)",
         ].join("\n");
         const turnGroup = p.turn === "MANANA" ? 0 : p.turn === "TARDE" ? 1 : 2; // AMBOS al final, como las ambas de avisos
         const order = typeof p.order === "number" && p.order >= 0 ? p.order : -1;
@@ -894,13 +934,18 @@ export default function MensualTab() {
           <div
             key={p.id}
             onClick={(e) => { e.stopPropagation(); if (pickAction) { if (!(pickAction.kind === "plan" && pickAction.id === p.id)) pickDay(p.date); return; } if (e.ctrlKey || e.metaKey) { e.preventDefault(); setCopyPick({ kind: "plan", id: p.id, label: `${turnWord} · ${p.professionalAlias}` }); return; } openNoteEditor(p, sede, nombre); }}
+            onTouchStart={lpTouchStart("plan", p.id, () => setCopyPick({ kind: "plan", id: p.id, label: `${turnWord} · ${p.professionalAlias}` }))}
+            onTouchMove={lpTouchMove}
+            onTouchEnd={lpTouchEnd}
+            onTouchCancel={lpTouchCancel}
+            onContextMenu={(e) => { if (lpStart.current) e.preventDefault(); }} // long-press Android: sin menú del navegador
             draggable
             onDragStart={(e) => { draggingCardRef.current = true; e.dataTransfer.setData("text/plain", JSON.stringify({ kind: "plan", id: p.id })); e.dataTransfer.effectAllowed = "copyMove"; }}
             onDragEnd={() => { draggingCardRef.current = false; setDragOverDate(null); }}
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => reorderInDay(e, f, p.id, "plan", dayCards)}
-            className="text-[1em] px-0.5 sm:px-1 py-0.5 rounded font-bold leading-tight border border-black/10 break-words cursor-pointer hover:ring-2 hover:ring-amber-500 hover:ring-offset-0 transition relative"
-            style={{ background: sede.color, color: textColorFor(sede.color) }}
+            className={`text-[1em] px-0.5 sm:px-1 py-0.5 rounded font-bold leading-tight border border-black/10 break-words cursor-pointer hover:ring-2 hover:ring-amber-500 hover:ring-offset-0 transition relative select-none ${lpArmed === p.id ? "ring-2 ring-amber-500" : ""}`}
+            style={{ background: sede.color, color: textColorFor(sede.color), WebkitTouchCallout: "none" }}
             title={tooltipLines}
           >
             {/* Palabra del turno en la tarjeta: MAÑANA o TARDE (cada tarjeta = un turno; legacy AMBOS = MAÑANA Y TARDE) */}
@@ -946,19 +991,25 @@ export default function MensualTab() {
           <div
             key={`av-${a.id}`}
             onClick={(e) => { e.stopPropagation(); if (pickAction) { if (!(pickAction.kind === "aviso" && pickAction.id === a.id)) pickDay(a.date); return; } if (e.ctrlKey || e.metaKey) { e.preventDefault(); setCopyPick({ kind: "aviso", id: a.id, label: `${reason}${avisoProAlias ? ` · ${avisoProAlias}` : ""}` }); return; } openAvisoNoteEditor(a); }}
+            onTouchStart={lpTouchStart("aviso", a.id, () => setCopyPick({ kind: "aviso", id: a.id, label: `${reason}${avisoProAlias ? ` · ${avisoProAlias}` : ""}` }))}
+            onTouchMove={lpTouchMove}
+            onTouchEnd={lpTouchEnd}
+            onTouchCancel={lpTouchCancel}
+            onContextMenu={(e) => { if (lpStart.current) e.preventDefault(); }}
             draggable
             onDragStart={(e) => { draggingCardRef.current = true; e.dataTransfer.setData("text/plain", JSON.stringify({ kind: "aviso", id: a.id })); e.dataTransfer.effectAllowed = "copyMove"; }}
             onDragEnd={() => { draggingCardRef.current = false; setDragOverDate(null); }}
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => reorderInDay(e, f, a.id, "aviso", dayCards)}
-            className="text-[1em] px-0.5 sm:px-1 py-0.5 rounded font-bold leading-tight border border-red-900/40 break-words cursor-pointer hover:ring-2 hover:ring-red-500 hover:ring-offset-0 transition relative"
+            className={`text-[1em] px-0.5 sm:px-1 py-0.5 rounded font-bold leading-tight border border-red-900/40 break-words cursor-pointer hover:ring-2 hover:ring-red-500 hover:ring-offset-0 transition relative select-none ${lpArmed === a.id ? "ring-2 ring-amber-500" : ""}`}
             style={{
               background: "repeating-linear-gradient(45deg, #fee2e2, #fee2e2 5px, #fecaca 5px, #fecaca 10px)",
               color: "#7f1d1d",
+              WebkitTouchCallout: "none",
             }}
             title={[
               `${reason}${proName ? ` · ${proName}` : ""}${sede ? ` · ${sede.name}` : ""}${a.turn ? ` · ${a.turn === "M" ? "Mañana" : "Tarde"}` : ""}`,
-              hasNote ? `📝 ${notePreview.length > 200 ? notePreview.slice(0, 200) + "…" : notePreview}` : "Click: nota · borrar el aviso · Ctrl+click: COPIAR (luego toca el día destino) · arrastra a otro día: MOVER · con ALT: COPIAR",
+              hasNote ? `📝 ${notePreview.length > 200 ? notePreview.slice(0, 200) + "…" : notePreview}` : "Click: nota · borrar el aviso · Ctrl+click: COPIAR (luego toca el día destino) · táctil: mantener pulsada 2 s: COPIAR · arrastra a otro día: MOVER · con ALT: COPIAR",
             ].join("\n")}
           >
             {turnLabel && <span className="inline-block font-black px-0.5 mr-0.5 bg-red-900 text-white rounded-[2px]">{turnLabel}</span>}
@@ -1149,7 +1200,7 @@ export default function MensualTab() {
               title="Mes siguiente (desliza a la izquierda)"
             >›</button>
           </div>
-          <span className="text-[10px] text-gray-500 font-bold hidden sm:block">+ turno · ⇅ ordena el día (M→T→ambas) · arrastra a otro día: MOVER · con ALT: COPIAR · Ctrl+click en la tarjeta: COPIAR (luego toca el día destino)</span>
+          <span className="text-[10px] text-gray-500 font-bold hidden sm:block">+ turno · ⇅ ordena el día (M→T→ambas) · arrastra a otro día: MOVER · con ALT: COPIAR · Ctrl+click en la tarjeta: COPIAR (luego toca el día destino) · táctil (móvil/tablet): mantener pulsada la tarjeta 2 s: COPIAR</span>
         </div>
         <div className="sm:hidden text-center text-[10px] text-gray-400 font-bold mb-2 no-print">
           Desliza ‹ › para cambiar de mes · 🌉 = empalme de dos meses
@@ -1171,7 +1222,7 @@ export default function MensualTab() {
         </div>
       </div>
 
-      {/* ═══ Diálogo 📋 COPIAR (Ctrl+click en la tarjeta) ═══ */}
+      {/* ═══ Diálogo 📋 COPIAR (Ctrl+click en PC · mantener pulsada 2 s en táctil) ═══ */}
       {copyPick && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4" onClick={() => setCopyPick(null)}>
           <div className="bg-white border-2 border-amber-500 rounded-xl p-5 w-full max-w-sm space-y-3 shadow-2xl" onClick={e => e.stopPropagation()}>
@@ -1180,6 +1231,9 @@ export default function MensualTab() {
             <p className="text-sm text-gray-700 font-medium leading-snug">
               1) Pulsa <b>COPIAR</b>.<br />
               2) Toca el <b>día destino</b> en el calendario (la original se queda donde está).
+            </p>
+            <p className="text-[11px] text-gray-500 font-semibold leading-snug">
+              En móvil/tablet este diálogo se abre <b>manteniendo pulsada la tarjeta 2 segundos</b>.
             </p>
             <div className="flex gap-2 pt-1">
               <button onClick={() => setCopyPick(null)} className="flex-1 py-2 px-4 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg font-bold text-sm transition">Cancelar</button>
