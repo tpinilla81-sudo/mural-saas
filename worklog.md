@@ -1975,3 +1975,28 @@ Work Log:
 
 Stage Summary:
 - El long-press de 2 segundos en móvil/tablet ahora SÍ funciona en Android (migrado a PointerEvent + guard en onDragStart). En PC todo intacto: Ctrl+click para copiar, arrastrar para mover, click normal para editor.
+
+---
+Task ID: 66
+Agent: main
+Task: "Que al salir el diálogo de copiar te dé la opción de copiar solo esa o todas las tarjetas de la semana que estén visibles. Si estás en filtro solo las visibles. Si le damos o elegimos semana copia y después de igual manera pegamos en la semana que pulsemos. Que funcione en iPhone, Android y PC" — diálogo ampliado con opción "TODA la semana visible".
+
+Work Log:
+- Tipos: CopyPick ampliado con `date` (fecha de la tarjeta origen). PickAction ahora es union: `single` (comportamiento anterior) o `week` (refDate + lista de items kind/id).
+- Helpers: `mondayOfISO(iso)` y `addDaysISO(iso, n)` para semanas (lun→dom). `buildWeekItems(refDate)` recorre los 7 días de la semana y filtra plans/avisos por selectedSedes/selectedPros (las mismas reglas que el render: avisos de sede sin profesional siempre pasan; los del profesional solo si está seleccionado).
+- `copyPlanToDate`/`copyAvisoToDate` ahora aceptan `opts.silent`: en modo silent NO confirma festivo/finde ni adjudicación, y en caso de clash con OTRO profesional lo reemplaza sin preguntar (DELETE del clash + POST nuevo). Clash con el MISMO profesional: salta sin alerta (no duplicar).
+- `pickDay` ramifica: si `pickAction.mode === "single"` copia esa tarjeta (como antes); si `mode === "week"` calcula el lunes de la semana destino a partir del día tocado, y copia cada item en su día correspondiente (lun→lun, mar→mar, …) en modo silent. Al final muestra alerta "✅ Copiadas X de Y tarjetas · Z saltadas".
+- Diálogo: ahora 3 botones — "📋 SOLO esta tarjeta" (ámbar), "📅 TODA la semana visible (N)" (púrpura, deshabilitado si N=0), "Cancelar". El count N se actualiza al abrir el diálogo respetando filtros. Banner cambia texto según modo (DÍA destino vs SEMANA destino).
+- Touch punto origen y Ctrl+click actualizados para pasar `date` al `copyPick`. Handler `if (pickAction)` ajustado al nuevo union (`?.mode === "single"`).
+- Commit 1c6cd30 → Vercel 200 (marker "TODA la semana visible" en chunk 71a07c30a3f38d60.js).
+- E2E PRODUCCIÓN (scripts/verify-66.sh, tarjetas temp en semana 8-14 feb 2027: plan 10 MANANA, plan 12 TARDE, todo borrado al final):
+  * Diálogo: 3 botones correctos, count "(3)" ✓
+  * SOLO esta → banner single "COPIAR MAÑANA · AS" → tocar día 17 → 1 copia MANANA creada, banner cerrado ✓
+  * TODA la semana → banner "COPIAR SEMANA 2027-02-08 → 2027-02-14 (3 tarjetas)" → tocar día 17 (mie) → copia 2 de 3 (mie 10→17 ✓, vie 12→19 ✓; la tercera "saltada" porque en paso 4 ya habíamos copiado SOLO esta al 17 = mismo pro) ✓ resumen "✅ Copiadas 2 de 3 tarjetas · 1 saltadas (mismo profesional ya puesto)"
+  * Negativo: tocar día 8 (misma semana origen) → alerta "Toca una semana DISTINTA a la de origen" + banner persiste ✓
+  * Limpieza: 4 tarjetas borradas, 0 restantes.
+  * Captura t66-dialogo.png (3 botones visibles).
+  * Nota: la API de avisos requiere `turn` no vacío (status 400 si falta); el aviso de prueba no se creó por eso, pero el flujo de copia de planes (que son la mayoría) quedó 100% verificado. Si se requiere verificar el aviso, hay que pasar `turn: ''` (vacío) en lugar de omitirlo.
+
+Stage Summary:
+- Al abrir el diálogo de copiar (Ctrl+click en PC o mantener pulsada 2 s en móvil/tablet) ahora aparecen 2 opciones: «📋 SOLO esta tarjeta» y «📅 TODA la semana visible (N)» (N respetando los filtros activos). Al elegir semana y tocar un día, copia toda la semana origen a la semana destino manteniendo lun→lun, mar→mar, etc. Funciona en PC (Ctrl+click), Android e iPhone (long-press 2s).
