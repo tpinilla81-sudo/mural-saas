@@ -67,10 +67,15 @@ export default function MensualTab() {
   const [planCopyDate, setPlanCopyDate] = useState("");
   const [avisoCopyDate, setAvisoCopyDate] = useState("");
   // 📋 COPIAR con Ctrl+click en la tarjeta (PC) o manteniéndola PULSADA 2 segundos
-  // (móvil/tablet, petición de julio): 1) sale un DIÁLOGO de copiar, 2) pulsas COPIAR
-  // y 3) tocas el día destino. MOVER sigue como siempre: arrastrando.
-  const [copyPick, setCopyPick] = useState<{ kind: "plan" | "aviso"; id: string; label: string } | null>(null);
-  const [pickAction, setPickAction] = useState<{ kind: "plan" | "aviso"; id: string; label: string } | null>(null);
+  // (móvil/tablet, petición de julio): 1) sale un DIÁLOGO de copiar, 2) eliges
+  // «SOLO esta» o «TODA la semana visible» y 3) tocas el día destino (o la semana destino).
+  // MOVER sigue como siempre: arrastrando.
+  type CopyPick = { kind: "plan" | "aviso"; id: string; label: string; date: string };
+  type PickAction =
+    | { mode: "single"; kind: "plan" | "aviso"; id: string; label: string }
+    | { mode: "week"; refDate: string; label: string; items: Array<{ kind: "plan" | "aviso"; id: string }> };
+  const [copyPick, setCopyPick] = useState<CopyPick | null>(null);
+  const [pickAction, setPickAction] = useState<PickAction | null>(null);
 
   // 📱 Long-press táctil: MANTENER PULSADA la tarjeta 2 s → mismo diálogo 📋 COPIAR.
   // Usa POINTER events (no touch) porque en Android un div `draggable` dispara
@@ -694,14 +699,42 @@ export default function MensualTab() {
   // ── Copiar tarjeta ARRASTRANDO a otro día (PC: drag & drop) ──
   // La original SE QUEDA: se crea una tarjeta igualita en el destino (mismo pro, turno y nota).
   // Para MOVER una tarjeta sigue habiendo "MOVER A OTRO DÍA" en su editor de nota.
-  const copyPlanToDate = async (src: PlanEntry, targetDate: string): Promise<boolean> => {
+  // 📅 Utilidades de semana (lunes→domingo) para copiar «TODA la semana visible»
+  const mondayOfISO = (iso: string): string => {
+    const d = new Date(iso + "T00:00:00");
+    const dow = d.getDay(); // 0=dom, 1=lun, … 6=sab
+    const offset = (dow + 6) % 7; // 0=lun … 6=dom
+    d.setDate(d.getDate() - offset);
+    return d.toISOString().slice(0, 10);
+  };
+  const addDaysISO = (iso: string, days: number): string => {
+    const d = new Date(iso + "T00:00:00");
+    d.setDate(d.getDate() + days);
+    return d.toISOString().slice(0, 10);
+  };
+  // Lista de tarjetas VISIBLES (respetando selectedSedes/selectedPros) de la semana de refDate
+  const buildWeekItems = (refDate: string): Array<{ kind: "plan" | "aviso"; id: string }> => {
+    const mon = mondayOfISO(refDate);
+    const items: Array<{ kind: "plan" | "aviso"; id: string }> = [];
+    for (let i = 0; i < 7; i++) {
+      const f = addDaysISO(mon, i);
+      plans.filter(p => p.date === f && selectedSedes.has(p.sedeId) && selectedPros.has(p.professionalAlias))
+        .forEach(p => items.push({ kind: "plan", id: p.id }));
+      avisos.filter(a => a.date === f && selectedSedes.has(a.sedeId) && (!a.professional?.alias || selectedPros.has(a.professional.alias)))
+        .forEach(a => items.push({ kind: "aviso", id: a.id }));
+    }
+    return items;
+  };
+
+  const copyPlanToDate = async (src: PlanEntry, targetDate: string, opts?: { silent?: boolean }): Promise<boolean> => {
     const sede = sedes.find(s => s.id === src.sedeId);
     const pro = professionals.find(p => p.alias === src.professionalAlias);
+    const silent = !!opts?.silent;
     // Validaciones de negocio — las mismas que al crear un turno (Task 57)
     const we = isWE(new Date(targetDate + "T00:00:00"));
     const fest = sede ? holidays.some(h => h.date === targetDate && h.province === sede.province) : false;
-    if ((we || fest) && !confirm("Es festivo/fin de semana. ¿Continuar?")) return false;
-    if (sede && pro && !isProAssignedToSede(pro.assignedSedes, sede.name)) {
+    if ((we || fest) && !silent && !confirm("Es festivo/fin de semana. ¿Continuar?")) return false;
+    if (!silent && sede && pro && !isProAssignedToSede(pro.assignedSedes, sede.name)) {
       if (!confirm(`${pro.alias} no está adjudicado a ${sede.name}. ¿Continuar?`)) return false;
     }
     // Conflicto: en la sede destino ya hay una tarjeta con el MISMO turno ese día
@@ -709,10 +742,12 @@ export default function MensualTab() {
     const turnLabel = src.turn === "MANANA" ? "Mañana" : src.turn === "TARDE" ? "Tarde" : "Mañana y Tarde";
     if (clash) {
       if (clash.professionalAlias === src.professionalAlias) {
-        alert(`${src.professionalAlias} ya tiene esa tarjeta (${turnLabel}) el ${formatDateLabel(targetDate)}.`);
-        return false;
+        if (!silent) alert(`${src.professionalAlias} ya tiene esa tarjeta (${turnLabel}) el ${formatDateLabel(targetDate)}.`);
+        return false; // mismo profesional: saltar (no duplicar)
       }
-      if (!confirm(`El ${formatDateLabel(targetDate)} ya hay una tarjeta de ${clash.professionalAlias} (${turnLabel}). ¿Reemplazarla?`)) return false;
+      if (!silent && !confirm(`El ${formatDateLabel(targetDate)} ya hay una tarjeta de ${clash.professionalAlias} (${turnLabel}). ¿Reemplazarla?`)) return false;
+      // En modo silent: reemplazamos la del otro profesional silenciosamente
+      if (silent) { try { await fetch(`/api/company/plan/${clash.id}`, { method: "DELETE" }); } catch {} }
     }
     try {
       const res = await fetch("/api/company/plan", {
@@ -720,9 +755,8 @@ export default function MensualTab() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sedeId: src.sedeId, date: targetDate, turn: src.turn, professionalAlias: src.professionalAlias }),
       });
-      if (!res.ok) { alert("No se pudo copiar la tarjeta."); return false; }
+      if (!res.ok) { if (!silent) alert("No se pudo copiar la tarjeta."); return false; }
       const created = await res.json();
-      // La copia lleva la MISMA nota (incluido el 🔔 @N si la original lo tenía)
       if (src.notes && src.notes.trim()) {
         try {
           await fetch(`/api/company/plan/${created.id}`, {
@@ -730,18 +764,19 @@ export default function MensualTab() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ notes: src.notes }),
           });
-        } catch { /* la copia ya existe; la nota se puede añadir a mano */ }
+        } catch {}
       }
       await load();
       return true;
-    } catch { alert("Error de red al copiar la tarjeta."); return false; }
+    } catch { if (!silent) alert("Error de red al copiar la tarjeta."); return false; }
   };
 
-  const copyAvisoToDate = async (src: AvisoEntry, targetDate: string): Promise<boolean> => {
+  const copyAvisoToDate = async (src: AvisoEntry, targetDate: string, opts?: { silent?: boolean }): Promise<boolean> => {
     const sede = sedes.find(s => s.id === src.sedeId);
+    const silent = !!opts?.silent;
     const we = isWE(new Date(targetDate + "T00:00:00"));
     const fest = sede ? holidays.some(h => h.date === targetDate && h.province === sede.province) : false;
-    if ((we || fest) && !confirm("Es festivo/fin de semana. ¿Continuar?")) return false;
+    if ((we || fest) && !silent && !confirm("Es festivo/fin de semana. ¿Continuar?")) return false;
     try {
       const res = await fetch("/api/company/avisos", {
         method: "POST",
@@ -755,10 +790,10 @@ export default function MensualTab() {
           note: src.note || "",
         }),
       });
-      if (!res.ok) { alert("No se pudo copiar el aviso."); return false; }
+      if (!res.ok) { if (!silent) alert("No se pudo copiar el aviso."); return false; }
       await load();
       return true;
-    } catch { alert("Error de red al copiar el aviso."); return false; }
+    } catch { if (!silent) alert("Error de red al copiar el aviso."); return false; }
   };
 
   const handleDrop = async (e: React.DragEvent, targetDate: string) => {
@@ -796,19 +831,44 @@ export default function MensualTab() {
     if (await copyAvisoToDate(src, avisoCopyDate)) setAvisoCopyDate("");
   };
 
-  // ── Paso final del COPIAR con Ctrl+click: el usuario confirmó en el diálogo y ahora
-  // toca el DÍA destino (celda del día, día completo o cualquier tarjeta de ese día).
+  // ── Paso final del COPIAR con Ctrl+click / long-press: el usuario confirmó en el diálogo
+  // y ahora toca un DÍA destino (celda del día, día completo o cualquier tarjeta de ese día).
+  // Si pickAction.mode === "single" copia ESA tarjeta. Si === "week" copia TODAS las visibles
+  // de la semana origen a la semana destino (manteniendo lun→lun, mar→mar, …).
   const pickDay = async (targetDate: string) => {
     const pa = pickAction;
     if (!pa) return;
-    const src: PlanEntry | AvisoEntry | undefined = pa.kind === "plan"
-      ? plans.find(p => p.id === pa.id)
-      : avisos.find(a => a.id === pa.id);
-    if (!src) { setPickAction(null); return; }
-    if (src.date === targetDate) { alert("Toca un día DISTINTO al de la tarjeta."); return; }
-    setPickAction(null); // el aviso desaparece en cuanto se elige el día
-    if (pa.kind === "plan") await copyPlanToDate(src as PlanEntry, targetDate);
-    else await copyAvisoToDate(src as AvisoEntry, targetDate);
+    if (pa.mode === "single") {
+      const src: PlanEntry | AvisoEntry | undefined = pa.kind === "plan"
+        ? plans.find(p => p.id === pa.id)
+        : avisos.find(a => a.id === pa.id);
+      if (!src) { setPickAction(null); return; }
+      if (src.date === targetDate) { alert("Toca un día DISTINTO al de la tarjeta."); return; }
+      setPickAction(null);
+      if (pa.kind === "plan") await copyPlanToDate(src as PlanEntry, targetDate);
+      else await copyAvisoToDate(src as AvisoEntry, targetDate);
+    } else {
+      // mode === "week"
+      const srcMon = mondayOfISO(pa.refDate);
+      const dstMon = mondayOfISO(targetDate);
+      if (srcMon === dstMon) { alert("Toca una semana DISTINTA a la de origen."); return; }
+      setPickAction(null); // el banner desaparece en cuanto se elige el día
+      let ok = 0, fail = 0, total = pa.items.length;
+      for (const it of pa.items) {
+        const src: PlanEntry | AvisoEntry | undefined = it.kind === "plan"
+          ? plans.find(p => p.id === it.id)
+          : avisos.find(a => a.id === it.id);
+        if (!src) continue;
+        const off = (new Date(src.date + "T00:00:00").getDay() + 6) % 7; // 0=lun … 6=dom
+        const dst = addDaysISO(dstMon, off);
+        const r = it.kind === "plan"
+          ? await copyPlanToDate(src as PlanEntry, dst, { silent: true })
+          : await copyAvisoToDate(src as AvisoEntry, dst, { silent: true });
+        if (r) ok++; else fail++;
+      }
+      if (total === 0) alert("No había tarjetas visibles en la semana de origen.");
+      else alert(`✅ Copiadas ${ok} de ${total} tarjetas${fail ? ` · ${fail} saltadas (mismo profesional ya puesto)` : ""}.`);
+    }
   };
 
   // ── Orden de tarjetas DENTRO de un día (manual + auto M→T→ambas) ──
@@ -938,8 +998,8 @@ export default function MensualTab() {
           node: (
           <div
             key={p.id}
-            onClick={(e) => { e.stopPropagation(); if (pickAction) { if (!(pickAction.kind === "plan" && pickAction.id === p.id)) pickDay(p.date); return; } if (e.ctrlKey || e.metaKey) { e.preventDefault(); setCopyPick({ kind: "plan", id: p.id, label: `${turnWord} · ${p.professionalAlias}` }); return; } openNoteEditor(p, sede, nombre); }}
-            onPointerDown={lpPointerDown("plan", p.id, () => setCopyPick({ kind: "plan", id: p.id, label: `${turnWord} · ${p.professionalAlias}` }))}
+            onClick={(e) => { e.stopPropagation(); if (pickAction?.mode === "single" && pickAction.kind === "plan" && pickAction.id === p.id) return; if (pickAction) { pickDay(p.date); return; } if (e.ctrlKey || e.metaKey) { e.preventDefault(); setCopyPick({ kind: "plan", id: p.id, label: `${turnWord} · ${p.professionalAlias}`, date: p.date }); return; } openNoteEditor(p, sede, nombre); }}
+            onPointerDown={lpPointerDown("plan", p.id, () => setCopyPick({ kind: "plan", id: p.id, label: `${turnWord} · ${p.professionalAlias}`, date: p.date }))}
             onPointerMove={lpPointerMove}
             onPointerUp={lpPointerUp}
             onPointerCancel={lpPointerCancel}
@@ -995,8 +1055,8 @@ export default function MensualTab() {
           node: (
           <div
             key={`av-${a.id}`}
-            onClick={(e) => { e.stopPropagation(); if (pickAction) { if (!(pickAction.kind === "aviso" && pickAction.id === a.id)) pickDay(a.date); return; } if (e.ctrlKey || e.metaKey) { e.preventDefault(); setCopyPick({ kind: "aviso", id: a.id, label: `${reason}${avisoProAlias ? ` · ${avisoProAlias}` : ""}` }); return; } openAvisoNoteEditor(a); }}
-            onPointerDown={lpPointerDown("aviso", a.id, () => setCopyPick({ kind: "aviso", id: a.id, label: `${reason}${avisoProAlias ? ` · ${avisoProAlias}` : ""}` }))}
+            onClick={(e) => { e.stopPropagation(); if (pickAction?.mode === "single" && pickAction.kind === "aviso" && pickAction.id === a.id) return; if (pickAction) { pickDay(a.date); return; } if (e.ctrlKey || e.metaKey) { e.preventDefault(); setCopyPick({ kind: "aviso", id: a.id, label: `${reason}${avisoProAlias ? ` · ${avisoProAlias}` : ""}`, date: a.date }); return; } openAvisoNoteEditor(a); }}
+            onPointerDown={lpPointerDown("aviso", a.id, () => setCopyPick({ kind: "aviso", id: a.id, label: `${reason}${avisoProAlias ? ` · ${avisoProAlias}` : ""}`, date: a.date }))}
             onPointerMove={lpPointerMove}
             onPointerUp={lpPointerUp}
             onPointerCancel={lpPointerCancel}
@@ -1228,35 +1288,54 @@ export default function MensualTab() {
       </div>
 
       {/* ═══ Diálogo 📋 COPIAR (Ctrl+click en PC · mantener pulsada 2 s en táctil) ═══ */}
-      {copyPick && (
+      {copyPick && (() => {
+        const weekItems = buildWeekItems(copyPick.date);
+        const weekCount = weekItems.length;
+        const startSingle = () => { setPickAction({ mode: "single", kind: copyPick.kind, id: copyPick.id, label: copyPick.label }); setCopyPick(null); };
+        const startWeek = () => {
+          if (weekCount === 0) { alert("No hay tarjetas visibles en la semana de esta tarjeta (revisa los filtros)."); return; }
+          const mon = mondayOfISO(copyPick.date);
+          const end = addDaysISO(mon, 6);
+          setPickAction({ mode: "week", refDate: copyPick.date, label: `SEMANA ${mon} → ${end} (${weekCount} tarjetas)`, items: weekItems });
+          setCopyPick(null);
+        };
+        return (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4" onClick={() => setCopyPick(null)}>
           <div className="bg-white border-2 border-amber-500 rounded-xl p-5 w-full max-w-sm space-y-3 shadow-2xl" onClick={e => e.stopPropagation()}>
             <h3 className="text-gray-900 font-black text-lg">📋 Copiar tarjeta</h3>
             <p className="text-xs text-gray-800 font-bold uppercase tracking-wide">{copyPick.label}</p>
             <p className="text-sm text-gray-700 font-medium leading-snug">
-              1) Pulsa <b>COPIAR</b>.<br />
-              2) Toca el <b>día destino</b> en el calendario (la original se queda donde está).
+              Elige qué copiar y luego toca el <b>día destino</b> (o la <b>semana destino</b>).
             </p>
-            <p className="text-[11px] text-gray-500 font-semibold leading-snug">
-              En móvil/tablet este diálogo se abre <b>manteniendo pulsada la tarjeta 2 segundos</b>.
-            </p>
-            <div className="flex gap-2 pt-1">
-              <button onClick={() => setCopyPick(null)} className="flex-1 py-2 px-4 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg font-bold text-sm transition">Cancelar</button>
-              <button onClick={() => { setPickAction(copyPick); setCopyPick(null); }} className="flex-1 py-2 px-4 bg-amber-500 hover:bg-amber-400 text-black rounded-lg font-black text-sm transition" title="Pulsa y luego toca el día destino">📋 COPIAR</button>
+            <div className="grid grid-cols-1 gap-2 pt-1">
+              <button onClick={startSingle} className="py-2.5 px-4 bg-amber-500 hover:bg-amber-400 text-black rounded-lg font-black text-sm transition flex items-center justify-center gap-2" title="Copia SOLO esta tarjeta en el día que toques">
+                📋 SOLO esta tarjeta
+              </button>
+              <button onClick={startWeek} disabled={weekCount === 0} className={`py-2.5 px-4 rounded-lg font-black text-sm transition flex items-center justify-center gap-2 ${weekCount === 0 ? "bg-gray-200 text-gray-400 cursor-not-allowed" : "bg-purple-600 hover:bg-purple-500 text-white"}`} title={`Copia TODAS las tarjetas visibles de esta semana (${weekCount}) en la semana que toques`}>
+                📅 TODA la semana visible ({weekCount})
+              </button>
+              <button onClick={() => setCopyPick(null)} className="py-2 px-4 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg font-bold text-sm transition">Cancelar</button>
             </div>
+            <p className="text-[11px] text-gray-500 font-semibold leading-snug">
+              En móvil/tablet este diálogo se abre <b>manteniendo pulsada la tarjeta 2 segundos</b>. La semana copia lun→lun, mar→mar, etc., respetando los filtros activos.
+            </p>
           </div>
         </div>
-      )}
+        );
+      })()}
 
-      {/* ═══ Banner modo 📋 copiar: toca el día destino ═══ */}
-      {pickAction && (
-        <div className="no-print fixed top-2 left-1/2 -translate-x-1/2 z-[80] max-w-[96vw] bg-gray-900 text-white rounded-full pl-4 pr-1.5 py-1.5 shadow-2xl border-2 border-amber-400 flex items-center gap-2">
-          <span className="text-[11px] sm:text-sm font-black leading-tight truncate">
-            📋 COPIAR <span className="text-amber-300">{pickAction.label}</span> — toca el DÍA destino (la original se queda)
-          </span>
-          <button onClick={() => setPickAction(null)} className="shrink-0 bg-red-600 hover:bg-red-500 text-white rounded-full px-3 py-1 text-[10px] sm:text-xs font-black transition" title="Cancelar: no copia nada">CANCELAR</button>
-        </div>
-      )}
+      {/* ═══ Banner modo 📋 copiar: toca el día / semana destino ═══ */}
+      {pickAction && (() => {
+        const txt = pickAction.mode === "single"
+          ? <>📋 COPIAR <span className="text-amber-300">{pickAction.label}</span> — toca el DÍA destino (la original se queda)</>
+          : <>📅 COPIAR <span className="text-amber-300">{pickAction.label}</span> — toca un DÍA de la SEMANA destino</>;
+        return (
+          <div className="no-print fixed top-2 left-1/2 -translate-x-1/2 z-[80] max-w-[96vw] bg-gray-900 text-white rounded-full pl-4 pr-1.5 py-1.5 shadow-2xl border-2 border-amber-400 flex items-center gap-2">
+            <span className="text-[11px] sm:text-sm font-black leading-tight truncate">{txt}</span>
+            <button onClick={() => setPickAction(null)} className="shrink-0 bg-red-600 hover:bg-red-500 text-white rounded-full px-3 py-1 text-[10px] sm:text-xs font-black transition" title="Cancelar: no copia nada">CANCELAR</button>
+          </div>
+        );
+      })()}
 
       {/* ═══ Aviso note editor modal ═══ */}
       {avisoNoteModal && (
