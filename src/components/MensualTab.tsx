@@ -73,42 +73,47 @@ export default function MensualTab() {
   const [pickAction, setPickAction] = useState<{ kind: "plan" | "aviso"; id: string; label: string } | null>(null);
 
   // 📱 Long-press táctil: MANTENER PULSADA la tarjeta 2 s → mismo diálogo 📋 COPIAR.
-  // Si el dedo se mueve más de 12 px (scroll / arrastre de mes) se cancela; al soltar
-  // tras el long-press se anula el click sintético para NO abrir el editor.
+  // Usa POINTER events (no touch) porque en Android un div `draggable` dispara
+  // `dragstart` a los ~500ms y eso cancela el touchend → nunca llegaría a 2s.
+  // Por eso también se inhibe `onDragStart` mientras el long-press está armado.
+  // Si el dedo se mueve >12px (scroll / arrastre de mes) se cancela.
   const LP_MS = 2000;
   const lpTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lpStart = useRef<{ x: number; y: number } | null>(null);
   const lpFired = useRef(false);
+  const lpActive = useRef(false); // ¿long-press armado (dedo abajo, sin mover)?
   const [lpArmed, setLpArmed] = useState<string | null>(null); // tarjeta "armada": anillo ámbar mientras se mantiene
   const clearLP = () => {
     if (lpTimer.current) { clearTimeout(lpTimer.current); lpTimer.current = null; }
+    lpActive.current = false;
     setLpArmed(null);
   };
-  const lpTouchStart = (kind: "plan" | "aviso", id: string, open: () => void) => (e: React.TouchEvent) => {
+  const lpPointerDown = (kind: "plan" | "aviso", id: string, open: () => void) => (e: React.PointerEvent) => {
+    if (e.pointerType !== "touch") return; // solo táctil (ratón usa Ctrl+click)
     if (copyPick || pickAction) return; // ya hay diálogo o modo copiar activo: no rearmar
-    const t = e.touches[0];
-    lpStart.current = { x: t.clientX, y: t.clientY };
+    lpStart.current = { x: e.clientX, y: e.clientY };
     lpFired.current = false;
+    lpActive.current = true;
     setLpArmed(id);
     if (lpTimer.current) clearTimeout(lpTimer.current);
     lpTimer.current = setTimeout(() => {
       lpFired.current = true;
+      lpActive.current = false;
       setLpArmed(null);
       if (typeof navigator !== "undefined" && "vibrate" in navigator) { try { navigator.vibrate(60); } catch {} }
       open(); // setCopyPick(...) → mismo diálogo que Ctrl+click
     }, LP_MS);
   };
-  const lpTouchMove = (e: React.TouchEvent) => {
+  const lpPointerMove = (e: React.PointerEvent) => {
     if (!lpStart.current || !lpTimer.current) return;
-    const t = e.touches[0];
-    if (Math.hypot(t.clientX - lpStart.current.x, t.clientY - lpStart.current.y) > 12) clearLP(); // scroll/drag: cancelar
+    if (Math.hypot(e.clientX - lpStart.current.x, e.clientY - lpStart.current.y) > 12) clearLP(); // scroll/drag: cancelar
   };
-  const lpTouchEnd = (e: React.TouchEvent) => {
+  const lpPointerUp = (e: React.PointerEvent) => {
     clearLP();
     lpStart.current = null;
     if (lpFired.current) { lpFired.current = false; e.preventDefault(); e.stopPropagation(); } // click sintético anulado
   };
-  const lpTouchCancel = () => { clearLP(); lpStart.current = null; };
+  const lpPointerCancel = () => { clearLP(); lpStart.current = null; };
   useEffect(() => () => { if (lpTimer.current) clearTimeout(lpTimer.current); }, []);
   // Resalta la celda destino mientras arrastras una tarjeta (PC)
   const [dragOverDate, setDragOverDate] = useState<string | null>(null);
@@ -934,13 +939,13 @@ export default function MensualTab() {
           <div
             key={p.id}
             onClick={(e) => { e.stopPropagation(); if (pickAction) { if (!(pickAction.kind === "plan" && pickAction.id === p.id)) pickDay(p.date); return; } if (e.ctrlKey || e.metaKey) { e.preventDefault(); setCopyPick({ kind: "plan", id: p.id, label: `${turnWord} · ${p.professionalAlias}` }); return; } openNoteEditor(p, sede, nombre); }}
-            onTouchStart={lpTouchStart("plan", p.id, () => setCopyPick({ kind: "plan", id: p.id, label: `${turnWord} · ${p.professionalAlias}` }))}
-            onTouchMove={lpTouchMove}
-            onTouchEnd={lpTouchEnd}
-            onTouchCancel={lpTouchCancel}
+            onPointerDown={lpPointerDown("plan", p.id, () => setCopyPick({ kind: "plan", id: p.id, label: `${turnWord} · ${p.professionalAlias}` }))}
+            onPointerMove={lpPointerMove}
+            onPointerUp={lpPointerUp}
+            onPointerCancel={lpPointerCancel}
             onContextMenu={(e) => { if (lpStart.current) e.preventDefault(); }} // long-press Android: sin menú del navegador
             draggable
-            onDragStart={(e) => { draggingCardRef.current = true; e.dataTransfer.setData("text/plain", JSON.stringify({ kind: "plan", id: p.id })); e.dataTransfer.effectAllowed = "copyMove"; }}
+            onDragStart={(e) => { if (lpActive.current || lpFired.current) { e.preventDefault(); return; } draggingCardRef.current = true; e.dataTransfer.setData("text/plain", JSON.stringify({ kind: "plan", id: p.id })); e.dataTransfer.effectAllowed = "copyMove"; }}
             onDragEnd={() => { draggingCardRef.current = false; setDragOverDate(null); }}
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => reorderInDay(e, f, p.id, "plan", dayCards)}
@@ -991,13 +996,13 @@ export default function MensualTab() {
           <div
             key={`av-${a.id}`}
             onClick={(e) => { e.stopPropagation(); if (pickAction) { if (!(pickAction.kind === "aviso" && pickAction.id === a.id)) pickDay(a.date); return; } if (e.ctrlKey || e.metaKey) { e.preventDefault(); setCopyPick({ kind: "aviso", id: a.id, label: `${reason}${avisoProAlias ? ` · ${avisoProAlias}` : ""}` }); return; } openAvisoNoteEditor(a); }}
-            onTouchStart={lpTouchStart("aviso", a.id, () => setCopyPick({ kind: "aviso", id: a.id, label: `${reason}${avisoProAlias ? ` · ${avisoProAlias}` : ""}` }))}
-            onTouchMove={lpTouchMove}
-            onTouchEnd={lpTouchEnd}
-            onTouchCancel={lpTouchCancel}
+            onPointerDown={lpPointerDown("aviso", a.id, () => setCopyPick({ kind: "aviso", id: a.id, label: `${reason}${avisoProAlias ? ` · ${avisoProAlias}` : ""}` }))}
+            onPointerMove={lpPointerMove}
+            onPointerUp={lpPointerUp}
+            onPointerCancel={lpPointerCancel}
             onContextMenu={(e) => { if (lpStart.current) e.preventDefault(); }}
             draggable
-            onDragStart={(e) => { draggingCardRef.current = true; e.dataTransfer.setData("text/plain", JSON.stringify({ kind: "aviso", id: a.id })); e.dataTransfer.effectAllowed = "copyMove"; }}
+            onDragStart={(e) => { if (lpActive.current || lpFired.current) { e.preventDefault(); return; } draggingCardRef.current = true; e.dataTransfer.setData("text/plain", JSON.stringify({ kind: "aviso", id: a.id })); e.dataTransfer.effectAllowed = "copyMove"; }}
             onDragEnd={() => { draggingCardRef.current = false; setDragOverDate(null); }}
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => reorderInDay(e, f, a.id, "aviso", dayCards)}
