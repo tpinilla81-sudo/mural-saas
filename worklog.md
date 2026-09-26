@@ -1953,3 +1953,25 @@ Work Log:
 
 Stage Summary:
 - En móvil/tablet copiar es: MANTENER PULSADA la tarjeta 2 segundos → diálogo → COPIAR → tocar el día destino. En PC sigue: Ctrl+click. MOVER intacto (arrastrar; click normal = editor). Mismo diálogo y mismas validaciones para ambos.
+
+---
+Task ID: 65b
+Agent: main
+Task: "La función copiar con los 2 segundos no funciona en Mobil android" — corregir long-press en Android.
+
+Work Log:
+- CAUSA: en Android, un div con `draggable` dispara `dragstart` a los ~500 ms al mantenerlo pulsado. Eso interrumpe el flujo de TouchEvent (se cancela el touchend y nunca se dispara nuestro setTimeout a los 2 s). Por eso el diálogo no aparecía en Android.
+- FIX 1: migrado el long-press de TouchEvent → PointerEvent (pointerdown/move/up/cancel). El navegador no interrumpe pointerup por el dragstart nativo. Solo se activa si `e.pointerType === "touch"` (PC sigue con Ctrl+click, no se ve afectado).
+- FIX 2: guard en `onDragStart` de plan y aviso: si `lpActive.current` (long-press armado, dedo abajo sin mover) o `lpFired.current` (ya disparado) → `e.preventDefault()` para que el drag nativo NO robe el gesto. En PC (ratón) nunca se arma lpActive, así que el drag sigue funcionando.
+- Commit c9f8ffe → Vercel 200 (marker `pointerType` en chunk 1b722dc42a67f14a.js).
+- E2E PRODUCCIÓN con PointerEvent sintéticos (`pointerType: 'touch'`, scripts/verify-65b.sh):
+  * Anillo ámbar a 0.8 s ✓, diálogo "📋 Copiar tarjeta" a 2.3 s ✓
+  * Al soltar: diálogo sigue abierto y el editor NO se abre ✓
+  * COPIAR → banner + 28 días iluminados ✓
+  * Tocar día 17 → copia MANANA creada, original se queda, banner cerrado ✓
+  * Negativos: pointerdown + movimiento 40 px no abre ✓; pointerdown 0.3 s no abre ✓
+  * Regresión: Ctrl+click → diálogo ✓; click normal → editor ✓; drag de ratón en PC → sigue funcionando (lpActive=false) ✓
+  * Limpieza: 3 borradas, 0 VIT/AS restantes.
+
+Stage Summary:
+- El long-press de 2 segundos en móvil/tablet ahora SÍ funciona en Android (migrado a PointerEvent + guard en onDragStart). En PC todo intacto: Ctrl+click para copiar, arrastrar para mover, click normal para editor.
