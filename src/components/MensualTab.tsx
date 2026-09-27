@@ -132,6 +132,19 @@ export default function MensualTab() {
   };
   const lpPointerCancel = () => { clearLP(); lpStart.current = null; };
   useEffect(() => () => { if (lpTimer.current) clearTimeout(lpTimer.current); }, []);
+
+  // ── Cierre de modales al TOCAR FUERA — robusto para Android/iPhone/PC ──
+  // En Android real el `onClick` del overlay a veces no se dispara tras un long-press
+  // (el click sintético se queda pillado). Usamos `onPointerDown` en el overlay: si
+  // el toque empieza EN el overlay (no dentro del contenido), cerramos inmediatamente.
+  // En PC esto también funciona (pointerdown = mousedown). En iOS igual.
+  const overlayClose = (close: () => void) => (e: React.PointerEvent) => {
+    // Cerrar solo si el toque empezó en el propio overlay (target === currentTarget)
+    if (e.target === e.currentTarget) {
+      e.preventDefault();
+      close();
+    }
+  };
   // Resalta la celda destino mientras arrastras una tarjeta (PC)
   const [dragOverDate, setDragOverDate] = useState<string | null>(null);
   const [dragOverCopy, setDragOverCopy] = useState(false); // ¿arrastrando con ALT? (copiar) — anillo ámbar; sin ALT = mover — anillo azul
@@ -1318,8 +1331,8 @@ export default function MensualTab() {
           setCopyPick(null);
         };
         return (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4" onClick={onOverlayClick}>
-          <div className="bg-white border-2 border-amber-500 rounded-xl p-5 w-full max-w-sm space-y-3 shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4" onClick={onOverlayClick} onPointerDown={overlayClose(() => setCopyPick(null))}>
+          <div className="bg-white border-2 border-amber-500 rounded-xl p-5 w-full max-w-sm space-y-3 shadow-2xl" onClick={e => e.stopPropagation()} onPointerDown={e => e.stopPropagation()}>
             <h3 className="text-gray-900 font-black text-lg">📋 Copiar tarjeta</h3>
             <p className="text-xs text-gray-800 font-bold uppercase tracking-wide">{copyPick.label}</p>
             <p className="text-sm text-gray-700 font-medium leading-snug">
@@ -1360,10 +1373,12 @@ export default function MensualTab() {
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
           onClick={() => { setAvisoNoteModal(null); setNoteText(""); }}
+          onPointerDown={overlayClose(() => { setAvisoNoteModal(null); setNoteText(""); })}
         >
           <div
             className="bg-white border-2 border-red-900 rounded-xl p-4 sm:p-6 w-full max-w-md space-y-4 shadow-2xl"
             onClick={e => e.stopPropagation()}
+            onPointerDown={e => e.stopPropagation()}
           >
             <div className="border-b-2 border-red-900 pb-2">
               <h3 className="text-gray-900 font-black text-lg">🏖 Nota del aviso</h3>
@@ -1444,10 +1459,12 @@ export default function MensualTab() {
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
           onClick={closeNoteEditor}
+          onPointerDown={overlayClose(closeNoteEditor)}
         >
           <div
             className="bg-white border-2 border-gray-900 rounded-xl p-4 sm:p-6 w-full max-w-md space-y-4 shadow-2xl"
             onClick={e => e.stopPropagation()}
+            onPointerDown={e => e.stopPropagation()}
           >
             <div className="border-b-2 border-gray-900 pb-2">
               <h3 className="text-gray-900 font-black text-lg">Nota del turno</h3>
@@ -1552,10 +1569,12 @@ export default function MensualTab() {
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
           onClick={() => setAddModal(null)}
+          onPointerDown={overlayClose(() => setAddModal(null))}
         >
           <div
             className="bg-white border-2 border-gray-900 rounded-xl p-4 sm:p-6 w-full max-w-md space-y-4 shadow-2xl max-h-[92vh] overflow-y-auto"
             onClick={e => e.stopPropagation()}
+            onPointerDown={e => e.stopPropagation()}
           >
             <div className="border-b-2 border-gray-900 pb-2">
               <h3 className="text-gray-900 font-black text-lg">👷 Programar turno</h3>
