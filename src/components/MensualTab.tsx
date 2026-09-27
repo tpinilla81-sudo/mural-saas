@@ -779,18 +779,34 @@ export default function MensualTab() {
   };
   // Lista de tarjetas VISIBLES (respetando selectedSedes/selectedPros) de la FILA VISUAL (lun→dom)
   // que contiene refDate. La tarjeta origen SIEMPRE se incluye (la eligió el usuario).
+  // FALLBACK: si los filtros restrictivos vacían la lista, devolver TODAS las tarjetas visibles
+  // de esa fila (sin filtrar) — porque julio ve la tarjeta en pantalla y quiere poder copiarla.
   const buildWeekItems = (refDate: string, weekDates: string[], originId?: string, originKind?: "plan" | "aviso"): Array<{ kind: "plan" | "aviso"; id: string }> => {
     const items: Array<{ kind: "plan" | "aviso"; id: string }> = [];
     const seen = new Set<string>();
+    // 1) Tarjeta origen SIEMPRE (aunque no pase filtros)
     if (originId && originKind) {
       const src = originKind === "plan" ? plans.find(p => p.id === originId) : avisos.find(a => a.id === originId);
       if (src) { items.push({ kind: originKind, id: originId }); seen.add(originId); }
     }
+    // 2) Tarjetas visibles de la fila (con filtros activos)
     for (const f of weekDates) {
       plans.filter(p => p.date === f && selectedSedes.has(p.sedeId) && selectedPros.has(p.professionalAlias) && !seen.has(p.id))
         .forEach(p => { items.push({ kind: "plan", id: p.id }); seen.add(p.id); });
       avisos.filter(a => a.date === f && selectedSedes.has(a.sedeId) && (!a.professional?.alias || selectedPros.has(a.professional.alias)) && !seen.has(a.id))
         .forEach(a => { items.push({ kind: "aviso", id: a.id }); seen.add(a.id); });
+    }
+    // 3) FALLBACK: si solo está la origen (o nada), añadir TODAS las tarjetas reales de la fila
+    //    sin aplicar filtros de sede/pro (julio las ve en pantalla, las quiere copiar).
+    if (items.length <= 1) {
+      const allInRow: Array<{ kind: "plan" | "aviso"; id: string }> = [];
+      for (const f of weekDates) {
+        plans.filter(p => p.date === f).forEach(p => allInRow.push({ kind: "plan", id: p.id }));
+        avisos.filter(a => a.date === f).forEach(a => allInRow.push({ kind: "aviso", id: a.id }));
+      }
+      for (const x of allInRow) {
+        if (!seen.has(x.id)) { items.push(x); seen.add(x.id); }
+      }
     }
     return items;
   };
