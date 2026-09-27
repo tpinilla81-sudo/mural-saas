@@ -738,15 +738,21 @@ export default function MensualTab() {
     return d.toISOString().slice(0, 10);
   };
   // Lista de tarjetas VISIBLES (respetando selectedSedes/selectedPros) de la semana de refDate
-  const buildWeekItems = (refDate: string): Array<{ kind: "plan" | "aviso"; id: string }> => {
+  const buildWeekItems = (refDate: string, originId?: string, originKind?: "plan" | "aviso"): Array<{ kind: "plan" | "aviso"; id: string }> => {
     const mon = mondayOfISO(refDate);
     const items: Array<{ kind: "plan" | "aviso"; id: string }> = [];
+    const seen = new Set<string>();
+    // La tarjeta origen SIEMPRE se incluye (aunque no pase el filtro, el usuario la eligió)
+    if (originId && originKind) {
+      const src = originKind === "plan" ? plans.find(p => p.id === originId) : avisos.find(a => a.id === originId);
+      if (src) { items.push({ kind: originKind, id: originId }); seen.add(originId); }
+    }
     for (let i = 0; i < 7; i++) {
       const f = addDaysISO(mon, i);
-      plans.filter(p => p.date === f && selectedSedes.has(p.sedeId) && selectedPros.has(p.professionalAlias))
-        .forEach(p => items.push({ kind: "plan", id: p.id }));
-      avisos.filter(a => a.date === f && selectedSedes.has(a.sedeId) && (!a.professional?.alias || selectedPros.has(a.professional.alias)))
-        .forEach(a => items.push({ kind: "aviso", id: a.id }));
+      plans.filter(p => p.date === f && selectedSedes.has(p.sedeId) && selectedPros.has(p.professionalAlias) && !seen.has(p.id))
+        .forEach(p => { items.push({ kind: "plan", id: p.id }); seen.add(p.id); });
+      avisos.filter(a => a.date === f && selectedSedes.has(a.sedeId) && (!a.professional?.alias || selectedPros.has(a.professional.alias)) && !seen.has(a.id))
+        .forEach(a => { items.push({ kind: "aviso", id: a.id }); seen.add(a.id); });
     }
     return items;
   };
@@ -900,6 +906,7 @@ export default function MensualTab() {
       }
       const total = snapshot.length;
       if (total === 0) alert(`No había tarjetas visibles en la semana origen (${formatDateLabel(srcMon)} → ${formatDateLabel(addDaysISO(srcMon, 6))}). Revisa los filtros activos.`);
+      else if (ok === 0 && skip > 0) alert(`⚠️ No se copió ninguna: las ${skip} tarjetas ya existían en la semana destino (${formatDateLabel(dstMon)} → ${formatDateLabel(addDaysISO(dstMon, 6))}). Borra primero las del destino o elige otra semana.`);
       else alert(`✅ Copiadas ${ok} de ${total} tarjetas${skip ? ` · ${skip} saltadas (ya existían o festivo)` : ""}${fail ? ` · ${fail} fallos` : ""}.`);
     }
   };
@@ -1322,7 +1329,7 @@ export default function MensualTab() {
 
       {/* ═══ Diálogo 📋 COPIAR (Ctrl+click en PC · mantener pulsada 2 s en táctil) ═══ */}
       {copyPick && (() => {
-        const weekItems = buildWeekItems(copyPick.date);
+        const weekItems = buildWeekItems(copyPick.date, copyPick.id, copyPick.kind);
         const weekCount = weekItems.length;
         const startSingle = () => { setPickAction({ mode: "single", kind: copyPick.kind, id: copyPick.id, label: copyPick.label }); setCopyPick(null); };
         const startWeek = () => {
