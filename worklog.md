@@ -2000,3 +2000,21 @@ Work Log:
 
 Stage Summary:
 - Al abrir el diálogo de copiar (Ctrl+click en PC o mantener pulsada 2 s en móvil/tablet) ahora aparecen 2 opciones: «📋 SOLO esta tarjeta» y «📅 TODA la semana visible (N)» (N respetando los filtros activos). Al elegir semana y tocar un día, copia toda la semana origen a la semana destino manteniendo lun→lun, mar→mar, etc. Funciona en PC (Ctrl+click), Android e iPhone (long-press 2s).
+
+---
+Task ID: 66b
+Agent: main
+Task: "No funciona la función pegar. Me deja copiar toda la semana. Voy al día para pegarlo, lo pego pero no se copia" — bug en móvil real.
+
+Work Log:
+- CAUSA RAÍZ: al dispararse el long-press y abrirse el diálogo (z-70), el overlay ocupa toda la pantalla sobre la tarjeta. En móvil real, cuando el usuario levanta el dedo, el pointerup va al OVERLAY (no a la tarjeta), y el overlay tenía `onClick={() => setCopyPick(null)}` → el diálogo se cerraba inmediatamente. Julio veía el diálogo un instante y desaparecía — no le daba tiempo a elegir "TODA la semana" ni a pegar.
+- DIAGNÓSTICO: verify-66c.sh reproduce el flujo con pointerup y click dispatchados sobre el overlay (no sobre la tarjeta, como hace móvil real). Antes del fix: `dialogClosed: true, este_es_el_bug: true`.
+- FIX: añadido `lpFiredAt = useRef(0)` que marca el timestamp cuando el long-press dispara el diálogo. El overlay ahora usa `onOverlayClick` que ignora el click si llega en los 800ms siguientes al long-press (suprime el click espurio del levantamiento del dedo) y permite el cierre normal después.
+- Commit fb0cd91 → Vercel 200 (deploy tardó varios minutos; verificado por ausencia del bug en E2E).
+- E2E PRODUCCIÓN:
+  * verify-66c.sh: `dialogo_persiste_tras_pointerup: true` ✓ (el diálogo ya NO se cierra al levantar el dedo) + `cierra_click_tarde: true` ✓ (un click posterior sí lo cierra, preservando "tap fuera para cerrar")
+  * verify-66b.sh (flujo móvil completo): long-press 2s → diálogo ✓ → tap "TODA la semana visible (4)" → banner "📅 COPIAR SEMANA 2027-02-08 → 2027-02-14 (4 tarjetas) — toca un DÍA de la SEMANA" ✓ → tap día 17 (mie) → celda tiene anillo ámbar (pickAction activo) ✓ → alert "✅ Copiadas 3 de 4 tarjetas · 1 saltadas" ✓ → banner cerrado ✓ → copias creadas en semana destino (mie 17, vie 19, sab 20, manteniendo lun→lun mie→mie vie→vie sab→sab) ✓
+  * Limpieza: 6 tarjetas borradas, 0 restantes.
+
+Stage Summary:
+- El bug "no funciona pegar en móvil" estaba en el overlay del diálogo, no en pickDay. Cuando el diálogo aparecía sobre la tarjeta, el pointerup del dedo iba al overlay y disparaba el cierre inmediato. Ahora el overlay ignora el click espurio del levantamiento (800ms post-long-press) y el diálogo permanece abierto para que el usuario elija SOLO/SEMANA y luego toque el día destino. Funciona en iPhone, Android y PC.
