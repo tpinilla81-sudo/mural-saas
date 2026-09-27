@@ -70,10 +70,10 @@ export default function MensualTab() {
   // (móvil/tablet, petición de julio): 1) sale un DIÁLOGO de copiar, 2) eliges
   // «SOLO esta» o «TODA la semana visible» y 3) tocas el día destino (o la semana destino).
   // MOVER sigue como siempre: arrastrando.
-  type CopyPick = { kind: "plan" | "aviso"; id: string; label: string; date: string };
+  type CopyPick = { kind: "plan" | "aviso"; id: string; label: string; date: string; weekDates: string[] };
   type PickAction =
     | { mode: "single"; kind: "plan" | "aviso"; id: string; label: string }
-    | { mode: "week"; refDate: string; label: string; items: Array<{ kind: "plan" | "aviso"; id: string }> };
+    | { mode: "week"; refDate: string; weekDates: string[]; label: string; items: Array<{ kind: "plan" | "aviso"; id: string }> };
   const [copyPick, setCopyPick] = useState<CopyPick | null>(null);
   const [pickAction, setPickAction] = useState<PickAction | null>(null);
 
@@ -460,6 +460,46 @@ export default function MensualTab() {
   startWeekday = startWeekday === 0 ? 6 : startWeekday - 1;
   const totalDays = lastDay.getDate();
 
+  // ── Días a renderizar: mes normal o ventana 🌉 MEDIO (28 días: final de mes + principio del siguiente) ──
+  // Calculado ANTES de los handlers para que weekRowDatesOf pueda usarse en Ctrl+click/long-press.
+  const MESES_SHORT = ["ENE", "FEB", "MAR", "ABR", "MAY", "JUN", "JUL", "AGO", "SEP", "OCT", "NOV", "DIC"];
+  type ViewDay = { dateObj: Date; f: string; day: number; monthTag: string | null; adj?: boolean };
+  const viewDays: ViewDay[] = [];
+  if (midMode) {
+    const anchor = Math.max(1, totalDays - 13);
+    const back = (new Date(year, month, anchor).getDay() + 6) % 7;
+    const start = new Date(year, month, anchor - back);
+    for (let i = 0; i < 28; i++) {
+      const dObj = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+      viewDays.push({ dateObj: dObj, f: fmt(dObj), day: dObj.getDate(), monthTag: MESES_SHORT[dObj.getMonth()] });
+    }
+  } else {
+    const pm2 = month === 0 ? 11 : month - 1, py2 = month === 0 ? year - 1 : year;
+    const nm2 = month === 11 ? 0 : month + 1, ny2 = month === 11 ? year + 1 : year;
+    const prevTotal = new Date(py2, pm2 + 1, 0).getDate();
+    for (let i = startWeekday - 1; i >= 0; i--) {
+      const dObj = new Date(py2, pm2, prevTotal - i);
+      viewDays.push({ dateObj: dObj, f: fmt(dObj), day: dObj.getDate(), monthTag: MESES_SHORT[pm2], adj: true });
+    }
+    for (let day = 1; day <= totalDays; day++) {
+      const dateObj = new Date(year, month, day);
+      viewDays.push({ dateObj, f: fmt(dateObj), day, monthTag: null });
+    }
+    const trail = (7 - ((startWeekday + totalDays) % 7)) % 7;
+    for (let day = 1; day <= trail; day++) {
+      const dObj = new Date(ny2, nm2, day);
+      viewDays.push({ dateObj: dObj, f: fmt(dObj), day: dObj.getDate(), monthTag: MESES_SHORT[nm2], adj: true });
+    }
+  }
+  // Devuelve las 7 fechas ISO (lun→dom) de la FILA VISUAL que contiene dateISO.
+  // Esto es lo que julio pidió: "de lunes a domingo de la misma fila".
+  const weekRowDatesOf = (dateISO: string): string[] => {
+    const idx = viewDays.findIndex(v => v.f === dateISO);
+    if (idx < 0) return []; // fallback: la fecha no está visible (no debería pasar)
+    const row = Math.floor(idx / 7);
+    return viewDays.slice(row * 7, row * 7 + 7).map(v => v.f);
+  };
+
   const filteredSedes = sedes.filter(s => selectedSedes.has(s.id));
 
   // ── Añadir en Mensual (turno): el diálogo se abre directo en el formulario ──
@@ -737,18 +777,16 @@ export default function MensualTab() {
     d.setDate(d.getDate() + days);
     return d.toISOString().slice(0, 10);
   };
-  // Lista de tarjetas VISIBLES (respetando selectedSedes/selectedPros) de la semana de refDate
-  const buildWeekItems = (refDate: string, originId?: string, originKind?: "plan" | "aviso"): Array<{ kind: "plan" | "aviso"; id: string }> => {
-    const mon = mondayOfISO(refDate);
+  // Lista de tarjetas VISIBLES (respetando selectedSedes/selectedPros) de la FILA VISUAL (lun→dom)
+  // que contiene refDate. La tarjeta origen SIEMPRE se incluye (la eligió el usuario).
+  const buildWeekItems = (refDate: string, weekDates: string[], originId?: string, originKind?: "plan" | "aviso"): Array<{ kind: "plan" | "aviso"; id: string }> => {
     const items: Array<{ kind: "plan" | "aviso"; id: string }> = [];
     const seen = new Set<string>();
-    // La tarjeta origen SIEMPRE se incluye (aunque no pase el filtro, el usuario la eligió)
     if (originId && originKind) {
       const src = originKind === "plan" ? plans.find(p => p.id === originId) : avisos.find(a => a.id === originId);
       if (src) { items.push({ kind: originKind, id: originId }); seen.add(originId); }
     }
-    for (let i = 0; i < 7; i++) {
-      const f = addDaysISO(mon, i);
+    for (const f of weekDates) {
       plans.filter(p => p.date === f && selectedSedes.has(p.sedeId) && selectedPros.has(p.professionalAlias) && !seen.has(p.id))
         .forEach(p => { items.push({ kind: "plan", id: p.id }); seen.add(p.id); });
       avisos.filter(a => a.date === f && selectedSedes.has(a.sedeId) && (!a.professional?.alias || selectedPros.has(a.professional.alias)) && !seen.has(a.id))
@@ -879,34 +917,34 @@ export default function MensualTab() {
       if (pa.kind === "plan") await copyPlanToDate(src as PlanEntry, targetDate);
       else await copyAvisoToDate(src as AvisoEntry, targetDate);
     } else {
-      // mode === "week"
-      const srcMon = mondayOfISO(pa.refDate);
-      const dstMon = mondayOfISO(targetDate);
-      if (srcMon === dstMon) { alert("Toca una semana DISTINTA a la de origen."); return; }
-      // Capturar SNAPSHOT de los src ANTES de cualquier load(): pa.items se resuelve contra plans/avisos
-      // del render actual. Tras el 1er load() el state cambia, pero la closure sigue viendo los objetos
-      // originales (que siguen siendo válidos). Si un item ya no existe en el state nuevo (p.ej. lo borraron),
-      // saltamos sin contar como fail.
+      // mode === "week" — la semana origen es la FILA VISUAL (lun→dom) capturada al abrir el diálogo.
+      // La semana destino es la FILA VISUAL del día tocado (NO la semana ISO calculada por fecha).
+      const srcWeek = pa.weekDates;
+      const dstWeek = weekRowDatesOf(targetDate);
+      if (srcWeek.length !== 7 || dstWeek.length !== 7) { alert("No pude identificar la semana visual. Prueba otra vez."); setPickAction(null); return; }
+      if (srcWeek[0] === dstWeek[0]) { alert("Toca una semana DISTINTA a la de origen."); return; }
       const snapshot = pa.items.map(it => ({
         it,
         src: it.kind === "plan" ? plans.find(p => p.id === it.id) : avisos.find(a => a.id === it.id),
       })).filter(x => x.src) as Array<{ it: { kind: "plan" | "aviso"; id: string }; src: PlanEntry | AvisoEntry }>;
-      setPickAction(null); // el banner desaparece en cuanto se elige el día
+      setPickAction(null);
       let ok = 0, skip = 0, fail = 0;
       for (const { it, src } of snapshot) {
-        const off = (new Date(src.date + "T00:00:00").getDay() + 6) % 7; // 0=lun … 6=dom
-        const dst = addDaysISO(dstMon, off);
+        // Índice del día dentro de la fila origen (0=lun … 6=dom)
+        const off = srcWeek.indexOf(src.date);
+        if (off < 0) { fail++; continue; }
+        const dst = dstWeek[off];
         try {
           const r = it.kind === "plan"
             ? await copyPlanToDate(src as PlanEntry, dst, { silent: true })
             : await copyAvisoToDate(src as AvisoEntry, dst, { silent: true });
           if (r) ok++;
-          else skip++; // fail silencioso = mismo profesional ya puesto, festivo con silent, etc.
+          else skip++;
         } catch { fail++; }
       }
       const total = snapshot.length;
-      if (total === 0) alert(`No había tarjetas visibles en la semana origen (${formatDateLabel(srcMon)} → ${formatDateLabel(addDaysISO(srcMon, 6))}). Revisa los filtros activos.`);
-      else if (ok === 0 && skip > 0) alert(`⚠️ No se copió ninguna: las ${skip} tarjetas ya existían en la semana destino (${formatDateLabel(dstMon)} → ${formatDateLabel(addDaysISO(dstMon, 6))}). Borra primero las del destino o elige otra semana.`);
+      if (total === 0) alert(`No había tarjetas visibles en la semana origen (${formatDateLabel(srcWeek[0])} → ${formatDateLabel(srcWeek[6])}). Revisa los filtros activos.`);
+      else if (ok === 0 && skip > 0) alert(`⚠️ No se copió ninguna: las ${skip} tarjetas ya existían en la semana destino (${formatDateLabel(dstWeek[0])} → ${formatDateLabel(dstWeek[6])}). Borra primero las del destino o elige otra semana.`);
       else alert(`✅ Copiadas ${ok} de ${total} tarjetas${skip ? ` · ${skip} saltadas (ya existían o festivo)` : ""}${fail ? ` · ${fail} fallos` : ""}.`);
     }
   };
@@ -960,38 +998,6 @@ export default function MensualTab() {
     saveDayOrder(date, list);
   };
 
-  // ── Días a renderizar: mes normal o ventana 🌉 MEDIO (28 días: final de mes + principio del siguiente) ──
-  const MESES_SHORT = ["ENE", "FEB", "MAR", "ABR", "MAY", "JUN", "JUL", "AGO", "SEP", "OCT", "NOV", "DIC"];
-  type ViewDay = { dateObj: Date; f: string; day: number; monthTag: string | null; adj?: boolean };
-  const viewDays: ViewDay[] = [];
-  if (midMode) {
-    const anchor = Math.max(1, totalDays - 13); // ~2 semanas antes de fin de mes
-    const back = (new Date(year, month, anchor).getDay() + 6) % 7; // días desde el lunes
-    const start = new Date(year, month, anchor - back);
-    for (let i = 0; i < 28; i++) {
-      const dObj = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
-      viewDays.push({ dateObj: dObj, f: fmt(dObj), day: dObj.getDate(), monthTag: MESES_SHORT[dObj.getMonth()] });
-    }
-  } else {
-    // Mes normal + días REALES de los meses vecinos: al pasar de mes siempre se ve
-    // el final del anterior y el principio del siguiente (con sus tarjetas).
-    const pm2 = month === 0 ? 11 : month - 1, py2 = month === 0 ? year - 1 : year;
-    const nm2 = month === 11 ? 0 : month + 1, ny2 = month === 11 ? year + 1 : year;
-    const prevTotal = new Date(py2, pm2 + 1, 0).getDate();
-    for (let i = startWeekday - 1; i >= 0; i--) {
-      const dObj = new Date(py2, pm2, prevTotal - i);
-      viewDays.push({ dateObj: dObj, f: fmt(dObj), day: dObj.getDate(), monthTag: MESES_SHORT[pm2], adj: true });
-    }
-    for (let day = 1; day <= totalDays; day++) {
-      const dateObj = new Date(year, month, day);
-      viewDays.push({ dateObj, f: fmt(dateObj), day, monthTag: null });
-    }
-    const trail = (7 - ((startWeekday + totalDays) % 7)) % 7;
-    for (let day = 1; day <= trail; day++) {
-      const dObj = new Date(ny2, nm2, day);
-      viewDays.push({ dateObj: dObj, f: fmt(dObj), day, monthTag: MESES_SHORT[nm2], adj: true });
-    }
-  }
 
   const cells: React.ReactNode[] = [];
 
@@ -1038,8 +1044,8 @@ export default function MensualTab() {
           node: (
           <div
             key={p.id}
-            onClick={(e) => { e.stopPropagation(); if (lpConsumeClick()) return; if (pickAction?.mode === "single" && pickAction.kind === "plan" && pickAction.id === p.id) return; if (pickAction) { pickDay(p.date); return; } if (e.ctrlKey || e.metaKey) { e.preventDefault(); setCopyPick({ kind: "plan", id: p.id, label: `${turnWord} · ${p.professionalAlias}`, date: p.date }); return; } openNoteEditor(p, sede, nombre); }}
-            onPointerDown={lpPointerDown("plan", p.id, () => setCopyPick({ kind: "plan", id: p.id, label: `${turnWord} · ${p.professionalAlias}`, date: p.date }))}
+            onClick={(e) => { e.stopPropagation(); if (lpConsumeClick()) return; if (pickAction?.mode === "single" && pickAction.kind === "plan" && pickAction.id === p.id) return; if (pickAction) { pickDay(p.date); return; } if (e.ctrlKey || e.metaKey) { e.preventDefault(); setCopyPick({ kind: "plan", id: p.id, label: `${turnWord} · ${p.professionalAlias}`, date: p.date, weekDates: weekRowDatesOf(p.date) }); return; } openNoteEditor(p, sede, nombre); }}
+            onPointerDown={lpPointerDown("plan", p.id, () => setCopyPick({ kind: "plan", id: p.id, label: `${turnWord} · ${p.professionalAlias}`, date: p.date, weekDates: weekRowDatesOf(p.date) }))}
             onPointerMove={lpPointerMove}
             onPointerUp={lpPointerUp}
             onPointerCancel={lpPointerCancel}
@@ -1095,8 +1101,8 @@ export default function MensualTab() {
           node: (
           <div
             key={`av-${a.id}`}
-            onClick={(e) => { e.stopPropagation(); if (lpConsumeClick()) return; if (pickAction?.mode === "single" && pickAction.kind === "aviso" && pickAction.id === a.id) return; if (pickAction) { pickDay(a.date); return; } if (e.ctrlKey || e.metaKey) { e.preventDefault(); setCopyPick({ kind: "aviso", id: a.id, label: `${reason}${avisoProAlias ? ` · ${avisoProAlias}` : ""}`, date: a.date }); return; } openAvisoNoteEditor(a); }}
-            onPointerDown={lpPointerDown("aviso", a.id, () => setCopyPick({ kind: "aviso", id: a.id, label: `${reason}${avisoProAlias ? ` · ${avisoProAlias}` : ""}`, date: a.date }))}
+            onClick={(e) => { e.stopPropagation(); if (lpConsumeClick()) return; if (pickAction?.mode === "single" && pickAction.kind === "aviso" && pickAction.id === a.id) return; if (pickAction) { pickDay(a.date); return; } if (e.ctrlKey || e.metaKey) { e.preventDefault(); setCopyPick({ kind: "aviso", id: a.id, label: `${reason}${avisoProAlias ? ` · ${avisoProAlias}` : ""}`, date: a.date, weekDates: weekRowDatesOf(a.date) }); return; } openAvisoNoteEditor(a); }}
+            onPointerDown={lpPointerDown("aviso", a.id, () => setCopyPick({ kind: "aviso", id: a.id, label: `${reason}${avisoProAlias ? ` · ${avisoProAlias}` : ""}`, date: a.date, weekDates: weekRowDatesOf(a.date) }))}
             onPointerMove={lpPointerMove}
             onPointerUp={lpPointerUp}
             onPointerCancel={lpPointerCancel}
@@ -1329,14 +1335,14 @@ export default function MensualTab() {
 
       {/* ═══ Diálogo 📋 COPIAR (Ctrl+click en PC · mantener pulsada 2 s en táctil) ═══ */}
       {copyPick && (() => {
-        const weekItems = buildWeekItems(copyPick.date, copyPick.id, copyPick.kind);
+        const weekDates = copyPick.weekDates;
+        const weekItems = buildWeekItems(copyPick.date, weekDates, copyPick.id, copyPick.kind);
         const weekCount = weekItems.length;
         const startSingle = () => { setPickAction({ mode: "single", kind: copyPick.kind, id: copyPick.id, label: copyPick.label }); setCopyPick(null); };
         const startWeek = () => {
           if (weekCount === 0) { alert("No hay tarjetas visibles en la semana de esta tarjeta (revisa los filtros)."); return; }
-          const mon = mondayOfISO(copyPick.date);
-          const end = addDaysISO(mon, 6);
-          setPickAction({ mode: "week", refDate: copyPick.date, label: `SEMANA ${mon} → ${end} (${weekCount} tarjetas)`, items: weekItems });
+          const label = `SEMANA ${weekDates[0]} → ${weekDates[6]} (${weekCount} tarjetas)`;
+          setPickAction({ mode: "week", refDate: copyPick.date, weekDates, label, items: weekItems });
           setCopyPick(null);
         };
         // En táctil, el overlay captura el pointerup/click espurio que sigue al long-press
@@ -1374,7 +1380,7 @@ export default function MensualTab() {
       {pickAction && (() => {
         const txt = pickAction.mode === "single"
           ? <>📋 COPIAR <span className="text-amber-300">{pickAction.label}</span> — toca el DÍA destino (la original se queda)</>
-          : <>📅 COPIAR <span className="text-amber-300">SEMANA {pickAction.mode === "week" ? `${mondayOfISO(pickAction.refDate)} → ${addDaysISO(mondayOfISO(pickAction.refDate), 6)}` : ""} ({pickAction.items.length} tarjetas)</span> — toca un DÍA de la SEMANA destino (lun→lun, mar→mar…)</>;
+          : <>📅 COPIAR <span className="text-amber-300">SEMANA {pickAction.mode === "week" ? `${pickAction.weekDates[0]} → ${pickAction.weekDates[6]}` : ""} ({pickAction.items.length} tarjetas)</span> — toca un DÍA de la SEMANA destino (misma fila: lun→lun, mar→mar…)</>;
         return (
           <div className="no-print fixed top-2 left-1/2 -translate-x-1/2 z-[80] max-w-[96vw] bg-gray-900 text-white rounded-full pl-4 pr-1.5 py-1.5 shadow-2xl border-2 border-amber-400 flex items-center gap-2">
             <span className="text-[11px] sm:text-sm font-black leading-tight truncate">{txt}</span>
