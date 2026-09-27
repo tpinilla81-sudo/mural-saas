@@ -86,6 +86,7 @@ export default function MensualTab() {
   const lpTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lpStart = useRef<{ x: number; y: number } | null>(null);
   const lpFired = useRef(false);
+  const lpFiredAt = useRef(0); // timestamp en que el long-press disparó el diálogo (para suprimir el click espurio sobre el overlay)
   const lpActive = useRef(false); // ¿long-press armado (dedo abajo, sin mover)?
   const [lpArmed, setLpArmed] = useState<string | null>(null); // tarjeta "armada": anillo ámbar mientras se mantiene
   const clearLP = () => {
@@ -103,6 +104,7 @@ export default function MensualTab() {
     if (lpTimer.current) clearTimeout(lpTimer.current);
     lpTimer.current = setTimeout(() => {
       lpFired.current = true;
+      lpFiredAt.current = Date.now();
       lpActive.current = false;
       setLpArmed(null);
       if (typeof navigator !== "undefined" && "vibrate" in navigator) { try { navigator.vibrate(60); } catch {} }
@@ -1299,8 +1301,14 @@ export default function MensualTab() {
           setPickAction({ mode: "week", refDate: copyPick.date, label: `SEMANA ${mon} → ${end} (${weekCount} tarjetas)`, items: weekItems });
           setCopyPick(null);
         };
+        // En táctil, el overlay captura el pointerup/click espurio que sigue al long-press
+        // (el dedo estaba sobre la tarjeta y el diálogo apareció encima). Suprimimos ese click.
+        const onOverlayClick = () => {
+          if (lpFiredAt.current && Date.now() - lpFiredAt.current < 800) { lpFiredAt.current = 0; return; }
+          setCopyPick(null);
+        };
         return (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4" onClick={() => setCopyPick(null)}>
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4" onClick={onOverlayClick}>
           <div className="bg-white border-2 border-amber-500 rounded-xl p-5 w-full max-w-sm space-y-3 shadow-2xl" onClick={e => e.stopPropagation()}>
             <h3 className="text-gray-900 font-black text-lg">📋 Copiar tarjeta</h3>
             <p className="text-xs text-gray-800 font-bold uppercase tracking-wide">{copyPick.label}</p>
