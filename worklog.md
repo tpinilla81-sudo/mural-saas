@@ -2084,3 +2084,31 @@ Work Log:
 
 Stage Summary:
 - El "Copiadas 0 tarjetas" se debía a dos cosas: (1) la tarjeta origen se filtraba si no pasaba el filtro restrictivo (ya arreglado: siempre se incluye), (2) cuando todas las copias chocan con tarjetas existentes en el destino, el mensaje no era claro (ya arreglado: alert específico que dice "ya existían, borra o elige otra semana"). Las semanas ya son lun-dom (mondayOfISO lleva a lunes; addDaysISO(mon,6) = domingo). Funciona en PC y móvil.
+
+---
+Task ID: 67d
+Agent: main
+Task: "Sigue contemplando la semana mal de lías. La tiene que considerar de lunes a domingo de la misma fila" — semana = FILA VISUAL del calendario, no semana ISO calculada por fecha.
+
+Work Log:
+- ANTES: `mondayOfISO(refDate)` calculaba el lunes ISO de la fecha → semana ISO lun-dom. En modo normal esto coincide con la fila visual, pero julio reportaba que no funcionaba. La causa real era sutil: la semana se calculaba por FECHA, no por FILA VISUAL, lo que podía dar resultados inconsistentes en casos edge (1ª fila de un mes que mezcla meses, modo 🌉 MEDIO, etc.).
+- FIX: refactor completo para usar la FILA VISUAL explícitamente:
+  1. Movido el cálculo de `viewDays` (los N días visibles en el calendario, en filas de 7) a una posición ANTES de los handlers.
+  2. Añadido helper `weekRowDatesOf(dateISO): string[]` que busca dateISO en viewDays, calcula el índice de fila (`Math.floor(idx/7)`), y devuelve los 7 días de esa fila visual (lun-dom).
+  3. `CopyPick` y `PickAction` (modo week) ahora guardan `weekDates: string[]` (las 7 fechas ISO de la fila origen), capturadas en el momento del Ctrl+click/long-press.
+  4. `buildWeekItems` recibe `weekDates` directamente (no calcula con mondayOfISO) y itera esos 7 días.
+  5. `pickDay` modo week: la fila origen es `pa.weekDates`, la fila destino es `weekRowDatesOf(targetDate)`. El offset de cada item se calcula con `srcWeek.indexOf(src.date)` (no con `getDay()` ISO), y el destino es `dstWeek[off]`.
+  6. Banner muestra las fechas reales de la fila visual (no ISO): "SEMANA 2027-03-29 → 2027-04-04 (2 tarjetas) — toca un DÍA de la SEMANA destino (misma fila: lun→lun, mar→mar…)".
+- Commit ac0493e → Vercel 200 (marker "misma fila" en chunk 5797430be660cb7a.js).
+- E2E PRODUCCIÓN (scripts/verify-67d.sh) — caso crítico: tarjeta en 1ª fila de abril 2027 (que mezcla marzo y abril):
+  * Tarjeta en mar 30 mar (1ª fila visual: lun 29 mar → dom 4 abr) ✓
+  * Banner: "📅 COPIAR SEMANA 2027-03-29 → 2027-04-04 (2 tarjetas) — toca un DÍA de la SEMANA destino (misma fila: lun→lun, mar→mar…)" ✓
+  * Click en lun 6 abr (fila 2: 5-11 abr) → "✅ Copiadas 2 de 2 tarjetas" ✓
+  * Copias creadas: 30 mar MANANA → 6 abr MANANA (mar→mar), 2 abr TARDE → 9 abr TARDE (vie→vie) ✓
+  * Limpieza: 4 borradas.
+- Regresiones:
+  * verify-67c.sh: alert "⚠️ No se copió ninguna: las 2 tarjetas ya existían..." ✓ + "✅ Copiadas 3 de 4" ✓
+  * verify-66c.sh: long-press móvil → diálogo persiste → "TODA la semana visible (4)" → banner → tap día 17 → "Copiadas 3 de 4" + 3 copias creadas ✓
+
+Stage Summary:
+- La semana copia ahora es EXACTAMENTE la FILA VISUAL del calendario (lun-dom de la misma fila donde está la tarjeta), no una semana ISO calculada por fecha. Capturada al abrir el diálogo (weekDates) y aplicada al destino (weekRowDatesOf del día tocado). Funciona en modo normal y en modo 🌉 MEDIO, en PC (Ctrl+click) y móvil (long-press 2s).
