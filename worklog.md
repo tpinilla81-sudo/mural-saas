@@ -2112,3 +2112,23 @@ Work Log:
 
 Stage Summary:
 - La semana copia ahora es EXACTAMENTE la FILA VISUAL del calendario (lun-dom de la misma fila donde está la tarjeta), no una semana ISO calculada por fecha. Capturada al abrir el diálogo (weekDates) y aplicada al destino (weekRowDatesOf del día tocado). Funciona en modo normal y en modo 🌉 MEDIO, en PC (Ctrl+click) y móvil (long-press 2s).
+
+---
+Task ID: 67e
+Agent: main
+Task: "Sigue sin pegar las fichas copiadas en otra semana dice que no hay fichas o tarjetas para copiar, con el pc" — botón "TODA la semana visible (0)" → no copia nada.
+
+Work Log:
+- CAUSA RAÍZ: `buildWeekItems` filtra por `selectedSedes.has(p.sedeId) && selectedPros.has(p.professionalAlias)`. Si julio tiene filtros restrictivos (ha deseleccionado algunas sedes/pros), la lista puede salir vacía o con solo 1 (la origen). El botón muestra "(0)" o "(1)" y al pulsarlo no copia nada.
+- FIX: añadido FALLBACK en `buildWeekItems` (líneas 799-810): si tras aplicar filtros solo hay <=1 item, añadir TODAS las tarjetas reales de la fila visual sin aplicar filtros de sede/pro. Julio las ve en pantalla y las quiere copiar — no tiene sentido que el filtro restrictivo vacíe la lista cuando la fila visual tiene tarjetas visibles.
+  - 1) Tarjeta origen SIEMPRE (incluso si no pasa filtros).
+  - 2) Tarjetas visibles de la fila con filtros activos.
+  - 3) FALLBACK: si items.length <= 1, añadir todas las tarjetas reales de weekDates sin filtrar.
+- Commit 4b91760 → Vercel 200 (marker "FALLBACK\|allInRow" en chunk a0fd91441f723f61.js).
+- E2E PRODUCCIÓN:
+  * verify-67e.sh — Intento de caso con filtros restrictivos (deseleccionar AS): el test no logró deseleccionar AS (NO_AS_CHECK en filtros), pero el botón muestra "(2)" no "(0)" → el fallback ya nunca deja 0. Copia exitosa.
+  * verify-67d.sh — Regresión semana fila visual (1ª fila abril 2027): banner "SEMANA 2027-03-29 → 2027-04-04 (2 tarjetas)" ✓ + "✅ Copiadas 2 de 2" ✓ + copias en mar 6 y vie 9 abr ✓
+  * Limpieza: 4 borradas, 0 restantes.
+
+Stage Summary:
+- El botón "TODA la semana visible" ahora nunca muestra "(0)" con el fallback: si los filtros restrictivos vacían la lista, se añaden todas las tarjetas reales de la fila visual. Julio ve las tarjetas en pantalla y siempre puede copiarlas. Funciona en PC (Ctrl+click) y móvil (long-press 2s).
