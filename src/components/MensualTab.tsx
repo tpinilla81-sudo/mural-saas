@@ -877,22 +877,30 @@ export default function MensualTab() {
       const srcMon = mondayOfISO(pa.refDate);
       const dstMon = mondayOfISO(targetDate);
       if (srcMon === dstMon) { alert("Toca una semana DISTINTA a la de origen."); return; }
+      // Capturar SNAPSHOT de los src ANTES de cualquier load(): pa.items se resuelve contra plans/avisos
+      // del render actual. Tras el 1er load() el state cambia, pero la closure sigue viendo los objetos
+      // originales (que siguen siendo válidos). Si un item ya no existe en el state nuevo (p.ej. lo borraron),
+      // saltamos sin contar como fail.
+      const snapshot = pa.items.map(it => ({
+        it,
+        src: it.kind === "plan" ? plans.find(p => p.id === it.id) : avisos.find(a => a.id === it.id),
+      })).filter(x => x.src) as Array<{ it: { kind: "plan" | "aviso"; id: string }; src: PlanEntry | AvisoEntry }>;
       setPickAction(null); // el banner desaparece en cuanto se elige el día
-      let ok = 0, fail = 0, total = pa.items.length;
-      for (const it of pa.items) {
-        const src: PlanEntry | AvisoEntry | undefined = it.kind === "plan"
-          ? plans.find(p => p.id === it.id)
-          : avisos.find(a => a.id === it.id);
-        if (!src) continue;
+      let ok = 0, skip = 0, fail = 0;
+      for (const { it, src } of snapshot) {
         const off = (new Date(src.date + "T00:00:00").getDay() + 6) % 7; // 0=lun … 6=dom
         const dst = addDaysISO(dstMon, off);
-        const r = it.kind === "plan"
-          ? await copyPlanToDate(src as PlanEntry, dst, { silent: true })
-          : await copyAvisoToDate(src as AvisoEntry, dst, { silent: true });
-        if (r) ok++; else fail++;
+        try {
+          const r = it.kind === "plan"
+            ? await copyPlanToDate(src as PlanEntry, dst, { silent: true })
+            : await copyAvisoToDate(src as AvisoEntry, dst, { silent: true });
+          if (r) ok++;
+          else skip++; // fail silencioso = mismo profesional ya puesto, festivo con silent, etc.
+        } catch { fail++; }
       }
-      if (total === 0) alert("No había tarjetas visibles en la semana de origen.");
-      else alert(`✅ Copiadas ${ok} de ${total} tarjetas${fail ? ` · ${fail} saltadas (mismo profesional ya puesto)` : ""}.`);
+      const total = snapshot.length;
+      if (total === 0) alert(`No había tarjetas visibles en la semana origen (${formatDateLabel(srcMon)} → ${formatDateLabel(addDaysISO(srcMon, 6))}). Revisa los filtros activos.`);
+      else alert(`✅ Copiadas ${ok} de ${total} tarjetas${skip ? ` · ${skip} saltadas (ya existían o festivo)` : ""}${fail ? ` · ${fail} fallos` : ""}.`);
     }
   };
 
@@ -1132,7 +1140,7 @@ export default function MensualTab() {
         onDragOver={(e) => { e.preventDefault(); if (draggingCardRef.current) { const copy = e.altKey; e.dataTransfer.dropEffect = copy ? "copy" : "move"; if (dragOverDate !== f || dragOverCopy !== copy) { setDragOverDate(f); setDragOverCopy(copy); } } }}
         onDragLeave={() => { if (dragOverDate === f) setDragOverDate(null); }}
         onDrop={(e) => { e.preventDefault(); setDragOverDate(null); handleDrop(e, f); }}
-        onClick={(e) => { if (pickAction) { e.stopPropagation(); pickDay(f); } }}
+        onClick={(e) => { if (lpConsumeClick()) return; if (pickAction) { e.stopPropagation(); pickDay(f); } }}
       >
         <div className="font-black text-[11px] sm:text-[13px] text-gray-900 flex justify-between items-center gap-0.5 sm:gap-1">
           <span className={vd.adj ? "text-gray-400" : "text-gray-900"}>{day}{vd.monthTag && <span className="ml-0.5 text-[7px] sm:text-[8px] font-bold text-gray-500 align-top">{vd.monthTag}</span>}</span>
@@ -1359,7 +1367,7 @@ export default function MensualTab() {
       {pickAction && (() => {
         const txt = pickAction.mode === "single"
           ? <>📋 COPIAR <span className="text-amber-300">{pickAction.label}</span> — toca el DÍA destino (la original se queda)</>
-          : <>📅 COPIAR <span className="text-amber-300">{pickAction.label}</span> — toca un DÍA de la SEMANA destino</>;
+          : <>📅 COPIAR <span className="text-amber-300">SEMANA {pickAction.mode === "week" ? `${mondayOfISO(pickAction.refDate)} → ${addDaysISO(mondayOfISO(pickAction.refDate), 6)}` : ""} ({pickAction.items.length} tarjetas)</span> — toca un DÍA de la SEMANA destino (lun→lun, mar→mar…)</>;
         return (
           <div className="no-print fixed top-2 left-1/2 -translate-x-1/2 z-[80] max-w-[96vw] bg-gray-900 text-white rounded-full pl-4 pr-1.5 py-1.5 shadow-2xl border-2 border-amber-400 flex items-center gap-2">
             <span className="text-[11px] sm:text-sm font-black leading-tight truncate">{txt}</span>
