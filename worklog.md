@@ -2039,3 +2039,23 @@ Work Log:
 
 Stage Summary:
 - El bug "no inserta en Android" era un click sintético residual que abría el editor en vez del diálogo. Fixeado con un flag `lpSuppressClick` consumido por `lpConsumeClick()` en el onClick de la tarjeta. El flujo móvil ahora funciona end-to-end en Android real: long-press → diálogo persiste → elegir semana → tap día destino → copias creadas.
+
+---
+Task ID: 67
+Agent: main
+Task: "Las pantallas emergentes, en general no se van o tardan en irse, no sé cómo funciona. Yo pondría que al tocar fuera se cierren" — cierre consistente al tocar fuera en TODOS los modales.
+
+Work Log:
+- Inspección: 4 modales en MensualTab: diálogo copiar (z-70), editor nota turno (z-50), editor nota aviso (z-50), alta turno (z-50). Todos ya tenían `onClick` en el overlay para cerrar al tocar fuera, PERO en Android real el `onClick` a veces no se dispara tras un long-press (el click sintético se queda pillado) → el modal "no se va".
+- FIX: añadido helper `overlayClose(close)` que escucha `onPointerDown` en el overlay. Si el toque empieza EN el propio overlay (target === currentTarget, es decir fuera del contenido), cierra inmediatamente con `preventDefault`. `onPointerDown` es más fiable que `onClick` en Android/iOS porque se dispara nada más tocar, sin esperar al cycle completo pointerup→click. En PC funciona igual (pointerdown = mousedown).
+- Aplicado a los 4 modales: overlay con `onPointerDown={overlayClose(...)}`, contenido con `onPointerDown={e => e.stopPropagation()}` (preserva: tocar dentro NO cierra).
+- Commit 8a92900 → Vercel 200 (marker "TODA la semana" en chunk 408fdf7d3edb240d.js).
+- E2E PRODUCCIÓN (scripts/verify-67.sh):
+  * Editor nota turno: tap fuera → `modal_cerrado: true` ✓
+  * Alta turno (botón +): tap fuera → `modal_cerrado: true` ✓
+  * Diálogo copiar (Ctrl+click): tap fuera → `modal_cerrado: true` ✓
+  * Capturas: t67-editor-turno.png, t67-alta-turno.png, t67-dialogo-copiar.png
+- Regresión (verify-66c.sh): long-press → diálogo persiste → elegir "TODA la semana visible (4)" → banner → tap día 17 → "✅ Copiadas 3 de 4" → copias creadas mie 17, vie 19, sab 20 ✓ — el fix no rompe el flujo de copia.
+
+Stage Summary:
+- TODOS los modales de MensualTab (diálogo copiar, editor nota turno, editor nota aviso, alta turno) ahora se cierran al tocar fuera de forma fiable en Android/iPhone/PC usando `onPointerDown` en el overlay (no solo `onClick`). Tocar dentro del contenido sigue sin cerrarlos (stopPropagation en onPointerDown del contenido).
