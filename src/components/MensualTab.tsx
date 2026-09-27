@@ -87,6 +87,7 @@ export default function MensualTab() {
   const lpStart = useRef<{ x: number; y: number } | null>(null);
   const lpFired = useRef(false);
   const lpFiredAt = useRef(0); // timestamp en que el long-press disparó el diálogo (para suprimir el click espurio sobre el overlay)
+  const lpSuppressClick = useRef(false); // bandera robusta: el próximo click de la tarjeta se suprime (long-press en Android genera click sintético que abre el editor)
   const lpActive = useRef(false); // ¿long-press armado (dedo abajo, sin mover)?
   const [lpArmed, setLpArmed] = useState<string | null>(null); // tarjeta "armada": anillo ámbar mientras se mantiene
   const clearLP = () => {
@@ -105,10 +106,13 @@ export default function MensualTab() {
     lpTimer.current = setTimeout(() => {
       lpFired.current = true;
       lpFiredAt.current = Date.now();
+      lpSuppressClick.current = true; // el click sintético que viene será suprimido en onClick
       lpActive.current = false;
       setLpArmed(null);
       if (typeof navigator !== "undefined" && "vibrate" in navigator) { try { navigator.vibrate(60); } catch {} }
       open(); // setCopyPick(...) → mismo diálogo que Ctrl+click
+      // Seguro: si no llega ningún click en 1s, resetear igual (no dejamos el flag colgado)
+      setTimeout(() => { lpSuppressClick.current = false; }, 1000);
     }, LP_MS);
   };
   const lpPointerMove = (e: React.PointerEvent) => {
@@ -118,7 +122,13 @@ export default function MensualTab() {
   const lpPointerUp = (e: React.PointerEvent) => {
     clearLP();
     lpStart.current = null;
-    if (lpFired.current) { lpFired.current = false; e.preventDefault(); e.stopPropagation(); } // click sintético anulado
+    if (lpFired.current) { lpFired.current = false; e.preventDefault(); e.stopPropagation(); } // intento de anular click sintético (no siempre funciona en Android)
+  };
+  // El onClick de la tarjeta llama a esto PRIMERO: si el long-press disparó el diálogo,
+  // suprime el click sintético y devuelve true (el handler externo debe salir).
+  const lpConsumeClick = (): boolean => {
+    if (lpSuppressClick.current) { lpSuppressClick.current = false; return true; }
+    return false;
   };
   const lpPointerCancel = () => { clearLP(); lpStart.current = null; };
   useEffect(() => () => { if (lpTimer.current) clearTimeout(lpTimer.current); }, []);
@@ -1000,12 +1010,12 @@ export default function MensualTab() {
           node: (
           <div
             key={p.id}
-            onClick={(e) => { e.stopPropagation(); if (pickAction?.mode === "single" && pickAction.kind === "plan" && pickAction.id === p.id) return; if (pickAction) { pickDay(p.date); return; } if (e.ctrlKey || e.metaKey) { e.preventDefault(); setCopyPick({ kind: "plan", id: p.id, label: `${turnWord} · ${p.professionalAlias}`, date: p.date }); return; } openNoteEditor(p, sede, nombre); }}
+            onClick={(e) => { e.stopPropagation(); if (lpConsumeClick()) return; if (pickAction?.mode === "single" && pickAction.kind === "plan" && pickAction.id === p.id) return; if (pickAction) { pickDay(p.date); return; } if (e.ctrlKey || e.metaKey) { e.preventDefault(); setCopyPick({ kind: "plan", id: p.id, label: `${turnWord} · ${p.professionalAlias}`, date: p.date }); return; } openNoteEditor(p, sede, nombre); }}
             onPointerDown={lpPointerDown("plan", p.id, () => setCopyPick({ kind: "plan", id: p.id, label: `${turnWord} · ${p.professionalAlias}`, date: p.date }))}
             onPointerMove={lpPointerMove}
             onPointerUp={lpPointerUp}
             onPointerCancel={lpPointerCancel}
-            onContextMenu={(e) => { if (lpStart.current) e.preventDefault(); }} // long-press Android: sin menú del navegador
+            onContextMenu={(e) => { if (lpActive.current || lpSuppressClick.current || lpStart.current) e.preventDefault(); }} // long-press Android: sin menú del navegador
             draggable
             onDragStart={(e) => { if (lpActive.current || lpFired.current) { e.preventDefault(); return; } draggingCardRef.current = true; e.dataTransfer.setData("text/plain", JSON.stringify({ kind: "plan", id: p.id })); e.dataTransfer.effectAllowed = "copyMove"; }}
             onDragEnd={() => { draggingCardRef.current = false; setDragOverDate(null); }}
@@ -1057,7 +1067,7 @@ export default function MensualTab() {
           node: (
           <div
             key={`av-${a.id}`}
-            onClick={(e) => { e.stopPropagation(); if (pickAction?.mode === "single" && pickAction.kind === "aviso" && pickAction.id === a.id) return; if (pickAction) { pickDay(a.date); return; } if (e.ctrlKey || e.metaKey) { e.preventDefault(); setCopyPick({ kind: "aviso", id: a.id, label: `${reason}${avisoProAlias ? ` · ${avisoProAlias}` : ""}`, date: a.date }); return; } openAvisoNoteEditor(a); }}
+            onClick={(e) => { e.stopPropagation(); if (lpConsumeClick()) return; if (pickAction?.mode === "single" && pickAction.kind === "aviso" && pickAction.id === a.id) return; if (pickAction) { pickDay(a.date); return; } if (e.ctrlKey || e.metaKey) { e.preventDefault(); setCopyPick({ kind: "aviso", id: a.id, label: `${reason}${avisoProAlias ? ` · ${avisoProAlias}` : ""}`, date: a.date }); return; } openAvisoNoteEditor(a); }}
             onPointerDown={lpPointerDown("aviso", a.id, () => setCopyPick({ kind: "aviso", id: a.id, label: `${reason}${avisoProAlias ? ` · ${avisoProAlias}` : ""}`, date: a.date }))}
             onPointerMove={lpPointerMove}
             onPointerUp={lpPointerUp}
