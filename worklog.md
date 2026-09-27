@@ -2059,3 +2059,28 @@ Work Log:
 
 Stage Summary:
 - TODOS los modales de MensualTab (diálogo copiar, editor nota turno, editor nota aviso, alta turno) ahora se cierran al tocar fuera de forma fiable en Android/iPhone/PC usando `onPointerDown` en el overlay (no solo `onClick`). Tocar dentro del contenido sigue sin cerrarlos (stopPropagation en onPointerDown del contenido).
+
+---
+Task ID: 67b & 67c
+Agent: main
+Task: "Las semanas q las coja de lunes a domingo y no está copiando al darle en cualquier día, sale mensaje de copiadas 0 tarjetas" + "Ocurre también con PC" — bug lógico del modo semana.
+
+Work Log:
+- Hipótesis 1 (descartada): problema de touch en móvil. Julio reporta también en PC → es un bug lógico, no de eventos.
+- Causa raíz: `buildWeekItems` filtraba por `selectedSedes`/`selectedPros`. Si julio tiene un filtro restrictivo (p.ej. solo 1 sede/pro seleccionados), la semana origen puede tener la tarjeta visible pero el filtro excluye otras del mismo día → count puede salir bajo o 0. Pero más importante: **si el usuario ELIGIÓ una tarjeta, esa tarjeta DEBE estar en la semana copia** sin importar filtros.
+- FIX 1 (Task 67b, commit 42de072):
+  * Snapshot de los `src` ANTES del `load()` para que el 2º item no busque en state ya mutado por la 1ª copia.
+  * Distinguir `skip` (clash mismo pro, festivo) de `fail` (excepción).
+  * `lpConsumeClick()` en el `onClick` del td (para que el long-press en el día destino no bloquee el pickDay).
+  * Banner muestra "SEMANA YYYY-MM-DD → YYYY-MM-DD (N tarjetas)" + "lun→lun, mar→mar" explícito.
+- FIX 2 (Task 67c, commit 00cd6d7):
+  * `buildWeekItems(refDate, originId?, originKind?)` → la tarjeta origen SIEMPRE se incluye en la lista (incluso si no pasa el filtro), porque el usuario la eligió explícitamente. Las demás siguen respetando filtros.
+  * Nuevo alert específico cuando `ok === 0 && skip > 0`: "⚠️ No se copió ninguna: las N tarjetas ya existían en la semana destino (LUN ... → DOM ...). Borra primero las del destino o elige otra semana." Mucho más claro que "Copiadas 0 de N · N saltadas".
+- E2E PRODUCCIÓN:
+  * verify-67c.sh — Escenario "todas saltadas": botón muestra "(2)" (origen incluida) → copiar → alert "⚠️ No se copió ninguna: las 2 tarjetas ya existían en la semana destino (LUN 15/2/2027 → DOM 21/2/2027). Borra primero las del destino o elige otra semana." ✓
+  * verify-67c.sh — Escenario normal (destino vacío): "✅ Copiadas 3 de 4" + 3 copias creadas mie 17, vie 19, sab 20 ✓
+  * verify-66c.sh — Regresión móvil long-press: diálogo persiste, "TODA la semana visible (4)", banner, tap día 17, "Copiadas 3 de 4", 3 copias ✓
+  * Limpieza: 6 borradas en cada test, 0 restantes.
+
+Stage Summary:
+- El "Copiadas 0 tarjetas" se debía a dos cosas: (1) la tarjeta origen se filtraba si no pasaba el filtro restrictivo (ya arreglado: siempre se incluye), (2) cuando todas las copias chocan con tarjetas existentes en el destino, el mensaje no era claro (ya arreglado: alert específico que dice "ya existían, borra o elige otra semana"). Las semanas ya son lun-dom (mondayOfISO lleva a lunes; addDaysISO(mon,6) = domingo). Funciona en PC y móvil.
