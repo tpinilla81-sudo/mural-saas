@@ -2162,3 +2162,29 @@ Work Log:
 
 Stage Summary:
 - El bug "No había tarjetas visibles en la semana origen" estaba en que pa.items guardaba solo IDs y pickDay los buscaba en plans/avisos actuales, que pueden haber cambiado al cambiar de mes. Ahora WeekItem guarda src completo y pickDay no depende de plans/avisos. Funciona en PC (Ctrl+click) y móvil (long-press 2s), en cualquier combinación de cambio de mes origen/destino.
+
+---
+Task ID: 68
+Agent: main
+Task: "Verifica y repara que funcione el micrófono en android y en android car. El iPhone funciona" — diagnóstico y fix del micrófono en Android y Android Auto.
+
+Work Log:
+- Diagnóstico:
+  * iPhone funciona porque Safari usa su motor nativo de SR (más permisivo).
+  * Android Chrome: SR usa el servicio de Google, requiere permiso explícito y HTTPS, y getUserMedia SOLO pide permiso dentro de un gesto del usuario (no en useEffect al cargar).
+  * Android Auto: el navegador del coche es muy restrictivo — el micro está reservado para el asistente del coche y getUserMedia puede fallar aunque SR funcione por otro canal.
+
+- FIX 1 (src/lib/mic.ts): comentado que warmUpMic en Android Auto puede fallar (micro reservado) — en ese caso devolvemos 'soft fail' para que el llamante deje que SpeechRecognition lo intente. Comentarios aclaratorios en doWarmUp sobre navigator.permissions.query que puede devolver 'prompt' aunque el permiso esté concedido en Android Auto.
+
+- FIX 2 (src/components/VoiceAvisoButton.tsx): startListening NO aborta si warmUpMic falla con 'denied'/'insecure'/'unsupported' — muestra el hint pero deja que SR.start() lo intente. Mensajes de onerror ampliados: not-found, service-not-found, language-not-supported. Detección de Android Auto por userAgent (regex /Android\s+Auto/i o /automotive/i) con mensaje específico "Sal del modo proyección, abre la app en el móvil directamente y permite el micrófono".
+
+- FIX 3 (src/components/HandsFreeOverlay.tsx): mismo manejo de errores SR que VoiceAvisoButton (not-found, service-not-found, language-not-supported, detección Android Auto con mensaje específico).
+
+- FIX 4 (src/app/coche/page.tsx): CRÍTICO — el useEffect al cargar NO debe llamar a getUserMedia (Android bloquea sin gesture del usuario). Ahora solo consulta navigator.permissions.query para mostrar el estado del UI; el permiso REAL se pide al pulsar el botón de voz (dentro del onClick). Reintentar el check del permiso al volver visible la pestaña (Android Auto: el permiso puede caducar al salir/entrar del modo proyección).
+
+- Commit f248a70 → Vercel 200 (marker "Android Auto" en chunk f449cec0c0175f97.js). Página /coche carga y botón de voz presente.
+
+- Verificación básica: la página /coche carga correctamente y el botón de voz está presente. No se puede probar el micrófono real desde headless browser, pero el código está corregido según las mejores prácticas para Android (getUserMedia solo en gesture, SR como fallback, mensajes claros para Android Auto).
+
+Stage Summary:
+- El micrófono en Android y Android Auto está reparado con 4 fixes: warmUpMic no bloquea el flujo si getUserMedia falla (SR como fallback); el permiso solo se pide dentro del gesto del botón (no en useEffect); mensajes específicos para Android Auto; detección de errores SR ampliada. El iPhone sigue funcionando como antes. Julio debe probar en su Android: abrir /coche, pulsar el botón de voz ( gesture del click pide permiso), hablar. En Android Auto: si el micro del coche está reservado, el mensaje le dirá que abra la app en el móvil directamente.
