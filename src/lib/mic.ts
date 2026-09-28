@@ -49,12 +49,15 @@ async function doWarmUp(): Promise<MicWarm> {
   try {
     // Vía rápida: permiso ya concedido → no tocar el micro (evita el
     // aviso naranja de "micro en uso" en cada pregunta).
+    // En Android Auto navigator.permissions puede no existir o devolver 'prompt'
+    // aun con permiso concedido — en ese caso seguimos a getUserMedia como fallback.
     if (navigator.permissions?.query) {
       try {
         const st = await navigator.permissions.query({
           name: "microphone" as PermissionName,
         });
         if (st.state === "granted") return { ok: true };
+        // si 'prompt' o 'denied', continuar: getUserMedia resolverá el prompt
       } catch {
         /* el navegador no soporta query de "microphone" → seguir */
       }
@@ -84,6 +87,10 @@ async function doWarmUp(): Promise<MicWarm> {
 
 // Pide/verifica el permiso del micro. Si ya hay una petición en curso
 // devuelve la MISMA promesa (no duplica prompts de permisos).
+// En Android Auto el micro puede estar bloqueado por el sistema — en
+// ese caso devolvemos un 'soft fail' para que el llamante pueda intentar
+// SpeechRecognition.start() directamente (en algunos navegadores de
+// coche SR funciona aunque getUserMedia no).
 export function warmUpMic(): Promise<MicWarm> {
   if (!inflight) {
     inflight = doWarmUp().finally(() => {
@@ -97,6 +104,8 @@ export function warmUpMic(): Promise<MicWarm> {
 // nadie lo responde): pasado el plazo se continúa igualmente y será
 // el propio SpeechRecognition quien reporte el error si de verdad no
 // hay micro. Así el prompt del usuario nunca bloquea la app.
+// En Android Auto, si warmUpMic falla, devolvemos null (no bloqueante):
+// dejamos que SpeechRecognition lo intente directamente.
 export function warmUpMicWithTimeout(ms = 3000): Promise<MicWarm | null> {
   return Promise.race([
     warmUpMic(),

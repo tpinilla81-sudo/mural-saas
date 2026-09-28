@@ -50,13 +50,42 @@ function CarScreen() {
     if (status === "unauthenticated") window.location.href = "/";
   }, [status]);
 
-  // ── MICRO: pedir permiso automáticamente al abrir el Modo Coche ──
-  // Así el prompt sale nada más entrar (una sola vez) y al pulsar el
-  // botón de voz el micro ya está activado.
+  // ── MICRO: pedir permiso al abrir el Modo Coche ──
+  // IMPORTANTE: en Android Chrome, getUserMedia SOLO pide permiso si se llama
+  // DENTRO de un gesto del usuario (un click). Si lo llamamos en un useEffect
+  // al cargar, Android bloquea sin mostrar el prompt. Por eso solo
+  // "comprobamos" el estado aquí; el permiso real se pide al pulsar el botón.
+  // En iPhone y PC esto funciona en ambos casos.
   useEffect(() => {
     if (status !== "authenticated") return;
-    void warmUpMic().then(w => setMicState(w.ok ? "ok" : "blocked"));
+    // Solo consultar el estado del permiso (sin pedirlo) para mostrar el UI
+    if (navigator.permissions?.query) {
+      try {
+        navigator.permissions.query({ name: "microphone" as PermissionName })
+          .then(st => setMicState(st.state === "granted" ? "ok" : "blocked"))
+          .catch(() => setMicState("checking"));
+      } catch { setMicState("checking"); }
+    } else {
+      // Sin API de permisos: asumir OK, el botón pedirá permiso al pulsar
+      setMicState("ok");
+    }
   }, [status]);
+
+  // Reintentar el permiso del micro cuando la pestaña vuelve a estar visible
+  // (en Android Auto el permiso puede caducar al salir/entrar del modo proyección).
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    const onVis = () => {
+      if (document.visibilityState === "visible" && micState === "blocked" && navigator.permissions?.query) {
+        try {
+          navigator.permissions.query({ name: "microphone" as PermissionName })
+            .then(st => setMicState(st.state === "granted" ? "ok" : "blocked"));
+        } catch {}
+      }
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, [status, micState]);
 
   // Reloj (tick cada 20 s)
   useEffect(() => {

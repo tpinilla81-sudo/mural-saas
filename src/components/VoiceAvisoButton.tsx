@@ -320,13 +320,14 @@ export function VoiceAvisoModal({ onClose, onSaved, sedes, professionals, contex
     if (!SR) { setSupport("no"); return; }
     setMicError("");
     finalRef.current = "";
-    // ANDROID: activar el permiso del micro ANTES del reconocimiento
-    // (el gesto fue el tap en el botón 🎙️; sin esto Chrome falla con
-    // not-allowed y a veces ni muestra el prompt).
+    // ANDROID / Android Auto: calentar el micro con getUserMedia ANTES del
+    // reconocimiento. Si warmUp falla por 'denied' o 'insecure' o 'unsupported',
+    // NO abortamos: dejamos que SpeechRecognition.start() lo intente. En Android
+    // Auto getUserMedia puede fallar (micro reservado) pero SR funcionar.
     const w = await warmUpMicWithTimeout(2500);
     if (w && !w.ok && (w.code === "denied" || w.code === "insecure" || w.code === "unsupported")) {
-      setMicError(w.hint + " También puedes escribir el aviso abajo.");
-      return;
+      // Mostrar hint pero NO abortar: SR puede tener su propio permiso
+      setMicError(w.hint + " Si no funciona, escribe el aviso abajo.");
     }
     try {
       const rec = new SR();
@@ -345,13 +346,20 @@ export function VoiceAvisoModal({ onClose, onSaved, sedes, professionals, contex
       };
       rec.onerror = (e: { error: string }) => {
         if (e.error === "not-allowed" || e.error === "service-not-allowed") {
-          setMicError("Micrófono bloqueado. Toca el candado 🔒 de la barra de dirección → Permisos → Micrófono → Permitir, o escribe el aviso.");
+          // Mensaje específico para Android Auto: el micro del coche puede estar reservado
+          const ua = (typeof navigator !== "undefined" && navigator.userAgent) || "";
+          const isAndroidAuto = /Android\s+Auto/i.test(ua) || /automotive/i.test(ua);
+          setMicError(isAndroidAuto
+            ? "Micrófono bloqueado en Android Auto. Sal del modo proyección, abre la app en el móvil directamente y permite el micrófono (candado 🔒 → Permisos), o escribe el aviso."
+            : "Micrófono bloqueado. Toca el candado 🔒 de la barra de dirección → Permisos → Micrófono → Permitir, o escribe el aviso.");
         } else if (e.error === "no-speech") {
           setMicError("No se ha oído nada. Pulsa de nuevo y habla.");
         } else if (e.error === "audio-capture") {
           setMicError("No se detecta micrófono en este dispositivo.");
         } else if (e.error === "network") {
           setMicError("El reconocimiento por voz necesita internet. Revisa la conexión.");
+        } else if (e.error === "not-found" || e.error === "service-not-found" || e.error === "language-not-supported") {
+          setMicError("El servicio de voz no está disponible en este navegador. Prueba en Chrome estándar o escribe el aviso.");
         } else {
           setMicError("Error del micrófono: " + e.error);
         }

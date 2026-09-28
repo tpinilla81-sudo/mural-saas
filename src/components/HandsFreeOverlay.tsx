@@ -220,13 +220,21 @@ export default function HandsFreeOverlay({
       rec.onerror = (e: { error: string }) => {
         if (e.error === "not-allowed" || e.error === "service-not-allowed") {
           abortRef.current = true;
-          setFatal("Micrófono bloqueado. Toca el candado 🔒 en la barra de dirección → Permisos → Micrófono → Permitir, y vuelve a pulsar el botón de voz.");
+          // Mensaje específico para Android Auto: el micro del coche puede estar reservado
+          const ua = (typeof navigator !== "undefined" && navigator.userAgent) || "";
+          const isAndroidAuto = /Android\s+Auto/i.test(ua) || /automotive/i.test(ua);
+          setFatal(isAndroidAuto
+            ? "Micrófono bloqueado en Android Auto. Sal del modo proyección, abre la app en el móvil directamente y permite el micrófono (candado 🔒 → Permisos)."
+            : "Micrófono bloqueado. Toca el candado 🔒 en la barra de dirección → Permisos → Micrófono → Permitir, y vuelve a pulsar el botón de voz.");
         } else if (e.error === "audio-capture") {
           abortRef.current = true;
           setFatal("No se detecta micrófono en este dispositivo.");
         } else if (e.error === "network") {
           abortRef.current = true;
           setFatal("La voz necesita internet (servicio de Google). Revisa la conexión y vuelve a pulsar.");
+        } else if (e.error === "not-found" || e.error === "service-not-found" || e.error === "language-not-supported") {
+          abortRef.current = true;
+          setFatal("El servicio de reconocimiento de voz no está disponible en este dispositivo/navegador. Prueba en Chrome estándar o en el móvil directamente.");
         }
         // "no-speech" / "aborted": se gestionan en onend (reintento)
       };
