@@ -71,9 +71,13 @@ export default function MensualTab() {
   // «SOLO esta» o «TODA la semana visible» y 3) tocas el día destino (o la semana destino).
   // MOVER sigue como siempre: arrastrando.
   type CopyPick = { kind: "plan" | "aviso"; id: string; label: string; date: string; weekDates: string[] };
+  // PickAction.week guarda los src completos (PlanEntry/AvisoEntry) en el momento de abrir el diálogo,
+  // para no depender de buscarlos en plans/avisos al pegar (que pueden haber cambiado si el usuario
+  // cambió de mes y el mes origen ya no está cargado).
+  type WeekItem = { kind: "plan" | "aviso"; id: string; src: PlanEntry | AvisoEntry };
   type PickAction =
     | { mode: "single"; kind: "plan" | "aviso"; id: string; label: string }
-    | { mode: "week"; refDate: string; weekDates: string[]; label: string; items: Array<{ kind: "plan" | "aviso"; id: string }> };
+    | { mode: "week"; refDate: string; weekDates: string[]; label: string; items: WeekItem[] };
   const [copyPick, setCopyPick] = useState<CopyPick | null>(null);
   const [pickAction, setPickAction] = useState<PickAction | null>(null);
 
@@ -781,28 +785,29 @@ export default function MensualTab() {
   // que contiene refDate. La tarjeta origen SIEMPRE se incluye (la eligió el usuario).
   // FALLBACK: si los filtros restrictivos vacían la lista, devolver TODAS las tarjetas visibles
   // de esa fila (sin filtrar) — porque julio ve la tarjeta en pantalla y quiere poder copiarla.
-  const buildWeekItems = (refDate: string, weekDates: string[], originId?: string, originKind?: "plan" | "aviso"): Array<{ kind: "plan" | "aviso"; id: string }> => {
-    const items: Array<{ kind: "plan" | "aviso"; id: string }> = [];
+  // Devuelve WeekItem[] (con src completo) para que pickDay no dependa de plans/avisos al pegar.
+  const buildWeekItems = (refDate: string, weekDates: string[], originId?: string, originKind?: "plan" | "aviso"): WeekItem[] => {
+    const items: WeekItem[] = [];
     const seen = new Set<string>();
     // 1) Tarjeta origen SIEMPRE (aunque no pase filtros)
     if (originId && originKind) {
       const src = originKind === "plan" ? plans.find(p => p.id === originId) : avisos.find(a => a.id === originId);
-      if (src) { items.push({ kind: originKind, id: originId }); seen.add(originId); }
+      if (src) { items.push({ kind: originKind, id: originId, src }); seen.add(originId); }
     }
     // 2) Tarjetas visibles de la fila (con filtros activos)
     for (const f of weekDates) {
       plans.filter(p => p.date === f && selectedSedes.has(p.sedeId) && selectedPros.has(p.professionalAlias) && !seen.has(p.id))
-        .forEach(p => { items.push({ kind: "plan", id: p.id }); seen.add(p.id); });
+        .forEach(p => { items.push({ kind: "plan", id: p.id, src: p }); seen.add(p.id); });
       avisos.filter(a => a.date === f && selectedSedes.has(a.sedeId) && (!a.professional?.alias || selectedPros.has(a.professional.alias)) && !seen.has(a.id))
-        .forEach(a => { items.push({ kind: "aviso", id: a.id }); seen.add(a.id); });
+        .forEach(a => { items.push({ kind: "aviso", id: a.id, src: a }); seen.add(a.id); });
     }
     // 3) FALLBACK: si solo está la origen (o nada), añadir TODAS las tarjetas reales de la fila
     //    sin aplicar filtros de sede/pro (julio las ve en pantalla, las quiere copiar).
     if (items.length <= 1) {
-      const allInRow: Array<{ kind: "plan" | "aviso"; id: string }> = [];
+      const allInRow: WeekItem[] = [];
       for (const f of weekDates) {
-        plans.filter(p => p.date === f).forEach(p => allInRow.push({ kind: "plan", id: p.id }));
-        avisos.filter(a => a.date === f).forEach(a => allInRow.push({ kind: "aviso", id: a.id }));
+        plans.filter(p => p.date === f).forEach(p => allInRow.push({ kind: "plan", id: p.id, src: p }));
+        avisos.filter(a => a.date === f).forEach(a => allInRow.push({ kind: "aviso", id: a.id, src: a }));
       }
       for (const x of allInRow) {
         if (!seen.has(x.id)) { items.push(x); seen.add(x.id); }
@@ -935,23 +940,23 @@ export default function MensualTab() {
     } else {
       // mode === "week" — la semana origen es la FILA VISUAL (lun→dom) capturada al abrir el diálogo.
       // La semana destino es la FILA VISUAL del día tocado (NO la semana ISO calculada por fecha).
+      // Los src se guardaron completos en pa.items al abrir el diálogo (no dependen de plans/avisos
+      // actuales, que pueden haber cambiado si el usuario cambió de mes para pegar).
       const srcWeek = pa.weekDates;
       const dstWeek = weekRowDatesOf(targetDate);
       if (srcWeek.length !== 7 || dstWeek.length !== 7) { alert("No pude identificar la semana visual. Prueba otra vez."); setPickAction(null); return; }
       if (srcWeek[0] === dstWeek[0]) { alert("Toca una semana DISTINTA a la de origen."); return; }
-      const snapshot = pa.items.map(it => ({
-        it,
-        src: it.kind === "plan" ? plans.find(p => p.id === it.id) : avisos.find(a => a.id === it.id),
-      })).filter(x => x.src) as Array<{ it: { kind: "plan" | "aviso"; id: string }; src: PlanEntry | AvisoEntry }>;
+      const snapshot = pa.items; // ya tienen src completo, no hace falta buscar en plans/avisos
       setPickAction(null);
       let ok = 0, skip = 0, fail = 0;
-      for (const { it, src } of snapshot) {
+      for (const item of snapshot) {
+        const src = item.src;
         // Índice del día dentro de la fila origen (0=lun … 6=dom)
         const off = srcWeek.indexOf(src.date);
         if (off < 0) { fail++; continue; }
         const dst = dstWeek[off];
         try {
-          const r = it.kind === "plan"
+          const r = item.kind === "plan"
             ? await copyPlanToDate(src as PlanEntry, dst, { silent: true })
             : await copyAvisoToDate(src as AvisoEntry, dst, { silent: true });
           if (r) ok++;
