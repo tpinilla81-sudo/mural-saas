@@ -2132,3 +2132,33 @@ Work Log:
 
 Stage Summary:
 - El botón "TODA la semana visible" ahora nunca muestra "(0)" con el fallback: si los filtros restrictivos vacían la lista, se añaden todas las tarjetas reales de la fila visual. Julio ve las tarjetas en pantalla y siempre puede copiarlas. Funciona en PC (Ctrl+click) y móvil (long-press 2s).
+
+---
+Task ID: 67f
+Agent: main
+Task: "CUANDO VOY A PEGAR LA SEMANA COPIADA, ESTO DICE No había tarjetas visibles en la semana origen (LUN 28/9/2026 → DOM 4/10/2026). Revisa los filtros activos." — bug raíz encontrado y arreglado.
+
+Work Log:
+- CAUSA RAÍZ (confirmada con la fecha exacta que dio julio): julio copia desde una semana que cruza meses (28/9 → 4/10, semana lun-dom que mezcla septiembre y octubre). Está viendo septiembre. Abre diálogo → elige "TODA la semana visible (N)" → pa.items se setea con los IDs de las tarjetas de esa fila. Luego cambia a octubre para pegar (load() recarga sep+oct+nov). Al tocar día destino, pickDay hacía:
+    `const src = plans.find(p => p.id === it.id)`  // buscar en plans actuales
+  Pero si la semana origen tenía tarjetas en septiembre y julio cambió a un mes donde septiembre ya no se carga, ese find devuelve undefined → se filtran → `snapshot.length === 0` → "No había tarjetas visibles en la semana origen".
+  En el caso de julio (28/9 → 4/10): al cambiar a octubre, load() carga sep+oct+nov → septiembre SÍ se carga, PERO al cambiar a noviembre o más allá, septiembre no se cargaría. Y si julio copiaba desde una semana totalmente en septiembre y pegaba en noviembre, todos los items se perdían.
+  Incluso en su caso concreto: al cambiar a octubre, plans se actualiza con la respuesta del API. Si el ID de algún plan cambió entre load() (loадки anterior y nueva) o si el plan se eliminó, el find falla.
+- FIX: `WeekItem` ahora guarda el `src` COMPLETO (PlanEntry | AvisoEntry) en el momento de abrir el diálogo. `buildWeekItems` devuelve WeekItem[] con src completo. `pickDay` usa `pa.items` directamente (no busca en plans/avisos) → nunca falla por cambios de mes o recargas.
+  - Type: `WeekItem = { kind: "plan" | "aviso"; id: string; src: PlanEntry | AvisoEntry }`
+  - `buildWeekItems`: cada push incluye `src: p` (objeto completo), no solo `id: p.id`.
+  - `pickDay`: `for (const item of snapshot) { const src = item.src; ... }` — usa el src guardado, no `plans.find()`.
+- Commit 54609be → Vercel 200.
+- E2E PRODUCCIÓN — caso julio exacto (scripts/verify-67f.sh):
+  * Tarjeta en 2/10 (vie de semana 28/9-4/10), vista en septiembre
+  * Botón "📅 TODA la semana visible (10)" (10 = todos los planes reales de la fila con fallback)
+  * Banner "📅 COPIAR SEMANA 2026-09-28 → 2026-10-04 (10 tarjetas)"
+  * Cambiar a octubre 2026 (load recarga sep+oct+nov)
+  * Click en día 12/10 (lun de semana destino 12-18 oct)
+  * "✅ Copiadas 3 de 10 tarjetas · 7 saltadas"
+  * Copia creada en vie 16/10 ✓ (copia_vie_16: 1) — antes del fix diría "No había tarjetas"
+  * Limpieza: 5 borradas.
+- Regresión verify-67d.sh (1ª fila abril 2027 mezcla meses): "✅ Copiadas 2 de 2" ✓, copias en mar 6 y vie 9 abr ✓
+
+Stage Summary:
+- El bug "No había tarjetas visibles en la semana origen" estaba en que pa.items guardaba solo IDs y pickDay los buscaba en plans/avisos actuales, que pueden haber cambiado al cambiar de mes. Ahora WeekItem guarda src completo y pickDay no depende de plans/avisos. Funciona en PC (Ctrl+click) y móvil (long-press 2s), en cualquier combinación de cambio de mes origen/destino.
