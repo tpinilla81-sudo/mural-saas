@@ -2292,3 +2292,27 @@ Work Log:
 
 Stage Summary:
 - Al imprimir PDF: las tarjetas salen con sus colores de sede (mismo que la app). No sale logo MURAL, ni fecha/hora de impresión, ni instrucciones, ni URL, ni número de página. Solo queda el mes y el año en letra pequeña arriba y la tabla del calendario. El @page margin:0 quita el espacio del navegador para headers/footers; print-color-adjust:exact fuerza los colores de fondo. Si en algún navegador aún salen headers/footers, julio debe desmarcar "Headers and footers" en el diálogo de impresión (Chrome: Más ajustes → Sin cabeceras y bordes).
+
+---
+Task ID: 72 & 72b
+Agent: main
+Task: "Punto 1: la palabra QUIRÓFANO que está en negro y rojo, que aparezca más nítida, no difuminada. Punto 2: después de copiar tarjetas pincho en otro día y sale pegar pero no las pega."
+
+Work Log Punto 1 (QUIRÓFANO nítido):
+- El CSS .led-red tenía text-shadow: 0 0 1px #ff0000, 0 0 4px #ff0000, 0 0 9px rgba(255,0,0,0.85) + animación ledGlow 2.4s que creaba el efecto "LED glow" difuminado.
+- Cambiado a text-shadow: 0 1px 1px rgba(0,0,0,0.9) (sombra negra sutil, sin glow, sin animación). La palabra QUIRÓFANO ahora se lee nítida.
+- Verificado CSS en producción: led-red{color:#ff2626;...text-shadow:0 1px 1px #000000e6;...}
+
+Work Log Punto 2 (pegar no pega):
+- Bug 1 (plansRef): copyPlanToDate usaba `plans` de la closure del render. Al pegar varias tarjetas seguidas, la 2ª no veía la 1ª (creada por la 1ª copyPlanToDate que hace load()). Añadido plansRef sincronizado con state plans, y copyPlanToDate usa plansRef.current para el clash.
+- Bug 2 (RAÍZ, Task 72b): en modo silent (pegar), si el clash era del MISMO profesional (ya tiene ese turno ese día), copyPlanToDate devolvía false (saltar). Por eso julio veía "Copiadas 1 de 2 · 1 saltada" — la 2ª tarjeta se saltaba porque ya existía en el destino.
+- Fix: en modo silent, si clash mismo profesional → REEMPLAZAR (DELETE la existente + POST la nueva). Antes: "Copiadas 1 de 2 · 1 saltada". Ahora: "Copiadas 2 de 2".
+- Commit fa88646 (Task 72: led-red nítido + plansRef) → 665a590 (Task 72b: reemplazar en silent mismo pro).
+- E2E PRODUCCIÓN — caso julio real (pegar 2 VIT/AS en semana destino que YA tiene las mismas):
+  * Antes del fix: "✅ Copiadas 1 de 2 tarjetas · 1 saltadas" — solo 1 se pegaba.
+  * Después del fix: "✅ Copiadas 2 de 2 tarjetas" — ambas se pegan (reemplazan las existentes). copia_17=1, copia_19=1 ✓
+  * Test en semana vacía (julio 2027): "✅ Copiadas 2 de 2" ✓ (sin clash, comportamiento normal)
+
+Stage Summary:
+- Punto 1: QUIRÓFANO ahora nítido (sin glow difuminado, sombra negra sutil).
+- Punto 2: al pegar, las tarjetas se pegan aunque ya existan en el destino (reemplazan). El alert "saltada" ya no aparece para clashes del mismo profesional — ahora se reemplazan.
