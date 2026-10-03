@@ -66,24 +66,63 @@ export default function MensualTab() {
   // 📋 Copiar tarjeta a otro día (editor de nota; el arrastre en PC usa copyPlanToDate/copyAvisoToDate)
   const [planCopyDate, setPlanCopyDate] = useState("");
   const [avisoCopyDate, setAvisoCopyDate] = useState("");
-  // 📋 COPIAR con Ctrl+click en la tarjeta (PC) o manteniéndola PULSADA 2 segundos
-  // (móvil/tablet, petición de julio): 1) sale un DIÁLOGO de copiar, 2) eliges
-  // «SOLO esta» o «TODA la semana visible» y 3) tocas el día destino (o la semana destino).
-  // MOVER sigue como siempre: arrastrando.
-  type CopyPick = { kind: "plan" | "aviso"; id: string; label: string; date: string; weekDates: string[] };
-  // PickAction.week guarda los src completos (PlanEntry/AvisoEntry) en el momento de abrir el diálogo,
-  // para no depender de buscarlos en plans/avisos al pegar (que pueden haber cambiado si el usuario
-  // cambió de mes y el mes origen ya no está cargado).
+  // ── Selección estilo Excel (sin diálogo emergente) ──
+  // selection: tarjetas seleccionadas (clave `kind:id`). clipboard: items cortados/copiados.
+  // Click izq en tarjeta: selecciona (Ctrl/Shift añade). Click der: menú Cortar/Copiar/Pegar/Semana.
+  // Click izq en celda destino con clipboard: pega (mantiene día de la semana).
+  type SelKey = string; // `plan:${id}` | `aviso:${id}`
   type WeekItem = { kind: "plan" | "aviso"; id: string; src: PlanEntry | AvisoEntry };
-  type PickAction =
-    | { mode: "single"; kind: "plan" | "aviso"; id: string; label: string }
-    | { mode: "week"; refDate: string; weekDates: string[]; label: string; items: WeekItem[] }
-    | { mode: "many"; refDate: string; weekDates: string[]; label: string; items: WeekItem[] };
-  const [copyPick, setCopyPick] = useState<CopyPick | null>(null);
-  const [pickAction, setPickAction] = useState<PickAction | null>(null);
-  // Estado del sub-panel "VARIAS (elige)": set de IDs seleccionados y visibilidad.
-  const [pickManyOpen, setPickManyOpen] = useState(false);
-  const [pickManySel, setPickManySel] = useState<Set<string>>(new Set());
+  type Clipboard = { mode: "copy" | "cut"; items: WeekItem[]; refDate: string; weekDates: string[] };
+  const [selection, setSelection] = useState<Set<SelKey>>(new Set());
+  const [clipboard, setClipboard] = useState<Clipboard | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; cardKey?: SelKey; cardKind?: "plan" | "aviso"; cardId?: string; cellDate?: string } | null>(null);
+  const selKey = (kind: "plan" | "aviso", id: string): SelKey => `${kind}:${id}`;
+  const selHas = (kind: "plan" | "aviso", id: string) => selection.has(selKey(kind, id));
+  const selToggle = (kind: "plan" | "aviso", id: string) => {
+    const k = selKey(kind, id);
+    const n = new Set(selection);
+    if (n.has(k)) n.delete(k); else n.add(k);
+    setSelection(n);
+  };
+  const selClear = () => setSelection(new Set());
+  // Pegar el portapapeles en el día tocado (manteniendo lun→lun, mar→mar con la fila visual origen)
+  const pasteTo = async (targetDate: string) => {
+    const cb = clipboard;
+    if (!cb) return;
+    const srcWeek = cb.weekDates;
+    const dstWeek = weekRowDatesOf(targetDate);
+    if (srcWeek.length !== 7 || dstWeek.length !== 7) { alert("No pude identificar la semana visual. Prueba otra vez."); return; }
+    if (srcWeek[0] === dstWeek[0]) { alert("Pega en una semana DISTINTA a la de origen."); return; }
+    let ok = 0, skip = 0, fail = 0;
+    const moved = new Set<string>();
+    for (const it of cb.items) {
+      const src = it.src;
+      const off = srcWeek.indexOf(src.date);
+      if (off < 0) { fail++; continue; }
+      const dst = dstWeek[off];
+      try {
+        if (cb.mode === "copy") {
+          const r = it.kind === "plan"
+            ? await copyPlanToDate(src as PlanEntry, dst, { silent: true })
+            : await copyAvisoToDate(src as AvisoEntry, dst, { silent: true });
+          if (r) ok++; else skip++;
+        } else { // cut: mover (si es plan) y para aviso también
+          const r = it.kind === "plan"
+            ? await movePlanToDate(src as PlanEntry, dst)
+            : await moveAvisoToDate(src as AvisoEntry, dst);
+          if (r) { ok++; moved.add(it.id); } else fail++;
+        }
+      } catch { fail++; }
+    }
+    const total = cb.items.length;
+    if (cb.mode === "cut") {
+      setClipboard(null);
+      setSelection(new Set());
+    }
+    if (total === 0) alert("No hay tarjetas en el portapapeles.");
+    else if (ok === 0 && skip > 0) alert(`⚠️ No se pegó ninguna: las ${skip} tarjetas ya existían en la semana destino (${formatDateLabel(dstWeek[0])} → ${formatDateLabel(dstWeek[6])}).`);
+    else alert(`${cb.mode === "cut" ? "✂️ Movidas" : "✅ Copiadas"} ${ok} de ${total} tarjeta${total === 1 ? "" : "s"}${skip ? ` · ${skip} saltadas` : ""}${fail ? ` · ${fail} fallos` : ""}.`);
+  };
 
   // 📱 Long-press táctil: MANTENER PULSADA la tarjeta 2 s → mismo diálogo 📋 COPIAR.
   // Usa POINTER events (no touch) porque en Android un div `draggable` dispara
@@ -104,8 +143,8 @@ export default function MensualTab() {
     setLpArmed(null);
   };
   const lpPointerDown = (kind: "plan" | "aviso", id: string, open: () => void) => (e: React.PointerEvent) => {
-    if (e.pointerType !== "touch") return; // solo táctil (ratón usa Ctrl+click)
-    if (copyPick || pickAction) return; // ya hay diálogo o modo copiar activo: no rearmar
+    if (e.pointerType !== "touch") return; // solo táctil (ratón usa botón derecho para el menú)
+    if (clipboard) return; // hay portapapeles: no rearmar (el tap pega)
     lpStart.current = { x: e.clientX, y: e.clientY };
     lpFired.current = false;
     lpActive.current = true;
@@ -186,13 +225,27 @@ export default function MensualTab() {
     return () => mq.removeEventListener("change", apply);
   }, []);
 
-  // Esc cancela el diálogo de copiar y el modo "toca el día destino"
+  // Esc cancela selección, portapapeles y menú contextual
   useEffect(() => {
-    if (!pickAction && !copyPick) return;
-    const h = (e: KeyboardEvent) => { if (e.key === "Escape") { setPickAction(null); setCopyPick(null); } };
+    if (!clipboard && selection.size === 0 && !contextMenu) return;
+    const h = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setSelection(new Set());
+        setClipboard(null);
+        setContextMenu(null);
+      }
+    };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
-  }, [pickAction, copyPick]);
+  }, [clipboard, selection, contextMenu]);
+
+  // Cerrar el menú contextual con cualquier click fuera de él
+  useEffect(() => {
+    if (!contextMenu) return;
+    const h = () => setContextMenu(null);
+    window.addEventListener("click", h);
+    return () => window.removeEventListener("click", h);
+  }, [contextMenu]);
 
   // ── Deep-link desde NOTIFICACIÓN: /?fecha=…&card=…&t=plan|aviso ──
   // Al tocar una push, la app abre MENSUAL en la fecha del aviso y despliega
@@ -925,55 +978,7 @@ export default function MensualTab() {
     if (await copyAvisoToDate(src, avisoCopyDate)) setAvisoCopyDate("");
   };
 
-  // ── Paso final del COPIAR con Ctrl+click / long-press: el usuario confirmó en el diálogo
-  // y ahora toca un DÍA destino (celda del día, día completo o cualquier tarjeta de ese día).
-  // Si pickAction.mode === "single" copia ESA tarjeta. Si === "week" copia TODAS las visibles
-  // de la semana origen a la semana destino (manteniendo lun→lun, mar→mar, …).
-  const pickDay = async (targetDate: string) => {
-    const pa = pickAction;
-    if (!pa) return;
-    if (pa.mode === "single") {
-      const src: PlanEntry | AvisoEntry | undefined = pa.kind === "plan"
-        ? plans.find(p => p.id === pa.id)
-        : avisos.find(a => a.id === pa.id);
-      if (!src) { setPickAction(null); return; }
-      if (src.date === targetDate) { alert("Toca un día DISTINTO al de la tarjeta."); return; }
-      setPickAction(null);
-      if (pa.kind === "plan") await copyPlanToDate(src as PlanEntry, targetDate);
-      else await copyAvisoToDate(src as AvisoEntry, targetDate);
-    } else {
-      // mode === "week" | "many" — la semana origen es la FILA VISUAL (lun→dom) capturada al
-      // abrir el diálogo. La semana destino es la FILA VISUAL del día tocado (NO la semana ISO
-      // calculada por fecha). Los src se guardaron completos en pa.items al abrir el diálogo
-      // (no dependen de plans/avisos actuales, que pueden haber cambiado si el usuario cambió
-      // de mes para pegar). En modo "many" solo se copian los items que el usuario eligió.
-      const srcWeek = pa.weekDates;
-      const dstWeek = weekRowDatesOf(targetDate);
-      if (srcWeek.length !== 7 || dstWeek.length !== 7) { alert("No pude identificar la semana visual. Prueba otra vez."); setPickAction(null); return; }
-      if (srcWeek[0] === dstWeek[0]) { alert("Toca una semana DISTINTA a la de origen."); return; }
-      const snapshot = pa.items; // ya tienen src completo, no hace falta buscar en plans/avisos
-      setPickAction(null);
-      let ok = 0, skip = 0, fail = 0;
-      for (const item of snapshot) {
-        const src = item.src;
-        // Índice del día dentro de la fila origen (0=lun … 6=dom)
-        const off = srcWeek.indexOf(src.date);
-        if (off < 0) { fail++; continue; }
-        const dst = dstWeek[off];
-        try {
-          const r = item.kind === "plan"
-            ? await copyPlanToDate(src as PlanEntry, dst, { silent: true })
-            : await copyAvisoToDate(src as AvisoEntry, dst, { silent: true });
-          if (r) ok++;
-          else skip++;
-        } catch { fail++; }
-      }
-      const total = snapshot.length;
-      if (total === 0) alert(`No había tarjetas visibles en la semana origen (${formatDateLabel(srcWeek[0])} → ${formatDateLabel(srcWeek[6])}). Revisa los filtros activos.`);
-      else if (ok === 0 && skip > 0) alert(`⚠️ No se copió ninguna: las ${skip} tarjetas ya existían en la semana destino (${formatDateLabel(dstWeek[0])} → ${formatDateLabel(dstWeek[6])}). Borra primero las del destino o elige otra semana.`);
-      else alert(`✅ Copiadas ${ok} de ${total} tarjetas${skip ? ` · ${skip} saltadas (ya existían o festivo)` : ""}${fail ? ` · ${fail} fallos` : ""}.`);
-    }
-  };
+  // (pickDay eliminado — reemplazado por pasteTo con el portapapeles estilo Excel)
 
   // ── Orden de tarjetas DENTRO de un día (manual + auto M→T→ambas) ──
   const saveDayOrder = async (date: string, list: Array<{ id: string; kind: "plan" | "aviso" }>) => {
@@ -1070,18 +1075,50 @@ export default function MensualTab() {
           node: (
           <div
             key={p.id}
-            onClick={(e) => { e.stopPropagation(); if (lpConsumeClick()) return; if (pickAction?.mode === "single" && pickAction.kind === "plan" && pickAction.id === p.id) return; if (pickAction) { pickDay(p.date); return; } if (e.ctrlKey || e.metaKey) { e.preventDefault(); setCopyPick({ kind: "plan", id: p.id, label: `${turnWord} · ${p.professionalAlias}`, date: p.date, weekDates: weekRowDatesOf(p.date) }); return; } openNoteEditor(p, sede, nombre); }}
-            onPointerDown={lpPointerDown("plan", p.id, () => setCopyPick({ kind: "plan", id: p.id, label: `${turnWord} · ${p.professionalAlias}`, date: p.date, weekDates: weekRowDatesOf(p.date) }))}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (lpConsumeClick()) return;
+              // Si hay portapapeles: click izq pega en el día de esta tarjeta
+              if (clipboard && !e.ctrlKey && !e.metaKey && !e.shiftKey) { pasteTo(p.date); return; }
+              // Si no hay portapapeles: selección estilo Excel
+              if (e.ctrlKey || e.metaKey) { e.preventDefault(); selToggle("plan", p.id); return; }
+              if (e.shiftKey) { e.preventDefault();
+                // Shift+click: añadir esta y todas las del día
+                const dayPlans = plans.filter(x => x.date === p.date);
+                const n = new Set(selection);
+                dayPlans.forEach(x => n.add(selKey("plan", x.id)));
+                setSelection(n);
+                return;
+              }
+              // Click simple: solo esta (limpiar selección previa)
+              if (selHas("plan", p.id) && selection.size > 1) { setSelection(new Set([selKey("plan", p.id)])); return; }
+              if (selHas("plan", p.id)) { selClear(); return; }
+              setSelection(new Set([selKey("plan", p.id)]));
+            }}
+            onPointerDown={lpPointerDown("plan", p.id, () => {
+              // Long-press móvil = botón derecho: seleccionar esta y abrir menú contextual
+              if (!selHas("plan", p.id)) setSelection(new Set([selKey("plan", p.id)]));
+              setContextMenu({ x: lpStart.current?.x ?? 0, y: lpStart.current?.y ?? 0, cardKey: selKey("plan", p.id), cardKind: "plan", cardId: p.id, cellDate: p.date });
+            })}
             onPointerMove={lpPointerMove}
             onPointerUp={lpPointerUp}
             onPointerCancel={lpPointerCancel}
-            onContextMenu={(e) => { if (lpActive.current || lpSuppressClick.current || lpStart.current) e.preventDefault(); }} // long-press Android: sin menú del navegador
+            onContextMenu={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              // Asegurar que la tarjeta está en la selección para que Cortar/Copiar la incluya
+              if (!selHas("plan", p.id)) {
+                if (e.shiftKey || e.ctrlKey || e.metaKey) selToggle("plan", p.id);
+                else setSelection(new Set([selKey("plan", p.id)]));
+              }
+              setContextMenu({ x: e.clientX, y: e.clientY, cardKey: selKey("plan", p.id), cardKind: "plan", cardId: p.id, cellDate: p.date });
+            }}
             draggable
             onDragStart={(e) => { if (lpActive.current || lpFired.current) { e.preventDefault(); return; } draggingCardRef.current = true; e.dataTransfer.setData("text/plain", JSON.stringify({ kind: "plan", id: p.id })); e.dataTransfer.effectAllowed = "copyMove"; }}
             onDragEnd={() => { draggingCardRef.current = false; setDragOverDate(null); }}
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => reorderInDay(e, f, p.id, "plan", dayCards)}
-            className={`text-[1em] px-0.5 sm:px-1 py-0.5 rounded font-bold leading-tight border border-black/10 break-words cursor-pointer hover:ring-2 hover:ring-amber-500 hover:ring-offset-0 transition relative select-none ${lpArmed === p.id ? "ring-2 ring-amber-500" : ""}`}
+            className={`text-[1em] px-0.5 sm:px-1 py-0.5 rounded font-bold leading-tight border border-black/10 break-words cursor-pointer hover:ring-2 hover:ring-amber-500 hover:ring-offset-0 transition relative select-none ${lpArmed === p.id ? "ring-2 ring-amber-500" : ""} ${selHas("plan", p.id) ? "ring-2 ring-blue-500 ring-offset-1" : ""}`}
             style={{ background: sede.color, color: textColorFor(sede.color), WebkitTouchCallout: "none" }}
             title={tooltipLines}
           >
@@ -1127,18 +1164,45 @@ export default function MensualTab() {
           node: (
           <div
             key={`av-${a.id}`}
-            onClick={(e) => { e.stopPropagation(); if (lpConsumeClick()) return; if (pickAction?.mode === "single" && pickAction.kind === "aviso" && pickAction.id === a.id) return; if (pickAction) { pickDay(a.date); return; } if (e.ctrlKey || e.metaKey) { e.preventDefault(); setCopyPick({ kind: "aviso", id: a.id, label: `${reason}${avisoProAlias ? ` · ${avisoProAlias}` : ""}`, date: a.date, weekDates: weekRowDatesOf(a.date) }); return; } openAvisoNoteEditor(a); }}
-            onPointerDown={lpPointerDown("aviso", a.id, () => setCopyPick({ kind: "aviso", id: a.id, label: `${reason}${avisoProAlias ? ` · ${avisoProAlias}` : ""}`, date: a.date, weekDates: weekRowDatesOf(a.date) }))}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (lpConsumeClick()) return;
+              // Si hay portapapeles: click izq pega en el día de este aviso
+              if (clipboard && !e.ctrlKey && !e.metaKey && !e.shiftKey) { pasteTo(a.date); return; }
+              if (e.ctrlKey || e.metaKey) { e.preventDefault(); selToggle("aviso", a.id); return; }
+              if (e.shiftKey) { e.preventDefault();
+                const dayAvisos = avisos.filter(x => x.date === a.date);
+                const n = new Set(selection);
+                dayAvisos.forEach(x => n.add(selKey("aviso", x.id)));
+                setSelection(n);
+                return;
+              }
+              if (selHas("aviso", a.id) && selection.size > 1) { setSelection(new Set([selKey("aviso", a.id)])); return; }
+              if (selHas("aviso", a.id)) { selClear(); return; }
+              setSelection(new Set([selKey("aviso", a.id)]));
+            }}
+            onPointerDown={lpPointerDown("aviso", a.id, () => {
+              if (!selHas("aviso", a.id)) setSelection(new Set([selKey("aviso", a.id)]));
+              setContextMenu({ x: lpStart.current?.x ?? 0, y: lpStart.current?.y ?? 0, cardKey: selKey("aviso", a.id), cardKind: "aviso", cardId: a.id, cellDate: a.date });
+            })}
             onPointerMove={lpPointerMove}
             onPointerUp={lpPointerUp}
             onPointerCancel={lpPointerCancel}
-            onContextMenu={(e) => { if (lpStart.current) e.preventDefault(); }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (!selHas("aviso", a.id)) {
+                if (e.shiftKey || e.ctrlKey || e.metaKey) selToggle("aviso", a.id);
+                else setSelection(new Set([selKey("aviso", a.id)]));
+              }
+              setContextMenu({ x: e.clientX, y: e.clientY, cardKey: selKey("aviso", a.id), cardKind: "aviso", cardId: a.id, cellDate: a.date });
+            }}
             draggable
             onDragStart={(e) => { if (lpActive.current || lpFired.current) { e.preventDefault(); return; } draggingCardRef.current = true; e.dataTransfer.setData("text/plain", JSON.stringify({ kind: "aviso", id: a.id })); e.dataTransfer.effectAllowed = "copyMove"; }}
             onDragEnd={() => { draggingCardRef.current = false; setDragOverDate(null); }}
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => reorderInDay(e, f, a.id, "aviso", dayCards)}
-            className={`text-[1em] px-0.5 sm:px-1 py-0.5 rounded font-bold leading-tight border border-red-900/40 break-words cursor-pointer hover:ring-2 hover:ring-red-500 hover:ring-offset-0 transition relative select-none ${lpArmed === a.id ? "ring-2 ring-amber-500" : ""}`}
+            className={`text-[1em] px-0.5 sm:px-1 py-0.5 rounded font-bold leading-tight border border-red-900/40 break-words cursor-pointer hover:ring-2 hover:ring-red-500 hover:ring-offset-0 transition relative select-none ${lpArmed === a.id ? "ring-2 ring-amber-500" : ""} ${selHas("aviso", a.id) ? "ring-2 ring-blue-500 ring-offset-1" : ""}`}
             style={{
               background: "repeating-linear-gradient(45deg, #fee2e2, #fee2e2 5px, #fecaca 5px, #fecaca 10px)",
               color: "#7f1d1d",
@@ -1175,11 +1239,24 @@ export default function MensualTab() {
     cells.push(
       <td
         key={vd.f}
-        className={`border border-gray-300 h-auto min-h-[72px] sm:min-h-[110px] p-0.5 sm:p-1 align-top ${tdClass} ${dragOverDate === f ? (dragOverCopy ? "ring-2 ring-inset ring-amber-500" : "ring-2 ring-inset ring-sky-600") : ""} ${pickAction ? "ring-2 ring-inset ring-amber-400 cursor-pointer" : ""}`}
+        className={`border border-gray-300 h-auto min-h-[72px] sm:min-h-[110px] p-0.5 sm:p-1 align-top ${tdClass} ${dragOverDate === f ? (dragOverCopy ? "ring-2 ring-inset ring-amber-500" : "ring-2 ring-inset ring-sky-600") : ""} ${clipboard ? "ring-2 ring-inset ring-amber-400 cursor-pointer" : ""}`}
         onDragOver={(e) => { e.preventDefault(); if (draggingCardRef.current) { const copy = e.altKey; e.dataTransfer.dropEffect = copy ? "copy" : "move"; if (dragOverDate !== f || dragOverCopy !== copy) { setDragOverDate(f); setDragOverCopy(copy); } } }}
         onDragLeave={() => { if (dragOverDate === f) setDragOverDate(null); }}
         onDrop={(e) => { e.preventDefault(); setDragOverDate(null); handleDrop(e, f); }}
-        onClick={(e) => { if (lpConsumeClick()) return; if (pickAction) { e.stopPropagation(); pickDay(f); } }}
+        onClick={(e) => {
+          if (lpConsumeClick()) return;
+          // Click en celda vacía: si hay portapapeles, pega aquí; si no, deselecciona todo
+          if (e.target === e.currentTarget) {
+            if (clipboard) { e.stopPropagation(); pasteTo(f); return; }
+            if (selection.size > 0) { e.stopPropagation(); selClear(); }
+          }
+        }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          // Menú contextual en celda: si hay portapapeles, ofrece Pegar; si no, Copiar semana
+          setContextMenu({ x: e.clientX, y: e.clientY, cellDate: f });
+        }}
       >
         <div className="font-black text-[11px] sm:text-[13px] text-gray-900 flex justify-between items-center gap-0.5 sm:gap-1">
           <span className={vd.adj ? "text-gray-400" : "text-gray-900"}>{day}{vd.monthTag && <span className="ml-0.5 text-[7px] sm:text-[8px] font-bold text-gray-500 align-top">{vd.monthTag}</span>}</span>
@@ -1191,17 +1268,17 @@ export default function MensualTab() {
               </span>
             )}
             <button
-              onClick={(e) => { e.stopPropagation(); if (pickAction) return; autoSortDay(f); }}
+              onClick={(e) => { e.stopPropagation(); if (clipboard) return; autoSortDay(f); }}
               className="no-print shrink-0 h-5 w-5 rounded-full bg-gray-200 text-gray-700 text-[11px] font-black leading-none items-center justify-center hover:bg-amber-500 hover:text-black active:scale-90 transition hidden sm:flex"
               title="Ordenar automáticamente: mañanas → tardes → ambas"
             >⇅</button>
             <button
-              onClick={(e) => { e.stopPropagation(); if (pickAction) return; openAddDialog(f); }}
+              onClick={(e) => { e.stopPropagation(); if (clipboard) return; openAddDialog(f); }}
               className="no-print shrink-0 h-5 w-5 rounded-full bg-gray-900 text-white text-[13px] font-black leading-none items-center justify-center hover:bg-amber-500 hover:text-black active:scale-90 transition hidden sm:flex"
               title="Programar turno este día"
             >+</button>
             <button
-              onClick={(e) => { e.stopPropagation(); if (pickAction) return; openAddDialog(f); }}
+              onClick={(e) => { e.stopPropagation(); if (clipboard) return; openAddDialog(f); }}
               className="no-print sm:hidden shrink-0 h-5 w-5 rounded-full bg-gray-900/85 text-white text-[12px] font-black leading-none flex items-center justify-center active:scale-90 transition"
               title="Programar turno este día"
             >+</button>
@@ -1359,132 +1436,125 @@ export default function MensualTab() {
         </div>
       </div>
 
-      {/* ═══ Diálogo 📋 COPIAR (Ctrl+click en PC · mantener pulsada 2 s en táctil) ═══ */}
-      {copyPick && (() => {
-        const weekDates = copyPick.weekDates;
-        const weekItems = buildWeekItems(copyPick.date, weekDates, copyPick.id, copyPick.kind);
-        const weekCount = weekItems.length;
-        const startSingle = () => { setPickAction({ mode: "single", kind: copyPick.kind, id: copyPick.id, label: copyPick.label }); setCopyPick(null); };
-        const startWeek = () => {
-          if (weekCount === 0) { alert("No hay tarjetas visibles en la semana de esta tarjeta (revisa los filtros)."); return; }
-          const label = `SEMANA ${weekDates[0]} → ${weekDates[6]} (${weekCount} tarjetas)`;
-          setPickAction({ mode: "week", refDate: copyPick.date, weekDates, label, items: weekItems });
-          setCopyPick(null);
-        };
-        const startMany = () => {
-          // Abrir el sub-panel de selección múltiple: pre-marcar solo la tarjeta origen.
-          setPickManySel(new Set([copyPick.id]));
-          setPickManyOpen(true);
-        };
-        const confirmMany = () => {
-          const selected = weekItems.filter(it => pickManySel.has(it.id));
-          if (selected.length === 0) { alert("Selecciona al menos una tarjeta."); return; }
-          const label = `${selected.length} tarjetas seleccionadas`;
-          setPickAction({ mode: "many", refDate: copyPick.date, weekDates, label, items: selected });
-          setPickManyOpen(false);
-          setCopyPick(null);
-        };
-        // Etiqueta legible para cada item en el desplegable (día, sede, pro, turno).
-        const fmtItem = (it: WeekItem): string => {
-          const s = it.src;
-          const sedeName = sedes.find(x => x.id === (s as any).sedeId)?.name || "";
-          if (it.kind === "plan") {
-            const p = s as PlanEntry;
-            const turn = p.turn === "MANANA" ? "MAÑANA" : p.turn === "TARDE" ? "TARDE" : "AMBOS";
-            const dia = (p.date.slice(8) + "/" + p.date.slice(5, 7)).replace(/^0/, "");
-            return `${dia} · ${sedeName} · ${turn} · ${p.professionalAlias}`;
-          } else {
-            const a = s as AvisoEntry;
-            const turn = a.turn === "M" ? "MAÑANA" : a.turn === "T" ? "TARDE" : "AMBAS";
-            const dia = (a.date.slice(8) + "/" + a.date.slice(5, 7)).replace(/^0/, "");
-            const pro = a.professional?.alias || "sede";
-            return `${dia} · ${sedeName} · ${turn} · ${(a.reason || "AUSENCIA").toUpperCase()} · ${pro}`;
+      {/* ═══ Menú contextual (botón derecho): Cortar / Copiar / Copiar semana / Pegar / Borrar ═══ */}
+      {contextMenu && (() => {
+        const menu = contextMenu;
+        const close = () => setContextMenu(null);
+        // Construir items seleccionados como WeekItem[] (src completo)
+        const buildSelectedItems = (): WeekItem[] => {
+          const items: WeekItem[] = [];
+          for (const key of selection) {
+            const [kind, id] = key.split(":") as ["plan" | "aviso", string];
+            const src = kind === "plan" ? plans.find(p => p.id === id) : avisos.find(a => a.id === id);
+            if (src) items.push({ kind, id, src });
           }
+          return items;
         };
-        // En táctil, el overlay captura el pointerup/click espurio que sigue al long-press
-        // (el dedo estaba sobre la tarjeta y el diálogo apareció encima). Suprimimos ese click.
-        const onOverlayClick = () => {
-          if (lpFiredAt.current && Date.now() - lpFiredAt.current < 800) { lpFiredAt.current = 0; return; }
-          setCopyPick(null);
-          setPickManyOpen(false);
+        const doCopy = () => {
+          const items = buildSelectedItems();
+          if (items.length === 0) { alert("Selecciona alguna tarjeta primero (click o Ctrl+click)."); close(); return; }
+          const refDate = items[0].src.date;
+          const weekDates = weekRowDatesOf(refDate);
+          setClipboard({ mode: "copy", items, refDate, weekDates });
+          close();
+        };
+        const doCut = () => {
+          const items = buildSelectedItems();
+          if (items.length === 0) { alert("Selecciona alguna tarjeta primero (click o Ctrl+click)."); close(); return; }
+          const refDate = items[0].src.date;
+          const weekDates = weekRowDatesOf(refDate);
+          setClipboard({ mode: "cut", items, refDate, weekDates });
+          close();
+        };
+        const doCopyWeek = () => {
+          // Copia toda la fila visual de la tarjeta o celda donde se abrió el menú
+          const refDate = menu.cellDate || (menu.cardId && (menu.cardKind === "plan" ? plans.find(p => p.id === menu.cardId)?.date : avisos.find(a => a.id === menu.cardId)?.date));
+          if (!refDate) { alert("No pude identificar la semana."); close(); return; }
+          const weekDates = weekRowDatesOf(refDate);
+          if (weekDates.length !== 7) { alert("No pude identificar la semana visual."); close(); return; }
+          const items = buildWeekItems(refDate, weekDates);
+          if (items.length === 0) { alert("No hay tarjetas en esa semana."); close(); return; }
+          setClipboard({ mode: "copy", items, refDate, weekDates });
+          setSelection(new Set(items.map(it => selKey(it.kind, it.id))));
+          close();
+        };
+        const doPaste = () => {
+          if (!clipboard) { alert("No hay nada en el portapapeles. Copia o corta primero (botón derecho)."); close(); return; }
+          if (!menu.cellDate) { alert("Pega en una celda de día."); close(); return; }
+          close();
+          pasteTo(menu.cellDate);
+        };
+        const doDelete = () => {
+          const items = buildSelectedItems();
+          if (items.length === 0) { alert("Selecciona alguna tarjeta primero."); close(); return; }
+          if (!confirm(`¿Borrar ${items.length} tarjeta${items.length === 1 ? "" : "s"} seleccionada${items.length === 1 ? "" : "s"}?`)) { close(); return; }
+          close();
+          (async () => {
+            let del = 0;
+            for (const it of items) {
+              try {
+                const r = it.kind === "plan"
+                  ? await fetch(`/api/company/plan/${it.id}`, { method: "DELETE" })
+                  : await fetch(`/api/company/avisos/${it.id}`, { method: "DELETE" });
+                if (r.ok) del++;
+              } catch {}
+            }
+            setSelection(new Set());
+            await load();
+            alert(`🗑️ Borradas ${del} de ${items.length}.`);
+          })();
+        };
+        const doClear = () => { setSelection(new Set()); setClipboard(null); close(); };
+        const hasSelection = selection.size > 0;
+        const doEdit = () => {
+          if (!menu.cardId || !menu.cardKind) { alert("Toca una tarjeta para editarla (no una celda vacía)."); close(); return; }
+          if (menu.cardKind === "plan") {
+            const p = plans.find(x => x.id === menu.cardId);
+            if (p) {
+              const sede = sedes.find(s => s.id === p.sedeId);
+              const pro = professionals.find((x: any) => x.alias === p.professionalAlias);
+              const nombre = pro ? `${pro.firstName} ${pro.lastName}` : p.professionalAlias;
+              if (sede) openNoteEditor(p, sede, nombre);
+            }
+          } else {
+            const a = avisos.find(x => x.id === menu.cardId);
+            if (a) openAvisoNoteEditor(a);
+          }
+          close();
         };
         return (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4" onClick={onOverlayClick} onPointerDown={overlayClose(() => { setCopyPick(null); setPickManyOpen(false); })}>
-          <div className="bg-white border-2 border-amber-500 rounded-xl p-5 w-full max-w-md space-y-3 shadow-2xl" onClick={e => e.stopPropagation()} onPointerDown={e => e.stopPropagation()}>
-            <h3 className="text-gray-900 font-black text-lg">📋 Copiar tarjeta</h3>
-            <p className="text-xs text-gray-800 font-bold uppercase tracking-wide">{copyPick.label}</p>
-            <p className="text-sm text-gray-700 font-medium leading-snug">
-              Elige qué copiar y luego toca el <b>día destino</b> (o la <b>semana destino</b>).
-            </p>
-            <div className="grid grid-cols-1 gap-2 pt-1">
-              <button onClick={startSingle} className="py-2.5 px-4 bg-amber-500 hover:bg-amber-400 text-black rounded-lg font-black text-sm transition flex items-center justify-center gap-2" title="Copia SOLO esta tarjeta en el día que toques">
-                📋 SOLO esta tarjeta
-              </button>
-              <button onClick={startWeek} disabled={weekCount === 0} className={`py-2.5 px-4 rounded-lg font-black text-sm transition flex items-center justify-center gap-2 ${weekCount === 0 ? "bg-gray-200 text-gray-400 cursor-not-allowed" : "bg-purple-600 hover:bg-purple-500 text-white"}`} title={`Copia TODAS las tarjetas visibles de esta semana (${weekCount}) en la semana que toques`}>
-                📅 TODA la semana visible ({weekCount})
-              </button>
-              <button onClick={startMany} disabled={weekCount === 0} className={`py-2.5 px-4 rounded-lg font-black text-sm transition flex items-center justify-center gap-2 ${weekCount === 0 ? "bg-gray-200 text-gray-400 cursor-not-allowed" : "bg-sky-600 hover:bg-sky-500 text-white"}`} title="Elige qué tarjetas copiar con checkboxes">
-                ☑ VARIAS (elige)
-              </button>
-              <button onClick={() => { setCopyPick(null); setPickManyOpen(false); }} className="py-2 px-4 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg font-bold text-sm transition">Cancelar</button>
+          <div className="fixed inset-0 z-[90]" onClick={close} onContextMenu={(e) => { e.preventDefault(); close(); }}>
+            <div
+              className="fixed bg-white border-2 border-gray-900 rounded-lg shadow-2xl py-1 min-w-[180px] text-sm"
+              style={{ left: Math.min(menu.x, window.innerWidth - 200), top: Math.min(menu.y, window.innerHeight - 280) }}
+              onClick={e => e.stopPropagation()}
+            >
+              <button onClick={doEdit} disabled={!menu.cardId} className={`w-full text-left px-3 py-1.5 hover:bg-amber-100 ${!menu.cardId ? "text-gray-400 cursor-not-allowed" : "text-gray-900 font-bold"}`}>✏️ Editar esta tarjeta</button>
+              <div className="border-t border-gray-200 my-1" />
+              <button onClick={doCopy} disabled={!hasSelection} className={`w-full text-left px-3 py-1.5 hover:bg-amber-100 ${!hasSelection ? "text-gray-400 cursor-not-allowed" : "text-gray-900 font-bold"}`}>📋 Copiar{hasSelection ? ` (${selection.size})` : ""}</button>
+              <button onClick={doCut} disabled={!hasSelection} className={`w-full text-left px-3 py-1.5 hover:bg-amber-100 ${!hasSelection ? "text-gray-400 cursor-not-allowed" : "text-gray-900 font-bold"}`}>✂️ Cortar{hasSelection ? ` (${selection.size})` : ""}</button>
+              <button onClick={doCopyWeek} className="w-full text-left px-3 py-1.5 hover:bg-amber-100 text-purple-700 font-bold">📅 Copiar semana</button>
+              <button onClick={doPaste} disabled={!clipboard} className={`w-full text-left px-3 py-1.5 hover:bg-amber-100 ${!clipboard ? "text-gray-400 cursor-not-allowed" : "text-sky-700 font-bold"}`}>📥 Pegar{clipboard ? ` (${clipboard.items.length} ${clipboard.mode === "cut" ? "cortad" : "copiad"}${clipboard.items.length === 1 ? "a" : "as"})` : ""}</button>
+              <div className="border-t border-gray-200 my-1" />
+              <button onClick={doDelete} disabled={!hasSelection} className={`w-full text-left px-3 py-1.5 hover:bg-red-100 ${!hasSelection ? "text-gray-400 cursor-not-allowed" : "text-red-700 font-bold"}`}>🗑️ Borrar{hasSelection ? ` (${selection.size})` : ""}</button>
+              <button onClick={doClear} className="w-full text-left px-3 py-1.5 hover:bg-gray-100 text-gray-700 font-bold">✕ Cancelar selección</button>
             </div>
-            {pickManyOpen && (
-              <div className="border-2 border-sky-400 rounded-lg p-2 space-y-2 bg-sky-50">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-black text-sky-900 uppercase">Elige tarjetas</span>
-                  <div className="flex gap-1">
-                    <button onClick={() => setPickManySel(new Set(weekItems.map(it => it.id)))} className="text-[10px] bg-sky-600 hover:bg-sky-500 text-white px-2 py-1 rounded font-bold">Todas</button>
-                    <button onClick={() => setPickManySel(new Set())} className="text-[10px] bg-gray-200 hover:bg-gray-300 text-gray-800 px-2 py-1 rounded font-bold">Ninguna</button>
-                  </div>
-                </div>
-                <div className="max-h-52 overflow-y-auto space-y-1 pr-1">
-                  {weekItems.length === 0 && <p className="text-xs text-gray-500 italic">No hay tarjetas en esta semana.</p>}
-                  {weekItems.map(it => {
-                    const checked = pickManySel.has(it.id);
-                    const isOrigin = it.id === copyPick.id;
-                    return (
-                      <label key={it.id} className={`flex items-start gap-2 text-xs font-semibold p-1.5 rounded cursor-pointer hover:bg-sky-100 ${checked ? "bg-sky-100" : ""}`}>
-                        <input type="checkbox" checked={checked} onChange={() => {
-                          const n = new Set(pickManySel);
-                          if (n.has(it.id)) n.delete(it.id); else n.add(it.id);
-                          setPickManySel(n);
-                        }} className="mt-0.5 shrink-0" />
-                        <span className="flex-1">{fmtItem(it)}{isOrigin && <span className="ml-1 text-amber-600 font-black">(esta)</span>}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-                <div className="flex items-center justify-between gap-2 pt-1 border-t border-sky-300">
-                  <span className="text-xs font-bold text-sky-900">{pickManySel.size} seleccionada{pickManySel.size === 1 ? "" : "s"}</span>
-                  <div className="flex gap-1">
-                    <button onClick={() => setPickManyOpen(false)} className="text-xs bg-gray-200 hover:bg-gray-300 text-gray-800 px-3 py-1.5 rounded-lg font-bold">Atrás</button>
-                    <button onClick={confirmMany} disabled={pickManySel.size === 0} className={`text-xs px-3 py-1.5 rounded-lg font-black ${pickManySel.size === 0 ? "bg-gray-200 text-gray-400 cursor-not-allowed" : "bg-sky-600 hover:bg-sky-500 text-white"}`}>📋 COPIAR ({pickManySel.size})</button>
-                  </div>
-                </div>
-              </div>
-            )}
-            <p className="text-[11px] text-gray-500 font-semibold leading-snug">
-              En móvil/tablet este diálogo se abre <b>manteniendo pulsada la tarjeta 2 segundos</b>. La semana copia lun→lun, mar→mar, etc., respetando los filtros activos.
-            </p>
           </div>
-        </div>
         );
       })()}
 
-      {/* ═══ Banner modo 📋 copiar: toca el día / semana destino ═══ */}
-      {pickAction && (() => {
-        const txt = pickAction.mode === "single"
-          ? <>📋 COPIAR <span className="text-amber-300">{pickAction.label}</span> — toca el DÍA destino (la original se queda)</>
-          : pickAction.mode === "week"
-          ? <>📅 COPIAR <span className="text-amber-300">SEMANA {pickAction.weekDates[0]} → {pickAction.weekDates[6]} ({pickAction.items.length} tarjetas)</span> — toca un DÍA de la SEMANA destino (misma fila: lun→lun, mar→mar…)</>
-          : <>☑ COPIAR <span className="text-amber-300">{pickAction.items.length} tarjeta{pickAction.items.length === 1 ? "" : "s"} seleccionada{pickAction.items.length === 1 ? "" : "s"}</span> — toca un DÍA de la SEMANA destino (misma fila: lun→lun, mar→mar…)</>;
-        return (
-          <div className="no-print fixed top-2 left-1/2 -translate-x-1/2 z-[80] max-w-[96vw] bg-gray-900 text-white rounded-full pl-4 pr-1.5 py-1.5 shadow-2xl border-2 border-amber-400 flex items-center gap-2">
-            <span className="text-[11px] sm:text-sm font-black leading-tight truncate">{txt}</span>
-            <button onClick={() => setPickAction(null)} className="shrink-0 bg-red-600 hover:bg-red-500 text-white rounded-full px-3 py-1 text-[10px] sm:text-xs font-black transition" title="Cancelar: no copia nada">CANCELAR</button>
-          </div>
-        );
-      })()}
+      {/* ═══ Banner: selección / portapapeles (estilo Excel) ═══ */}
+      {(selection.size > 0 || clipboard) && (
+        <div className="no-print fixed top-2 left-1/2 -translate-x-1/2 z-[80] max-w-[96vw] bg-gray-900 text-white rounded-full pl-4 pr-1.5 py-1.5 shadow-2xl border-2 border-amber-400 flex items-center gap-2">
+          <span className="text-[11px] sm:text-sm font-black leading-tight truncate">
+            {clipboard
+              ? <>📥 Portapapeles: <span className="text-amber-300">{clipboard.items.length} {clipboard.mode === "cut" ? "cortad" : "copiad"}{clipboard.items.length === 1 ? "a" : "as"}</span> — toca un DÍA destino (o celda vacía)</>
+              : <>☑ <span className="text-amber-300">{selection.size}</span> seleccionada{selection.size === 1 ? "" : "s"} — botón derecho para Cortar/Copiar/Semana · Esc para limpiar</>}
+          </span>
+          <button onClick={() => { setSelection(new Set()); setClipboard(null); }} className="shrink-0 bg-red-600 hover:bg-red-500 text-white rounded-full px-3 py-1 text-[10px] sm:text-xs font-black transition" title="Limpiar selección y portapapeles">✕</button>
+        </div>
+      )}
+
 
       {/* ═══ Aviso note editor modal ═══ */}
       {avisoNoteModal && (
