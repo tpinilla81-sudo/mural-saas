@@ -2266,3 +2266,29 @@ Work Log:
 
 Stage Summary:
 - Sistema de copiar tarjetas rediseñado al estilo Excel: selección con click (anillo azul), Ctrl+click añade, Shift+click selecciona todo el día. Botón derecho abre menú contextual con Editar/Copiar/Cortar/Copiar semana/Pegar/Borrar/Cancelar. Click en celda destino (vacía o con tarjeta) pega manteniendo lun→lun. En móvil, long-press 2s = botón derecho. Sin diálogos emergentes. Cortar mueve (borra origen al pegar).
+
+---
+Task ID: 71
+Agent: main
+Task: "1) Al imprimir PDF que salgan todas las tarjetas con sus colores correspondientes, misma vista que la app. No logo MURAL, no fecha/hora de impresión, no instrucciones. 2) Eliminar instrucciones. No pie de página con URL ni número de página." — PDF limpio.
+
+Work Log:
+- CSS @page añadido en src/app/globals.css:
+  * `@page { margin: 0; size: auto; }` — margen 0 quita el sitio donde el navegador pone headers (URL, fecha, hora) y footers (número de página, URL). size:auto ajusta al contenido.
+  * `html, body { margin:0; padding:0; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }` — fuerza a imprimir los colores de fondo (las tarjetas con el color de su sede, igual que se ven en la app).
+  * #print-target con `padding: 8px !important` para que no quede pegado al borde (margen interno, no del navegador).
+- src/components/MensualTab.tsx:
+  * Logo MURAL (línea 1404): añadido `no-print` — no aparece en el PDF.
+  * Instrucciones largas de cabecera (línea 1417, "+ turno · ⇅ ordena el día..."): añadido `no-print` — no aparecen.
+  * Las instrucciones cortas de móvil (línea 1419) ya tenían `no-print`.
+  * Lo que queda visible en el PDF: solo el h1 con "MES AÑO" (letra pequeña, ej. "OCTUBRE 2026") + la tabla del calendario con las tarjetas en sus colores.
+- Commit 6c0803f → Vercel 200 (CSS compilado en /_next/static/chunks/ca257b6f94cd765b.css con @page, margin:0, print-color-adjust: exact verificados).
+- Verificación en producción:
+  * print-target encontrado ✓
+  * Logo MURAL: `logo_mural_oculto_en_print: true` (no-print aplicado) ✓
+  * Instrucciones largas: `instrucciones_ocultas_en_print: true` ✓
+  * h1 mes y año: `h1_mes_anio_visible: true, h1_texto: "OCTUBRE 2026"` ✓ (lo único que queda arriba)
+  * CSS @page margin:0 + print-color-adjust: exact presentes en el bundle ✓
+
+Stage Summary:
+- Al imprimir PDF: las tarjetas salen con sus colores de sede (mismo que la app). No sale logo MURAL, ni fecha/hora de impresión, ni instrucciones, ni URL, ni número de página. Solo queda el mes y el año en letra pequeña arriba y la tabla del calendario. El @page margin:0 quita el espacio del navegador para headers/footers; print-color-adjust:exact fuerza los colores de fondo. Si en algún navegador aún salen headers/footers, julio debe desmarcar "Headers and footers" en el diálogo de impresión (Chrome: Más ajustes → Sin cabeceras y bordes).
