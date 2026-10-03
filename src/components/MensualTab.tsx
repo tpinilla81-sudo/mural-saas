@@ -1477,7 +1477,7 @@ export default function MensualTab() {
           ? <>📋 COPIAR <span className="text-amber-300">{pickAction.label}</span> — toca el DÍA destino (la original se queda)</>
           : pickAction.mode === "week"
           ? <>📅 COPIAR <span className="text-amber-300">SEMANA {pickAction.weekDates[0]} → {pickAction.weekDates[6]} ({pickAction.items.length} tarjetas)</span> — toca un DÍA de la SEMANA destino (misma fila: lun→lun, mar→mar…)</>
-          : <>☑ COPIAR <span className="text-amber-300">{pickAction.items.length} tarjetas seleccionadas</span> — toca un DÍA de la SEMANA destino (misma fila: lun→lun, mar→mar…)</>;
+          : <>☑ COPIAR <span className="text-amber-300">{pickAction.items.length} tarjeta{pickAction.items.length === 1 ? "" : "s"} seleccionada{pickAction.items.length === 1 ? "" : "s"}</span> — toca un DÍA de la SEMANA destino (misma fila: lun→lun, mar→mar…)</>;
         return (
           <div className="no-print fixed top-2 left-1/2 -translate-x-1/2 z-[80] max-w-[96vw] bg-gray-900 text-white rounded-full pl-4 pr-1.5 py-1.5 shadow-2xl border-2 border-amber-400 flex items-center gap-2">
             <span className="text-[11px] sm:text-sm font-black leading-tight truncate">{txt}</span>
