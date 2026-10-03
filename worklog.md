@@ -2188,3 +2188,35 @@ Work Log:
 
 Stage Summary:
 - El micrófono en Android y Android Auto está reparado con 4 fixes: warmUpMic no bloquea el flujo si getUserMedia falla (SR como fallback); el permiso solo se pide dentro del gesto del botón (no en useEffect); mensajes específicos para Android Auto; detección de errores SR ampliada. El iPhone sigue funcionando como antes. Julio debe probar en su Android: abrir /coche, pulsar el botón de voz ( gesture del click pide permiso), hablar. En Android Auto: si el micro del coche está reservado, el mensaje le dirá que abra la app en el móvil directamente.
+
+---
+Task ID: 69
+Agent: main
+Task: "Lo que quiero es que cuando me sale la ventana emergente para copiar una tarjeta o las tarjetas de toda la semana, también me dé como tercer opción copiar varias tarjetas eligiéndolas en la ventana de un despegable" — 3a opción "☑ VARIAS (elige)" con sub-panel de checkboxes.
+
+Work Log:
+- Tipos: PickAction ahora tiene 3 modos: "single" (1 tarjeta), "week" (toda la fila), "many" (varias elegidas). El modo "many" usa los mismos weekDates/items que "week" — pickDay lo gestiona igual.
+- Estado: añadido `pickManyOpen` (visibilidad del sub-panel) y `pickManySel` (Set de IDs seleccionados).
+- Diálogo: ahora 3 botones + Cancelar:
+  * 📋 SOLO esta tarjeta (ámbar)
+  * 📅 TODA la semana visible (N) (púrpura)
+  * ☑ VARIAS (elige) (sky/azul) — abre sub-panel
+- Sub-panel: lista de TODAS las tarjetas de la fila visual (con buildWeekItems + fallback). Cada fila tiene checkbox + etiqueta "día/mes · sede · turno · pro". Botones "Todas"/"Ninguna" para marcar/desmarcar de golpe. Contador "N seleccionada/s". Botones "Atrás" (volver al diálogo principal) y "📋 COPIAR (N)" (confirmar).
+- Al confirmar: pre-marcada solo la tarjeta origen (la que abrió el diálogo); la etiqueta "(esta)" marca visualmente cuál es.
+- pickAction.mode="many" → pickDay copia solo los items seleccionados en la semana destino (lun→lun, mar→mar…).
+- Banner modo "many": "☑ COPIAR N tarjeta/s seleccionada/s — toca un DÍA de la SEMANA destino (misma fila: lun→lun, mar→mar…)".
+- fmtItem helper: etiqueta legible "10/02 · VIT · MAÑANA · AS" para plans y "11/02 · VIT · AMBAS · VACACIONES · AS" para avisos.
+- Commit 5da8f5f → Vercel 200 (marker "VARIAS (elige)" en chunk 39f0335f323d44ee.js).
+- Commit a539771 → fix plural "1 tarjeta" vs "N tarjetas".
+- E2E PRODUCCIÓN (scripts/verify-69.sh):
+  * Diálogo con 3 botones: SOLO + TODA (14) + VARIAS + Cancelar ✓
+  * Sub-panel abre con 14 checkboxes (todos los planes de la fila), pre-seleccionada 1 (la origen marcada "(esta)") ✓
+  * Botones Todas/Ninguna ✓
+  * Confirmar COPIAR (N) → banner "☑ COPIAR 1 tarjeta seleccionada" ✓
+  * Tap día 17 (mie) → "✅ Copiadas 1 de 1" ✓
+  * Copia creada en mie 17 (solo la seleccionada), vie 19 y sab 20 = 0 (no estaban seleccionadas) ✓
+  * Limpieza: 4 borradas, 0 restantes.
+  * Capturas: t69-dialogo-3-botones.png, t69-varias-subpanel.png
+
+Stage Summary:
+- Ahora el diálogo de copiar tiene 3 opciones: 📋 SOLO esta tarjeta, 📅 TODA la semana visible (N), y ☑ VARIAS (elige) que abre un sub-panel desplegable con checkboxes de cada tarjeta (día/sede/turno/pro), botones Todas/Ninguna, y COPIAR (N). Al confirmar, solo copia las elegidas en la semana destino (lun→lun, mar→mar…). Funciona en PC (Ctrl+click) y móvil (long-press 2s).
