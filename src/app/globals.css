@@ -134,7 +134,19 @@
 .month-anim-prev { animation: month-slide-prev 0.22s ease-out; }
 
 /* ── Impresión / PDF: solo el calendario (#print-target) si existe ── */
+@page {
+  margin: 0;          /* sin márgenes: nada de header/footer del navegador */
+  size: auto;         /* tamaño según contenido */
+}
 @media print {
+  html, body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+    /* Forzar colores de fondo (tarjetas con su color de sede) */
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
   .no-print { display: none !important; }
   body:has(#print-target) * { visibility: hidden; }
   body:has(#print-target) #print-target,
@@ -148,6 +160,7 @@
     max-height: none !important;
     overflow: visible !important;
     border-radius: 0 !important;
+    padding: 8px !important;  /* margen interno pequeño, no del navegador */
   }
 }
 

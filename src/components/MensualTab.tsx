@@ -1401,7 +1401,7 @@ export default function MensualTab() {
       >
         <div className="flex justify-between items-end mb-2 border-b-[3px] border-gray-900 pb-2">
           <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
-            <img src="/mural-logo.png" alt="MURAL" className="h-8 sm:h-10 w-auto shrink-0" />
+            <img src="/mural-logo.png" alt="MURAL" className="h-8 sm:h-10 w-auto shrink-0 no-print" />
             <button
               onClick={() => goMonth(-1)}
               className="no-print h-8 w-8 sm:h-9 sm:w-9 shrink-0 rounded-full bg-gray-100 hover:bg-amber-500 hover:text-black text-gray-700 text-xl font-black flex items-center justify-center transition"
@@ -1414,7 +1414,7 @@ export default function MensualTab() {
               title="Mes siguiente (desliza a la izquierda)"
             >›</button>
           </div>
-          <span className="text-[10px] text-gray-500 font-bold hidden sm:block">+ turno · ⇅ ordena el día (M→T→ambas) · arrastra a otro día: MOVER · con ALT: COPIAR · Ctrl+click en la tarjeta: COPIAR (luego toca el día destino) · táctil (móvil/tablet): mantener pulsada la tarjeta 2 s: COPIAR</span>
+          <span className="text-[10px] text-gray-500 font-bold hidden sm:block no-print">+ turno · ⇅ ordena el día (M→T→ambas) · arrastra a otro día: MOVER · con ALT: COPIAR · Ctrl+click en la tarjeta: COPIAR (luego toca el día destino) · táctil (móvil/tablet): mantener pulsada la tarjeta 2 s: COPIAR</span>
         </div>
         <div className="sm:hidden text-center text-[10px] text-gray-400 font-bold mb-2 no-print">
           Desliza ‹ › para cambiar de mes · 🌉 = empalme de dos meses
