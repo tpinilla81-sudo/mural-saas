@@ -288,12 +288,8 @@ html[data-brand="1"] .to-\[\#2E5D3A\] { --tw-gradient-to: var(--brand) !importan
   padding: 0 2px;
   font-weight: 900;
   letter-spacing: 0.04em;
-  text-shadow: 0 0 1px #ff0000, 0 0 4px #ff0000, 0 0 9px rgba(255, 0, 0, 0.85);
-  animation: ledGlow 2.4s ease-in-out infinite;
-}
-@keyframes ledGlow {
-  0%, 100% { text-shadow: 0 0 1px #ff0000, 0 0 4px #ff0000, 0 0 9px rgba(255, 0, 0, 0.85); }
-  50% { text-shadow: 0 0 2px #ff0000, 0 0 7px #ff0000, 0 0 13px rgba(255, 0, 0, 1); }
+  /* Sombra sutil: nítida pero con un toque rojo. Sin animación glow para que se lea claro. */
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.9);
 }
 @media print {
   .led-red { animation: none; -webkit-print-color-adjust: exact; print-color-adjust: exact; }

@@ -44,6 +44,14 @@ export default function MensualTab() {
   const [professionals, setProfessionals] = useState<any[]>([]);
   const [plans, setPlans] = useState<PlanEntry[]>([]);
   const [avisos, setAvisos] = useState<AvisoEntry[]>([]);
+  // Refs sincronizadas con plans/avisos: permiten que copyPlanToDate/copyAvisoToDate vean el
+  // state MÁS reciente (tras un load() dentro del mismo bucle de pegado) sin depender de la
+  // closure del render en que se crearon. Sin esto, al pegar varias tarjetas seguidas, la
+  // 2ª no vería la 1ª (creada por la 1ª copyPlanToDate) y podría crear duplicados o fallar.
+  const plansRef = useRef<PlanEntry[]>([]);
+  const avisosRef = useRef<AvisoEntry[]>([]);
+  useEffect(() => { plansRef.current = plans; }, [plans]);
+  useEffect(() => { avisosRef.current = avisos; }, [avisos]);
   const [holidays, setHolidays] = useState<any[]>([]);
   const [selectedSedes, setSelectedSedes] = useState<Set<string>>(new Set());
   const [selectedPros, setSelectedPros] = useState<Set<string>>(new Set());
@@ -884,8 +892,10 @@ export default function MensualTab() {
     if (!silent && sede && pro && !isProAssignedToSede(pro.assignedSedes, sede.name)) {
       if (!confirm(`${pro.alias} no está adjudicado a ${sede.name}. ¿Continuar?`)) return false;
     }
-    // Conflicto: en la sede destino ya hay una tarjeta con el MISMO turno ese día
-    const clash = plans.find(p => p.sedeId === src.sedeId && p.date === targetDate && p.turn === src.turn);
+    // Conflicto: en la sede destino ya hay una tarjeta con el MISMO turno ese día.
+    // Usamos plansRef.current (state más reciente) para ver las tarjetas creadas por llamadas
+    // anteriores en el mismo bucle de pegado (pasteTo itera y cada copyPlanToDate hace load()).
+    const clash = plansRef.current.find(p => p.sedeId === src.sedeId && p.date === targetDate && p.turn === src.turn);
     const turnLabel = src.turn === "MANANA" ? "Mañana" : src.turn === "TARDE" ? "Tarde" : "Mañana y Tarde";
     if (clash) {
       if (clash.professionalAlias === src.professionalAlias) {
