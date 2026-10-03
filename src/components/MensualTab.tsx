@@ -899,12 +899,21 @@ export default function MensualTab() {
     const turnLabel = src.turn === "MANANA" ? "Mañana" : src.turn === "TARDE" ? "Tarde" : "Mañana y Tarde";
     if (clash) {
       if (clash.professionalAlias === src.professionalAlias) {
-        if (!silent) alert(`${src.professionalAlias} ya tiene esa tarjeta (${turnLabel}) el ${formatDateLabel(targetDate)}.`);
-        return false; // mismo profesional: saltar (no duplicar)
+        // Mismo profesional ya tiene ese turno ese día:
+        // - Modo interactivo (no silent): avisar y saltar (no duplicar).
+        // - Modo silent (pegar semana/varias): REEMPLAZAR (julio quiere que se pegue aunque
+        //   ya exista — el pegado tiene que ser "pegar lo que hay en el portapapeles").
+        if (!silent) {
+          alert(`${src.professionalAlias} ya tiene esa tarjeta (${turnLabel}) el ${formatDateLabel(targetDate)}.`);
+          return false;
+        }
+        // silent: borrar la existente y crear la nueva (reemplazar)
+        try { await fetch(`/api/company/plan/${clash.id}`, { method: "DELETE" }); } catch {}
+      } else {
+        // Otro profesional tiene ese turno: en modo interactivo preguntar; en silent reemplazar.
+        if (!silent && !confirm(`El ${formatDateLabel(targetDate)} ya hay una tarjeta de ${clash.professionalAlias} (${turnLabel}). ¿Reemplazarla?`)) return false;
+        if (silent) { try { await fetch(`/api/company/plan/${clash.id}`, { method: "DELETE" }); } catch {} }
       }
-      if (!silent && !confirm(`El ${formatDateLabel(targetDate)} ya hay una tarjeta de ${clash.professionalAlias} (${turnLabel}). ¿Reemplazarla?`)) return false;
-      // En modo silent: reemplazamos la del otro profesional silenciosamente
-      if (silent) { try { await fetch(`/api/company/plan/${clash.id}`, { method: "DELETE" }); } catch {} }
     }
     try {
       const res = await fetch("/api/company/plan", {
