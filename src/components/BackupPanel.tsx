@@ -66,10 +66,16 @@ export default function BackupPanel() {
   };
 
   const restoreBackup = async (b: Backup, mode: "merge" | "replace") => {
-    const confirmText = mode === "replace"
-      ? `⚠️ Esto BORRA todos los datos actuales y los reemplaza por los del backup "${b.label}". ¿Estás seguro?`
-      : `¿Añadir los datos del backup "${b.label}" a los actuales? (merge — no borra nada, solo añade lo que falta)`;
-    if (!confirm(confirmText)) return;
+    if (mode === "replace") {
+      // Doble confirmación para REEMPLAZAR (borra todo)
+      const c1 = confirm(`⚠️ ATENCIÓN: vas a BORRAR TODOS los datos actuales (turnos, avisos, sedes, profesionales, festivos) y reemplazarlos por los del backup:\n\n"${b.label}"\n\n¿Estás SEGURO de querer reemplazar?`);
+      if (!c1) return;
+      const c2 = confirm(`Última confirmación: esto NO se puede deshacer. Los datos actuales se perderán y se sustituirán por los del backup "${b.label}".\n\n¿Confirmas que quieres REEMPLAZAR todo?`);
+      if (!c2) return;
+    } else {
+      // Merge: una sola confirmación
+      if (!confirm(`¿Añadir los datos del backup "${b.label}" a los actuales? (merge — no borra nada, solo añade lo que falta)`)) return;
+    }
     setBusy(true); setMsg("");
     try {
       const r = await fetch(`/api/company/backup/restore/${b.id}?mode=${mode}`, { method: "POST" });
@@ -94,10 +100,15 @@ export default function BackupPanel() {
   const onImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const confirmText = importMode === "replace"
-      ? `⚠️ Esto BORRA todos los datos actuales y los reemplaza por los del archivo "${file.name}". ¿Estás seguro?`
-      : `¿Añadir los datos del archivo "${file.name}" a los actuales? (merge)`;
-    if (!confirm(confirmText)) { if (fileRef.current) fileRef.current.value = ""; return; }
+    if (importMode === "replace") {
+      // Doble confirmación para REEMPLAZAR (borra todo)
+      const c1 = confirm(`⚠️ ATENCIÓN: vas a BORRAR TODOS los datos actuales y reemplazarlos por los del archivo:\n\n"${file.name}"\n\n¿Estás SEGURO de querer reemplazar?`);
+      if (!c1) { if (fileRef.current) fileRef.current.value = ""; return; }
+      const c2 = confirm(`Última confirmación: esto NO se puede deshacer. Los datos actuales se perderán y se sustituirán por los del archivo "${file.name}".\n\n¿Confirmas que quieres REEMPLAZAR todo?`);
+      if (!c2) { if (fileRef.current) fileRef.current.value = ""; return; }
+    } else {
+      if (!confirm(`¿Añadir los datos del archivo "${file.name}" a los actuales? (merge — no borra nada)`)) { if (fileRef.current) fileRef.current.value = ""; return; }
+    }
     setBusy(true); setMsg("");
     try {
       const text = await file.text();
