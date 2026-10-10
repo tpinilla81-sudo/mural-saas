@@ -2,6 +2,24 @@ import { NextResponse } from "next/server";
 import { requireCompanyAdmin } from "@/lib/api-auth";
 import { db } from "@/lib/db";
 
+async function ensureBackupTable() {
+  try {
+    await db.$executeRaw`
+      CREATE TABLE IF NOT EXISTS "Backup" (
+        "id" TEXT NOT NULL,
+        "companyId" TEXT NOT NULL,
+        "label" TEXT NOT NULL,
+        "filename" TEXT NOT NULL,
+        "data" TEXT NOT NULL,
+        "size" INTEGER NOT NULL DEFAULT 0,
+        "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "Backup_pkey" PRIMARY KEY ("id")
+      );
+    `;
+    await db.$executeRaw`CREATE INDEX IF NOT EXISTS "Backup_companyId_idx" ON "Backup"("companyId");`;
+  } catch {}
+}
+
 // Restaura un backup por su id (carga los datos guardados en la empresa actual).
 // Opción ?mode=merge (por defecto): añade los datos del backup a los actuales (sin borrar).
 // Opción ?mode=replace: BORRA primero los datos actuales y los reemplaza por los del backup.
@@ -12,6 +30,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params;
 
   try {
+    await ensureBackupTable();
     const backup = await db.backup.findUnique({ where: { id } });
     if (!backup || backup.companyId !== companyId) {
       return NextResponse.json({ error: "Backup no encontrado" }, { status: 404 });
