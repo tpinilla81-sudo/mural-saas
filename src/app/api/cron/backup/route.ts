@@ -30,6 +30,8 @@ async function ensureBackupTable() {
       );
     `;
     await db.$executeRaw`CREATE INDEX IF NOT EXISTS "Backup_companyId_idx" ON "Backup"("companyId");`;
+    // ALTER TABLE para anadir la columna 'auto' si la tabla ya existia sin ella (migracion)
+    try { await db.$executeRaw`ALTER TABLE "Backup" ADD COLUMN IF NOT EXISTS "auto" BOOLEAN NOT NULL DEFAULT false;`; } catch {}
   } catch {}
 }
 
