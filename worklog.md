@@ -2364,3 +2364,26 @@ Stage Summary:
   6. Descargar cada backup al PC como .json
   7. Subir archivo .json desde el PC y restaurar (merge o replace)
   8. Restaurar desde el listado (merge o replace)
+
+---
+Task ID: 75
+Agent: main
+Task: "NO DESCARGA DA ERROR, CUIDADO AL RESTAURAR PREGUNTA DOBLE DE SEGURIDAD"
+
+Work Log:
+- CAUSA RAÍZ del error de descarga: el archivo `src/app/api/company/backup/download/[id]/route.ts` NO estaba en git porque `.gitignore` línea 57 tiene `download/` (un ignore genérico que excluye cualquier directorio llamado "download"). Por eso Vercel no desplegaba la ruta y la descarga devolvía 404 (HTML de la página 404 de Next.js, no JSON nuestro).
+- FIX descarga: `git add -f "src/app/api/company/backup/download/[id]/route.ts"` — forzar añadir el archivo ignorado. Ahora la ruta está desplegada y la descarga funciona.
+- FIX doble confirmación al restaurar (cuidado con REEMPLAZAR):
+  * `restoreBackup(b, "replace")`: 2 confirms consecutivos con textos distintos:
+    1. "⚠️ ATENCIÓN: vas a BORRAR TODOS los datos actuales (turnos, avisos, sedes, profesionales, festivos) y reemplazarlos por los del backup: [label]. ¿Estás SEGURO de querer reemplazar?"
+    2. "Última confirmación: esto NO se puede deshacer. Los datos actuales se perderán y se sustituirán por los del backup [label]. ¿Confirmas que quieres REEMPLAZAR todo?"
+  * `restoreBackup(b, "merge")`: 1 solo confirm ("¿Añadir los datos del backup a los actuales? (merge — no borra nada)")
+  * `onImportFile` (subir archivo) en modo replace: misma doble confirmación con el nombre del archivo.
+- Commit 6a5e882 → Vercel 200.
+- E2E PRODUCCIÓN:
+  * curl directo a /api/company/backup/download/test-id → 401 (antes 404 HTML) ✓ la ruta existe
+  * create + download → status 200, content_type application/json, content_disposition "attachment; filename=mural-backup-2026-10-10-11-59-03.json", JSON válido con 22 sedes, 297 KB ✓
+  * Limpieza: backup creado se borra correctamente (manual).
+
+Stage Summary:
+- La descarga de backups funciona (el problema era .gitignore 'download/' que excluía la ruta). Al restaurar en modo REEMPLAZAR pide doble confirmación con textos distintos (aviso + última confirmación). Merge sigue con una sola confirmación.
