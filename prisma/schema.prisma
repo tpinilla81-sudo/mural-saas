@@ -551,6 +551,7 @@ model Backup {
   filename  String   // nombre del archivo descargable (ej. "mural-backup-2026-10-10.json")
   data      String   // JSON completo con sedes, profesionales, planes, avisos, holidays
   size      Int      @default(0) // tamaño en bytes (para mostrar al usuario)
+  auto      Boolean  @default(false) // true = creado por el cron diario; los automáticos NO se pueden borrar
   createdAt DateTime @default(now())
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)

@@ -16,6 +16,7 @@ async function ensureBackupTable() {
         "filename" TEXT NOT NULL,
         "data" TEXT NOT NULL,
         "size" INTEGER NOT NULL DEFAULT 0,
+        "auto" BOOLEAN NOT NULL DEFAULT false,
         "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
         CONSTRAINT "Backup_pkey" PRIMARY KEY ("id")
       );
@@ -30,6 +31,8 @@ export async function POST(req: Request) {
   const { error, status, user } = await requireCompanyAdmin();
   if (error) return NextResponse.json({ error }, { status });
   const companyId = user!.companyId!;
+  const url = new URL(req.url);
+  const isAuto = url.searchParams.get("auto") === "1"; // cron diario lo usa
 
   try {
     await ensureBackupTable();
@@ -86,18 +89,20 @@ export async function POST(req: Request) {
     const now = new Date();
     const tsLabel = now.toLocaleString("es-ES", { timeZone: "Europe/Madrid" });
     const tsFile = now.toISOString().slice(0, 19).replace(/[T:]/g, "-");
-    const label = `Backup ${tsLabel}`;
+    const label = isAuto ? `Backup automático ${tsLabel}` : `Backup ${tsLabel}`;
     const filename = `mural-backup-${tsFile}.json`;
 
-    // 3) Si ya hay 5 backups, borrar el más antiguo
+    // 3) Si ya hay 5 backups, borrar los más antiguos. Pero NO borrar los automáticos
+    //    (julio pidió que no se puedan borrar). Si todos los 5 son automáticos, no borramos
+    //    ninguno y el nuevo se añade igual (puede haber 6+ automáticos).
     const existing = await db.backup.findMany({
       where: { companyId },
       orderBy: { createdAt: "asc" },
-      select: { id: true, createdAt: true },
+      select: { id: true, createdAt: true, auto: true },
     });
     if (existing.length >= 5) {
-      // Borrar los más antiguos hasta dejar 4 (para hacer sitio al nuevo)
-      const toDelete = existing.slice(0, existing.length - 4);
+      // Borrar los MANUALES más antiguos hasta dejar 4 (para hacer sitio al nuevo)
+      const toDelete = existing.filter(b => !b.auto).slice(0, existing.length - 4);
       for (const b of toDelete) {
         await db.backup.delete({ where: { id: b.id } });
       }
@@ -105,7 +110,7 @@ export async function POST(req: Request) {
 
     // 4) Crear el nuevo backup
     const backup = await db.backup.create({
-      data: { companyId, label, filename, data: json, size },
+      data: { companyId, label, filename, data: json, size, auto: isAuto },
     });
 
     return NextResponse.json({

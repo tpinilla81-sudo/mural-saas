@@ -14,6 +14,7 @@ async function ensureBackupTable() {
         "filename" TEXT NOT NULL,
         "data" TEXT NOT NULL,
         "size" INTEGER NOT NULL DEFAULT 0,
+        "auto" BOOLEAN NOT NULL DEFAULT false,
         "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
         CONSTRAINT "Backup_pkey" PRIMARY KEY ("id")
       );
@@ -32,7 +33,7 @@ export async function GET() {
     const backups = await db.backup.findMany({
       where: { companyId },
       orderBy: { createdAt: "desc" },
-      select: { id: true, label: true, filename: true, size: true, createdAt: true },
+      select: { id: true, label: true, filename: true, size: true, auto: true, createdAt: true },
     });
     return NextResponse.json(backups);
   } catch (e: any) {
