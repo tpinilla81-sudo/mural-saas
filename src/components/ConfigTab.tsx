@@ -8,6 +8,7 @@
 // ═══════════════════════════════════════════════════════════
 
 import { useState, useEffect } from "react";
+import BackupPanel from "@/components/BackupPanel";
 
 interface AlertRule {
   id: string;
@@ -75,6 +76,7 @@ export default function ConfigTab() {
   return (
     <div className="space-y-4">
       <AlertRulesPanel />
+      <BackupPanel />
     </div>
   );
 }

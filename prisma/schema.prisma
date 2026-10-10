@@ -45,6 +45,7 @@ model Company {
   auditLogs      AuditLog[]
   outbox         OutboxNotification[]
   alertRules     AlertRule[]
+  backups        Backup[]
 }
 
 model User {
@@ -538,4 +539,21 @@ model PushErrorLog {
   device    String   @default("") // diagnóstico del dispositivo + userAgent
   error     String   @default("") // fallo real (name — message) o "OK"
   createdAt DateTime @default(now())
+}
+
+// ═══════════════════════════════════════════
+// COPIAS DE SEGURIDAD — máximo 5 por empresa
+// ═══════════════════════════════════════════
+model Backup {
+  id        String   @id @default(cuid())
+  companyId String
+  label     String   // descripción legible (ej. "Backup 2026-10-10 14:30")
+  filename  String   // nombre del archivo descargable (ej. "mural-backup-2026-10-10.json")
+  data      String   // JSON completo con sedes, profesionales, planes, avisos, holidays
+  size      Int      @default(0) // tamaño en bytes (para mostrar al usuario)
+  createdAt DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
 }
