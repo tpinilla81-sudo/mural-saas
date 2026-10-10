@@ -2316,3 +2316,51 @@ Work Log Punto 2 (pegar no pega):
 Stage Summary:
 - Punto 1: QUIRÓFANO ahora nítido (sin glow difuminado, sombra negra sutil).
 - Punto 2: al pegar, las tarjetas se pegan aunque ya existan en el destino (reemplazan). El alert "saltada" ya no aparece para clashes del mismo profesional — ahora se reemplazan.
+
+---
+Task ID: 73, 73b, 74, 74b
+Agent: main
+Task: "NECESITAMOS IMPLEMENTA UN SISTEMA DE SEGURIDAD DE DATOS. COPIA DE SEGURIDAD. REALIZA UN APARTADO CON COPIA DE SEGURIDAD Y QUE SE GUARDE EN UN LISTADO TRAZADO DE UN MÁXIMO DE 5, LA 5ª SOBREESCRIBE A LA MÁS ANTIGUA. SEAN ARCHIVOS QUE SE PUEDAN DESCARGAR AL PC Y VOLVER A CARGAR SI SERÍA NECESARIO" + "LAS COPIAS LAS HACE TODOS LOS DÍAS A LAS 10 DE LA NOCHE Y EMITE UN MENSAJE AL ADMINISTRADOR PARA RECORDARLE QUE LA PUEDE DESCARGAR UNA NUEVA COPIA. NO SE PUEDEN BORRAR. NO DEJAN POSIBILIDAD DE HACER MANUAL LA COPIA"
+
+Work Log:
+- Modelo Backup en prisma/schema.prisma: id, companyId, label, filename, data (JSON), size, auto (bool), createdAt. Relación con Company.
+- Endpoints API (todos con ensureBackupTable que hace CREATE TABLE IF NOT EXISTS + ALTER TABLE ADD COLUMN IF NOT EXISTS auto — Vercel no ejecuta migraciones, así que la tabla se crea sola en el primer acceso):
+  * POST /api/company/backup/create?auto=1 — crea backup (auto si ?auto=1); si ya hay 5, borra los MANUALES más antiguos (los auto no se tocan)
+  * GET /api/company/backup/list — lista los backups (máx 5, nuevo→viejo) con campo auto
+  * GET /api/company/backup/download/[id] — descarga el .json (Content-Disposition: attachment)
+  * DELETE /api/company/backup/download/[id] — borra un backup; rechaza borrar automáticos con 403
+  * POST /api/company/backup/restore/[id]?mode=merge|replace — restaura desde el listado
+  * POST /api/company/backup/import?mode=merge|replace — restaura desde archivo subido
+- Cron job /api/cron/backup (vercel.json "0 21 * * *" = 22:00 Madrid):
+  * Para cada empresa activa: crea 1 backup automático (auto=true) con todos los datos (sedes, profesionales, planes, avisos, holidays)
+  * Si ya hay 5, sobreescribe el manual más antiguo (los auto no se tocan)
+  * Envía push al admin de la empresa: "💾 Nueva copia de seguridad — Backup automático creado (N turnos, M avisos). Ya puedes descargarlo en Configuración." (tag backup-daily, source backup)
+- BackupPanel en ConfigTab (debajo de AlertRulesPanel):
+  * Botón 💾 CREAR BACKUP (manual, auto=false)
+  * Botón 📂 SUBIR Y RESTAURAR ARCHIVO (subir .json del PC)
+  * Selector modo MERGE (añadir) / REPLACE (reemplazar)
+  * Listado de 5 backups con: 🟢 auto / ⚪ manual, etiqueta AUTO, fecha, tamaño, filename, botones DESCARGAR / RESTAURAR MERGE / RESTAURAR REEMPLAZAR / 🗑 (solo manuales)
+  * Aviso cuando se llega a 5
+  * Leyenda explica auto (22:00) vs manual
+
+- Commits: 732c322 (Task 73 sistema base), de41289 (Task 73b ensureBackupTable en download/restore), d4f2c25 (Task 74 cron + auto + notificacion), 7c6c051 (Task 74b ALTER TABLE ADD COLUMN auto para migracion en produccion).
+- E2E PRODUCCIÓN:
+  * create?auto=1 → "Backup automático 10/10/2026, 13:44:19" con 22 sedes, 10 pros, 1428 planes, 17 avisos, 756 holidays, 297 KB ✓
+  * list → 5 backups con campo auto correcto (2 auto + 3 manual) ✓
+  * cron backup → total:1, notified:1 (encuentra 1 empresa activa, notifica 1 admin) ✓
+  * DELETE auto → 403 "Los backups automáticos no se pueden borrar" ✓
+  * DELETE manual → ok ✓
+  * import (subir archivo) → ok con merge/replace ✓
+  * restore desde listado → ok con merge (910 planes, 5 avisos saltados porque ya existían) ✓
+  * download → Content-Disposition: attachment con filename ✓
+
+Stage Summary:
+- Sistema de copia de seguridad completo:
+  1. Apartado "💾 Copia de seguridad" en Configuración
+  2. Backups automáticos diarios a las 22:00 (cron) con notificación push al admin
+  3. Máximo 5 backups; al crear el 6º, se borra el MANUAL más antiguo (los automáticos NO se borran)
+  4. Los automáticos no se pueden borrar (403); los manuales sí
+  5. Botón "CREAR BACKUP" manual siempre disponible
+  6. Descargar cada backup al PC como .json
+  7. Subir archivo .json desde el PC y restaurar (merge o replace)
+  8. Restaurar desde el listado (merge o replace)
