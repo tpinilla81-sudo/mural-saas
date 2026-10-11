@@ -171,7 +171,7 @@ export default function BackupPanel() {
           {/* Listado de backups (máx 5) */}
           <div>
             <div className="text-xs font-black text-slate-300 uppercase mb-1">
-              Backups guardados ({backups.length}/5) — el más nuevo arriba · 🟢 = automático · ⚪ = manual
+              Backups guardados ({backups.length}/5) — el más nuevo arriba · ⚪ = manual
             </div>
             {backups.length === 0 && (
               <p className="text-xs text-slate-500 italic py-2 text-center">Aún no hay ningún backup. Pulsa "CREAR BACKUP" para crear el primero.</p>
@@ -180,11 +180,10 @@ export default function BackupPanel() {
               {backups.map((b, i) => (
                 <div key={b.id} className={`bg-slate-900/60 border ${b.auto ? "border-emerald-700/40" : "border-slate-700"} rounded-lg px-3 py-2`}>
                   <div className="flex items-center gap-2">
-                    <span className="text-lg shrink-0">{b.auto ? "🟢" : "⚪"}</span>
+                    <span className="text-lg shrink-0">💾</span>
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-bold text-white truncate">
                         {b.label}
-                        {b.auto && <span className="ml-1.5 text-[9px] font-black bg-emerald-700 text-white px-1.5 py-0.5 rounded">AUTO</span>}
                       </div>
                       <div className="text-[10px] text-slate-400 truncate">{formatDate(b.createdAt)} · {formatSize(b.size)} · {b.filename}</div>
                     </div>
@@ -196,21 +195,19 @@ export default function BackupPanel() {
                       className="text-[10px] font-black bg-emerald-700/80 hover:bg-emerald-600 disabled:opacity-40 text-white px-2.5 py-1.5 rounded transition" title="Añadir a los datos actuales sin borrar">↩ RESTAURAR (MERGE)</button>
                     <button onClick={() => restoreBackup(b, "replace")} disabled={busy}
                       className="text-[10px] font-black bg-red-700/80 hover:bg-red-600 disabled:opacity-40 text-white px-2.5 py-1.5 rounded transition" title="Borrar todo y reemplazar por este backup">⚠ RESTAURAR (REEMPLAZAR)</button>
-                    {!b.auto && (
-                      <button onClick={() => deleteBackup(b)} disabled={busy}
-                        className="text-[10px] font-bold bg-red-600/20 hover:bg-red-600 disabled:opacity-40 text-red-400 hover:text-white px-2.5 py-1.5 rounded transition" title="Borrar este backup manual">🗑</button>
-                    )}
+                    <button onClick={() => deleteBackup(b)} disabled={busy}
+                      className="text-[10px] font-bold bg-red-600/20 hover:bg-red-600 disabled:opacity-40 text-red-400 hover:text-white px-2.5 py-1.5 rounded transition" title="Borrar este backup">🗑</button>
                   </div>
                 </div>
               ))}
             </div>
             {backups.length >= 5 && (
-              <p className="text-[10px] text-amber-400 font-bold mt-1">⚠️ Has llegado al máximo de 5. El próximo backup manual borrará el manual más antiguo. Los automáticos no se borran.</p>
+              <p className="text-[10px] text-amber-400 font-bold mt-1">⚠️ Has llegado al máximo de 5. El próximo backup borrará el más antiguo.</p>
             )}
           </div>
 
           <p className="text-[10px] text-slate-500 leading-snug px-1">
-            Los backups guardan TODOS los turnos, avisos, sedes, profesionales y festivos de la empresa. Hay backups <b className="text-emerald-400">AUTOMÁTICOS 🟢</b> (todos los días a las 22:00 — no se pueden borrar) y <b className="text-slate-300">manuales ⚪</b> (creados por ti — sí puedes borrarlos). Puedes descargar cada backup al PC como archivo .json y volver a subirlo si hace falta. <b className="text-slate-400">REEMPLAZAR borra los datos actuales</b> — úsalo con cuidado.
+            Los backups guardan TODOS los turnos, avisos, sedes, profesionales y festivos de la empresa. Se guardan en el servidor (máximo 5, el más antiguo se sobreescribe). Puedes descargar cada backup al PC como archivo .json y volver a subirlo si hace falta. <b className="text-slate-400">REEMPLAZAR borra los datos actuales</b> — úsalo con cuidado.
           </p>
         </div>
       )}

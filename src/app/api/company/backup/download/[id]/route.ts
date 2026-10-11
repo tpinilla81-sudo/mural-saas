@@ -61,10 +61,6 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
     if (!backup || backup.companyId !== companyId) {
       return NextResponse.json({ error: "Backup no encontrado" }, { status: 404 });
     }
-    // Los backups automáticos (cron diario) NO se pueden borrar (julio pidió que no se puedan borrar)
-    if (backup.auto) {
-      return NextResponse.json({ error: "Los backups automáticos no se pueden borrar. Se sobreescriben solos cuando se llega al límite." }, { status: 403 });
-    }
     await db.backup.delete({ where: { id } });
     return NextResponse.json({ ok: true });
   } catch (e: any) {

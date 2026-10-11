@@ -97,17 +97,14 @@ export async function POST(req: Request) {
     const label = isAuto ? `Backup automático ${tsLabel}` : `Backup ${tsLabel}`;
     const filename = `mural-backup-${tsFile}.json`;
 
-    // 3) Si ya hay 5 backups, borrar los más antiguos. Pero NO borrar los automáticos
-    //    (julio pidió que no se puedan borrar). Si todos los 5 son automáticos, no borramos
-    //    ninguno y el nuevo se añade igual (puede haber 6+ automáticos).
+    // 3) Si ya hay 5 backups, borrar el más antiguo (todos son manuales, todos se pueden borrar)
     const existing = await db.backup.findMany({
       where: { companyId },
       orderBy: { createdAt: "asc" },
       select: { id: true, createdAt: true, auto: true },
     });
     if (existing.length >= 5) {
-      // Borrar los MANUALES más antiguos hasta dejar 4 (para hacer sitio al nuevo)
-      const toDelete = existing.filter(b => !b.auto).slice(0, existing.length - 4);
+      const toDelete = existing.slice(0, existing.length - 4);
       for (const b of toDelete) {
         await db.backup.delete({ where: { id: b.id } });
       }
