@@ -78,12 +78,12 @@ function hashKey(key: string): string {
 // Marca lastUsedAt. Si la key no tiene un scope, devuelve 403.
 export async function requireApiKey(requiredScope: "read" | "write" | "delete" | "backup") {
   await ensureApiKeyTable();
-  // Leer el header Authorization de cualquier manera compatible
-  const auth = (typeof headers === "function" ? headers() : null) as Headers | null;
+  // Leer el header Authorization (Next.js 15: headers() es async)
   let bearer = "";
-  if (auth && typeof auth.get === "function") {
-    bearer = auth.get("authorization") || auth.get("Authorization") || "";
-  }
+  try {
+    const h = await headers();
+    bearer = h.get("authorization") || h.get("Authorization") || "";
+  } catch {}
   if (!bearer || !/^bearer\s+/i.test(bearer)) {
     return { error: "Falta Authorization: Bearer <api-key>", status: 401, companyId: null, scope: null };
   }
