@@ -9,6 +9,7 @@
 
 import { useState, useEffect } from "react";
 import BackupPanel from "@/components/BackupPanel";
+import ApiKeysPanel from "@/components/ApiKeysPanel";
 
 interface AlertRule {
   id: string;
@@ -77,6 +78,7 @@ export default function ConfigTab() {
     <div className="space-y-4">
       <AlertRulesPanel />
       <BackupPanel />
+      <ApiKeysPanel />
     </div>
   );
 }

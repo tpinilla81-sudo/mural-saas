@@ -46,6 +46,7 @@ model Company {
   outbox         OutboxNotification[]
   alertRules     AlertRule[]
   backups        Backup[]
+  apiKeys        ApiKey[]
 }
 
 model User {
@@ -553,6 +554,24 @@ model Backup {
   size      Int      @default(0) // tamaño en bytes (para mostrar al usuario)
   auto      Boolean  @default(false) // true = creado por el cron diario; los automáticos NO se pueden borrar
   createdAt DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+}
+
+// ═══════════════════════════════════════════
+// API KEYS — para integraciones externas (Claude, automatizaciones)
+// ═══════════════════════════════════════════
+model ApiKey {
+  id        String   @id @default(cuid())
+  companyId String
+  label     String   // descripción (ej. "Claude admin")
+  keyHash   String   @unique // hash bcrypt/SHA256 de la key real (no guardamos plain)
+  prefix    String   // primeros 8 chars para identificarla sin mostrar toda
+  scope     String   @default("read,write") // permisos: read,write,delete,backup
+  createdAt DateTime @default(now())
+  lastUsedAt DateTime?
 
   company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
