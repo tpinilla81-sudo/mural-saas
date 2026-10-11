@@ -2387,3 +2387,34 @@ Work Log:
 
 Stage Summary:
 - La descarga de backups funciona (el problema era .gitignore 'download/' que excluía la ruta). Al restaurar en modo REEMPLAZAR pide doble confirmación con textos distintos (aviso + última confirmación). Merge sigue con una sola confirmación.
+
+---
+Task ID: 77 & 77b
+Agent: main
+Task: "Tengo una cuenta Claude y me gustaría conectar la app para poder manejarla desde Claude"
+
+Work Log:
+- Modelo ApiKey en prisma/schema.prisma: id, companyId, label, keyHash (SHA256, unique), prefix (12 chars), scope (read,write,delete,backup), createdAt, lastUsedAt. ensureApiKeyTable en cada endpoint (CREATE TABLE IF NOT EXISTS + ALTER si falta columna).
+- src/lib/api-auth.ts: nueva función requireApiKey(scope) que valida el header Authorization: Bearer <key> con SHA256 (la key no se guarda en claro, solo su hash). Devuelve { companyId, scope }. Marca lastUsedAt. generateApiKey() genera una key nueva en formato mur_live_<48 hex>.
+- Fix crítico Task 77b: en Next.js 15, headers() es async — hay que hacer `await headers()`. Sin eso, el header Authorization no llegaba y devolvía 401.
+- Endpoints /api/company/apikeys (CRUD): GET lista (sin mostrar key real), POST crea (devuelve la key UNA vez), DELETE revoca.
+- Endpoints MCP /api/mcp/{...}:
+  * GET /whoami — valida la key y lista los endpoints disponibles
+  * GET /sedes — lista de sedes
+  * GET /profesionales — lista de profesionales
+  * GET /turnos?fecha=YYYY-MM-DD — turnos de un día (o próximos 7 días si no fecha)
+  * POST /turnos — crea un turno (valida sede por nombre, pro por alias; upsert maneja conflictos)
+  * GET /avisos?fecha=YYYY-MM-DD — avisos de un día
+  * POST /avisos — crea avisos en un rango desde/hasta (excluye domingos), valida sede y pro, no duplica en merge
+- ApiKeysPanel en ConfigTab (debajo de BackupPanel): crear key (se muestra 1 vez con aviso de copiar), revocar, instrucciones para conectar con Claude (Settings → Connectors → Custom Connector, URL base /api/mcp, Authorization: Bearer).
+- Commits: 3fa2ce9 (Task 77 sistema completo), 9e5c93a (Task 77b fix headers async).
+- E2E PRODUCCIÓN:
+  * Crear API key → ok, prefix "mur_live_d62…" ✓
+  * WHOAMI → 200, "API key válida — MURAL conectado a Claude" ✓
+  * Listar sedes → 7 sedes (VIT, CR, BDZ...) ✓
+  * Crear aviso (rango 20-25 oct 2027, VIT, AS, VACACIONES) → 5 creados (lun-vie, sin domingo) ✓
+  * Listar avisos vía MCP → "2027-10-22 Alberto Samper VACACIONES" ✓
+  * Limpieza: 5 avisos borrados + key revocada ✓
+
+Stage Summary:
+- Claude puede conectarse a MURAL: el admin genera una API key en Configuración → 🤖 Conectar con Claude, la pega en Claude (Settings → Connectors → Custom Connector con URL /api/mcp y Authorization Bearer). Luego puede pedirle: "crea un aviso de vacaciones para AS en VIT del 20 al 25 de octubre" y Claude lo hace. Endpoints disponibles: whoami, sedes, profesionales, turnos (GET+POST), avisos (GET+POST con rango de fechas). Scope: read,write (consultar y crear turnos/avisos).
