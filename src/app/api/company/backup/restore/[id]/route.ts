@@ -59,12 +59,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       await db.professional.deleteMany({ where: { companyId } });
     }
 
-    // Restaurar sedes (crear las que no existan por nombre; casar las existentes por nombre)
-    const sedeMap = new Map<string, string>(); // nombre -> id real
+    // Restaurar sedes — casar por name + task (algunas empresas tienen varias sedes
+    // con el mismo nombre pero task distinto, ej. "VIT" Consulta + "VIT" Quirófano).
+    const sedeMap = new Map<string, string>(); // "name | task" -> id real
+    const sedeKey = (name: string, task: string) => `${name} | ${task}`;
     const existingSedes = await db.sede.findMany({ where: { companyId } });
-    for (const s of existingSedes) sedeMap.set(s.name, s.id);
+    for (const s of existingSedes) sedeMap.set(sedeKey(s.name, s.task), s.id);
     for (const s of payload.sedes || []) {
-      if (!sedeMap.has(s.name)) {
+      const k = sedeKey(s.name, s.task || "");
+      if (!sedeMap.has(k)) {
         const created = await db.sede.create({
           data: {
             companyId,
@@ -78,7 +81,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             afternoonEnabled: s.afternoonEnabled ?? true,
           },
         });
-        sedeMap.set(s.name, created.id);
+        sedeMap.set(k, created.id);
       }
     }
 
@@ -106,10 +109,23 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       }
     }
 
-    // Restaurar planes (casar por sedeName + date + turn; upsert)
+    // Restaurar planes — casar sede por name+task (algunas empresas tienen varias sedes con
+    // el mismo nombre, ej. "VIT" Consulta + "VIT" Quirófano). Si el plan no tiene sedeTask
+    // (backups antiguos), usar solo sedeName como fallback.
+    const sedeKey2 = (name: string, task: string) => `${name} | ${task}`;
     let plansOk = 0, plansSkip = 0;
     for (const p of payload.plans || []) {
-      const sedeId = sedeMap.get(p.sedeName);
+      let sedeId: string | undefined;
+      if (p.sedeTask) {
+        sedeId = sedeMap.get(sedeKey2(p.sedeName, p.sedeTask));
+      }
+      if (!sedeId) {
+        // Fallback: buscar por nombre solo (para backups antiguos sin sedeTask)
+        // Si hay varias sedes con el mismo nombre, coger la primera
+        for (const [k, v] of sedeMap) {
+          if (k.startsWith(p.sedeName + ' | ')) { sedeId = v; break; }
+        }
+      }
       if (!sedeId) { plansSkip++; continue; }
       try {
         await db.plan.upsert({
@@ -133,7 +149,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     // Restaurar avisos (no hay unique constraint claro; en mode=merge evitamos duplicar comparando date+sede+turn+pro)
     let avisosOk = 0, avisosSkip = 0;
     for (const a of payload.avisos || []) {
-      const sedeId = sedeMap.get(a.sedeName);
+      let sedeId: string | undefined;
+      if (a.sedeTask) {
+        sedeId = sedeMap.get(sedeKey2(a.sedeName, a.sedeTask));
+      }
+      if (!sedeId) {
+        for (const [k, v] of sedeMap) {
+          if (k.startsWith(a.sedeName + ' | ')) { sedeId = v; break; }
+        }
+      }
       if (!sedeId) { avisosSkip++; continue; }
       const professionalId = a.professionalAlias ? proMap.get(a.professionalAlias) || null : null;
       // En mode=merge, saltar si ya existe uno idéntico

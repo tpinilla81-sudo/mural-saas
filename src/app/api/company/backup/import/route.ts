@@ -40,12 +40,15 @@ export async function POST(req: Request) {
       await db.professional.deleteMany({ where: { companyId } });
     }
 
-    // Restaurar sedes
+    // Restaurar sedes — casar por name + task (algunas empresas tienen varias sedes
+    // con el mismo nombre pero task distinto, ej. "VIT" Consulta + "VIT" Quirófano).
     const sedeMap = new Map<string, string>();
+    const sedeKey = (name: string, task: string) => `${name} | ${task}`;
     const existingSedes = await db.sede.findMany({ where: { companyId } });
-    for (const s of existingSedes) sedeMap.set(s.name, s.id);
+    for (const s of existingSedes) sedeMap.set(sedeKey(s.name, s.task), s.id);
     for (const s of payload.sedes || []) {
-      if (!sedeMap.has(s.name)) {
+      const k = sedeKey(s.name, s.task || "");
+      if (!sedeMap.has(k)) {
         const created = await db.sede.create({
           data: {
             companyId,
@@ -59,7 +62,7 @@ export async function POST(req: Request) {
             afternoonEnabled: s.afternoonEnabled ?? true,
           },
         });
-        sedeMap.set(s.name, created.id);
+        sedeMap.set(k, created.id);
       }
     }
 
@@ -87,10 +90,17 @@ export async function POST(req: Request) {
       }
     }
 
-    // Restaurar planes
+    // Restaurar planes — casar sede por name+task; fallback a name solo para backups antiguos
+    const sedeKey2 = (name: string, task: string) => `${name} | ${task}`;
     let plansOk = 0, plansSkip = 0;
     for (const p of payload.plans || []) {
-      const sedeId = sedeMap.get(p.sedeName);
+      let sedeId: string | undefined;
+      if (p.sedeTask) sedeId = sedeMap.get(sedeKey2(p.sedeName, p.sedeTask));
+      if (!sedeId) {
+        for (const [k, v] of sedeMap) {
+          if (k.startsWith(p.sedeName + ' | ')) { sedeId = v; break; }
+        }
+      }
       if (!sedeId) { plansSkip++; continue; }
       try {
         await db.plan.upsert({
@@ -114,7 +124,13 @@ export async function POST(req: Request) {
     // Restaurar avisos
     let avisosOk = 0, avisosSkip = 0;
     for (const a of payload.avisos || []) {
-      const sedeId = sedeMap.get(a.sedeName);
+      let sedeId: string | undefined;
+      if (a.sedeTask) sedeId = sedeMap.get(sedeKey2(a.sedeName, a.sedeTask));
+      if (!sedeId) {
+        for (const [k, v] of sedeMap) {
+          if (k.startsWith(a.sedeName + ' | ')) { sedeId = v; break; }
+        }
+      }
       if (!sedeId) { avisosSkip++; continue; }
       const professionalId = a.professionalAlias ? proMap.get(a.professionalAlias) || null : null;
       if (mode === "merge") {

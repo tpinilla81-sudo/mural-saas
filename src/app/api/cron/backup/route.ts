@@ -70,6 +70,7 @@ export async function GET() {
             const sede = sedes.find(s => s.id === p.sedeId);
             return {
               sedeName: sede?.name || "",
+              sedeTask: sede?.task || "",
               date: p.date, turn: p.turn, professionalAlias: p.professionalAlias,
               notes: p.notes, order: p.order,
             };
@@ -79,7 +80,9 @@ export async function GET() {
             const pro = professionals.find(pp => pp.id === a.professionalId);
             return {
               date: a.date, professionalAlias: pro?.alias || null,
-              sedeName: sede?.name || "", turn: a.turn, reason: a.reason,
+              sedeName: sede?.name || "",
+              sedeTask: sede?.task || "",
+              turn: a.turn, reason: a.reason,
               note: a.note, order: a.order,
             };
           }),

@@ -59,10 +59,12 @@ export async function POST(req: Request) {
       professionals: clean(professionals),
       plans: plans.map(p => {
         // Plan tiene sedeId (relación), pero sedeId referencia un id que cambiará al restaurar.
-        // Guardamos sedeName para casar por nombre al restaurar.
+        // Guardamos sedeName + sedeTask para casar por name+task al restaurar (algunas empresas
+        // tienen varias sedes con el mismo nombre pero task distinto, ej. "VIT" Consulta + "VIT" Quirófano).
         const sede = sedes.find(s => s.id === p.sedeId);
         return {
           sedeName: sede?.name || "",
+          sedeTask: sede?.task || "",
           date: p.date,
           turn: p.turn,
           professionalAlias: p.professionalAlias,
@@ -77,6 +79,7 @@ export async function POST(req: Request) {
           date: a.date,
           professionalAlias: pro?.alias || null, // null = aviso de sede completa
           sedeName: sede?.name || "",
+          sedeTask: sede?.task || "",
           turn: a.turn,
           reason: a.reason,
           note: a.note,
