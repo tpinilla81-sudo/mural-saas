@@ -2418,3 +2418,35 @@ Work Log:
 
 Stage Summary:
 - Claude puede conectarse a MURAL: el admin genera una API key en Configuración → 🤖 Conectar con Claude, la pega en Claude (Settings → Connectors → Custom Connector con URL /api/mcp y Authorization Bearer). Luego puede pedirle: "crea un aviso de vacaciones para AS en VIT del 20 al 25 de octubre" y Claude lo hace. Endpoints disponibles: whoami, sedes, profesionales, turnos (GET+POST), avisos (GET+POST con rango de fechas). Scope: read,write (consultar y crear turnos/avisos).
+
+---
+Task ID: 85, 86
+Agent: main
+Task: "tengo un problema. cuando quiero cambiar algun dato de una tarjeta en mensual, no puedo y me obliga a borrarla y hacerla de nuevo. me gustaria que al pinchar con boton izq con el raton, se abriria una ventana emergente para poder editar datos, siempre los datos tendran que ser desplegables, de sedes, profesionales.. que esten adjuntos en la app, nunca texto libre"
+
+Work Log Task 85 (bug crítico):
+- INVESTIGACIÓN: la app "cambiaba cosas sola" porque el POST /api/company/plan hacia UPSERT silencioso. Cuando alguien creaba un turno en sede/fecha/turno donde ya existia otro de OTRO profesional, lo sobrescribia sin avisar. Lo mismo en bulk y en avisos (que se duplicaban).
+- FIX: POST /api/company/plan ahora comprueba antes de crear: si ya existe un turno de otro profesional, devuelve 409 Conflicto con mensaje "Ya existe un turno de X en VIT/Quirófano VIT el 15/10 (Mañana). No se puede sobrescribir." — el turno existente NO se toca. Solo sobrescribe si es el mismo profesional.
+- POST /api/company/plan/bulk: misma regla. Devuelve conflicts[] en el resultado.
+- POST /api/company/avisos: comprueba duplicados (mismo dia/sede/turno/pro/motivo) antes de crear. Devuelve 409 si ya existe.
+- Commit 2215e77.
+
+Work Log Task 86 (editor editable):
+- Estado noteModal ampliado: sedeId, professionalAlias. Nuevos estados editSedeId, editProAlias se inicializan al abrir el modal.
+- Función saveSedePro: si cambia la sede, DELETE el turno actual + POST en la nueva sede (la API comprueba conflictos — si ya hay otro turno en el destino, no sobrescribe y recrea el original). Si solo cambia el profesional, PUT con professionalAlias.
+- Modal "Editar tarjeta" (antes "Nota del turno"): añadidos 2 selects desplegables:
+  * SEDE: <select> con todas las sedes (formato "VIT / Quirófano VIT (VITORIA)")
+  * PROFESIONAL: <select> con todos los profesionales (formato "JM — Julio Murillo")
+  * Botón "✓ APLICAR CAMBIO DE SEDE/PROFESIONAL" aparece solo si se ha cambiado algo.
+- Todo es desplegable (sin texto libre). El usuario solo puede elegir sedes/profesionales que existen en la app.
+- Para abrir el editor: botón derecho en la tarjeta → "✏️ Editar esta tarjeta" (porque el click izq ahora selecciona estilo Excel).
+- Commit 82035b4.
+- E2E PRODUCCIÓN:
+  * Click derecho → menú → Editar esta tarjeta → modal abre con titulo "Editar tarjeta" ✓
+  * 2 selects desplegables ✓ (SEDE, PROFESIONAL)
+  * Labels correctos: SEDE, PROFESIONAL, TURNO, NOTA, MOVER A OTRO DÍA, COPIAR A OTRO DÍA ✓
+  * Select sede con el valor actual preseleccionado ✓
+  * Select pro con el valor actual preseleccionado ✓
+
+Stage Summary:
+- Editor de tarjeta ampliado: ahora puedes cambiar SEDE y PROFESIONAL con desplegables (sin texto libre), además del TURNO, NOTA, MOVER y COPIAR que ya existían. Ya no hace falta borrar y hacer de nuevo. La API comprueba conflictos y NO sobrescribe turnos de otros profesionales (eso era el bug que hacia que "la app cambiaba cosas sola").
