@@ -62,7 +62,10 @@ export default function MensualTab() {
   const [loaded, setLoaded] = useState(false);
 
   // Note editor modal: open when a card is clicked
-  const [noteModal, setNoteModal] = useState<{ planId: string; sedeName: string; sedeTask: string; proName: string; date: string; turn: string } | null>(null);
+  const [noteModal, setNoteModal] = useState<{ planId: string; sedeId: string; sedeName: string; sedeTask: string; proName: string; professionalAlias: string; date: string; turn: string } | null>(null);
+  // Estado editable de sede/profesional del modal (cambia al abrir el modal)
+  const [editSedeId, setEditSedeId] = useState("");
+  const [editProAlias, setEditProAlias] = useState("");
   const [noteText, setNoteText] = useState("");
   const [noteSaving, setNoteSaving] = useState(false);
 
@@ -429,12 +432,17 @@ export default function MensualTab() {
   const openNoteEditor = (plan: PlanEntry, sede: any, proName: string) => {
     setNoteModal({
       planId: plan.id,
+      sedeId: sede.id,
       sedeName: sede.name,
       sedeTask: sede.task,
       proName,
+      professionalAlias: plan.professionalAlias,
       date: plan.date,
       turn: plan.turn,
     });
+    // Inicializar los desplegables con los valores actuales
+    setEditSedeId(sede.id);
+    setEditProAlias(plan.professionalAlias);
     loadAvisoState(plan.notes || "");
     setNoteText(stripAvisoToken(plan.notes || ""));
     setPlanMoveDate(plan.date);
@@ -444,6 +452,95 @@ export default function MensualTab() {
   const closeNoteEditor = () => {
     setNoteModal(null);
     setNoteText("");
+  };
+
+  // Guardar cambios de sede y profesional de la tarjeta (desplegables).
+  // Si se cambia la sede y ya existe otro turno en esa sede/fecha/turno (de otro pro),
+  // la API devuelve 409 y mostramos el error sin tocar el turno existente.
+  const saveSedePro = async () => {
+    if (!noteModal) return;
+    const sedeCambiada = editSedeId !== noteModal.sedeId;
+    const proCambiado = editProAlias !== noteModal.professionalAlias;
+    if (!sedeCambiada && !proCambiado) return; // nada que guardar
+    setNoteSaving(true);
+    try {
+      if (sedeCambiada) {
+        // Cambiar sede = borrar y crear en la nueva (no hay endpoint directo para cambiar sedeId)
+        // 1. Borrar el turno actual
+        const del = await fetch(`/api/company/plan/${noteModal.planId}`, { method: "DELETE" });
+        if (!del.ok) { alert("No se pudo borrar el turno original."); return; }
+        // 2. Crear en la nueva sede (la API comprueba conflictos)
+        const r = await fetch("/api/company/plan", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sedeId: editSedeId, date: noteModal.date, turn: noteModal.turn, professionalAlias: editProAlias }),
+        });
+        const body = await r.json();
+        if (!r.ok) {
+          // Conflicto: el turno existente en el destino no se sobrescribe. Recrear el original.
+          if (body.conflict) {
+            await fetch("/api/company/plan", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ sedeId: noteModal.sedeId, date: noteModal.date, turn: noteModal.turn, professionalAlias: noteModal.professionalAlias }),
+            });
+            alert(`⚠️ No se puede cambiar la sede: ya existe un turno de ${body.existingPro} en esa sede/fecha/turno. La tarjeta original no se ha tocado.`);
+            return;
+          }
+          alert("No se pudo crear el turno en la nueva sede: " + (body.error || ""));
+          return;
+        }
+        // Restaurar la nota si la tenía
+        const finalNote = buildAvisoNote(noteText, avisoOn, clampAvisoDays(avisoDays), selectedNames(), avisoRawTokenRef.current);
+        if (finalNote && finalNote.trim()) {
+          try {
+            await fetch(`/api/company/plan/${body.id}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ notes: finalNote }),
+            });
+          } catch {}
+        }
+        // Actualizar state local: el plan anterior desaparece y se crea uno nuevo
+        setPlans(prev => {
+          const sinViejo = prev.filter(p => p.id !== noteModal.planId);
+          const sede = sedes.find(s => s.id === editSedeId);
+          return [...sinViejo, { ...noteModal, id: body.id, sedeId: editSedeId, sedeName: sede?.name || "", sedeTask: sede?.task || "", professionalAlias: editProAlias, proName: editProAlias }];
+        });
+        // Actualizar el modal con el nuevo id y datos
+        const sede = sedes.find(s => s.id === editSedeId);
+        setNoteModal({
+          ...noteModal,
+          planId: body.id,
+          sedeId: editSedeId,
+          sedeName: sede?.name || "",
+          sedeTask: sede?.task || "",
+          professionalAlias: editProAlias,
+          proName: editProAlias,
+        });
+        alert(`✅ Cambiado a ${sede?.name || ''} / ${sede?.task || ''}`);
+      } else if (proCambiado) {
+        // Solo cambiar profesional (sin cambiar sede) — PUT con professionalAlias
+        const r = await fetch(`/api/company/plan/${noteModal.planId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ professionalAlias: editProAlias }),
+        });
+        if (!r.ok) {
+          const body = await r.json();
+          alert("No se pudo cambiar el profesional: " + (body.error || ""));
+          return;
+        }
+        // Actualizar state local
+        setPlans(prev => prev.map(p => p.id === noteModal.planId ? { ...p, professionalAlias: editProAlias } : p));
+        setNoteModal({ ...noteModal, professionalAlias: editProAlias, proName: editProAlias });
+        alert(`✅ Profesional cambiado a ${editProAlias}`);
+      }
+    } catch (e: any) {
+      alert("Error: " + (e?.message || String(e)));
+    } finally {
+      setNoteSaving(false);
+    }
   };
 
   const saveNote = async () => {
@@ -1674,14 +1771,46 @@ export default function MensualTab() {
             onPointerDown={e => e.stopPropagation()}
           >
             <div className="border-b-2 border-gray-900 pb-2">
-              <h3 className="text-gray-900 font-black text-lg">Nota del turno</h3>
+              <h3 className="text-gray-900 font-black text-lg">Editar tarjeta</h3>
               <p className="text-[11px] text-gray-600 font-bold uppercase tracking-wide">
                 {formatDateLabel(noteModal.date)} · {noteModal.turn === "MANANA" ? "Mañana" : noteModal.turn === "TARDE" ? "Tarde" : "Mañana y Tarde"}
               </p>
-              <p className="text-xs text-gray-800 font-bold mt-0.5">
-                {noteModal.sedeName}{noteModal.sedeTask ? ` / ${noteModal.sedeTask}` : ""} · {noteModal.proName}
-              </p>
             </div>
+            {/* SEDE — desplegable con todas las sedes (name + task) */}
+            <div>
+              <label className="block text-[11px] font-extrabold text-gray-700 uppercase mb-1.5">SEDE</label>
+              <select
+                value={editSedeId}
+                onChange={e => setEditSedeId(e.target.value)}
+                className="w-full px-3 py-2 bg-gray-50 border-2 border-gray-300 focus:border-amber-500 focus:bg-white rounded-lg text-sm text-gray-900 font-medium outline-none transition"
+              >
+                {sedes.map(s => (
+                  <option key={s.id} value={s.id}>{s.name} / {s.task} ({s.city})</option>
+                ))}
+              </select>
+            </div>
+            {/* PROFESIONAL — desplegable con todos los profesionales */}
+            <div>
+              <label className="block text-[11px] font-extrabold text-gray-700 uppercase mb-1.5">PROFESIONAL</label>
+              <select
+                value={editProAlias}
+                onChange={e => setEditProAlias(e.target.value)}
+                className="w-full px-3 py-2 bg-gray-50 border-2 border-gray-300 focus:border-amber-500 focus:bg-white rounded-lg text-sm text-gray-900 font-medium outline-none transition"
+              >
+                {professionals.map(p => (
+                  <option key={p.id} value={p.alias}>{p.alias} — {p.firstName} {p.lastName}</option>
+                ))}
+              </select>
+            </div>
+            {/* Botón aplicar cambios de sede/pro */}
+            {(editSedeId !== noteModal.sedeId || editProAlias !== noteModal.professionalAlias) && (
+              <button
+                onClick={saveSedePro}
+                disabled={noteSaving}
+                className="w-full py-2 px-4 bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-black rounded-lg font-black text-sm transition"
+                title="Aplicar el cambio de sede y/o profesional a esta tarjeta"
+              >{noteSaving ? "Aplicando…" : "✓ APLICAR CAMBIO DE SEDE/PROFESIONAL"}</button>
+            )}
             <div>
               <label className="block text-[11px] font-extrabold text-gray-700 uppercase mb-1.5">TURNO — toca para cambiarlo (se aplica al instante)</label>
               <div className="grid grid-cols-3 gap-1.5">
