@@ -23,18 +23,31 @@ export async function POST(req: Request) {
   if (body.assignments?.length) {
     for (const a of body.assignments) {
       try {
-        await db.plan.create({
-          data: { companyId, sedeId: a.sedeId, date: a.date, turn: a.turn, professionalAlias: a.professionalAlias },
+        // Comprobar si ya existe un turno en esa sede/fecha/turno
+        const existing = await db.plan.findUnique({
+          where: { sedeId_date_turn: { sedeId: a.sedeId, date: a.date, turn: a.turn } },
         });
-        results.created++;
-      } catch (e: any) {
-        if (e.code === "P2002") {
+        if (existing && existing.professionalAlias !== a.professionalAlias) {
+          // Ya hay un turno de OTRO profesional — NO sobrescribir, devolver conflicto en el resultado
+          results.conflicts = results.conflicts || [];
+          results.conflicts.push({ date: a.date, turn: a.turn, existingPro: existing.professionalAlias, newPro: a.professionalAlias });
+          continue; // saltar, no sobrescribir
+        }
+        if (existing) {
+          // Mismo profesional: actualizar
           await db.plan.update({
-            where: { sedeId_date_turn: { sedeId: a.sedeId, date: a.date, turn: a.turn } },
+            where: { id: existing.id },
             data: { professionalAlias: a.professionalAlias },
           });
           results.updated++;
+        } else {
+          await db.plan.create({
+            data: { companyId, sedeId: a.sedeId, date: a.date, turn: a.turn, professionalAlias: a.professionalAlias },
+          });
+          results.created++;
         }
+      } catch (e: any) {
+        // Otro error — lo ignoramos para no romper el bulk
       }
     }
   }

@@ -41,6 +41,26 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Faltan campos requeridos (date, sedeId, turn)" }, { status: 400 });
   }
 
+  // Comprobar si ya existe un aviso idéntico (mismo día, sede, turno, profesional y motivo)
+  // para evitar duplicados (julio reportó que la app crea avisos duplicados sola).
+  const existing = await db.aviso.findFirst({
+    where: {
+      companyId,
+      date: body.date,
+      sedeId: body.sedeId,
+      turn: body.turn,
+      professionalId: body.professionalId || null,
+      reason: body.reason || "",
+    },
+  });
+  if (existing) {
+    return NextResponse.json({
+      error: "Ya existe un aviso idéntico en esa fecha/sede/turno.",
+      conflict: true,
+      existingId: existing.id,
+    }, { status: 409 });
+  }
+
   const aviso = await db.aviso.create({
     data: {
       companyId,

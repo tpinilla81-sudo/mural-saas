@@ -38,6 +38,32 @@ export async function POST(req: Request) {
   const body = await req.json();
 
   try {
+    // ANTES de crear o sobrescribir, comprobar si ya existe un turno en esa sede/fecha/turno.
+    // Si existe y es de OTRO profesional, NO sobrescribir — devolver error.
+    // Si existe y es del MISMO profesional, sobrescribir (es un update normal).
+    // Si no existe, crear nuevo.
+    const existing = await db.plan.findUnique({
+      where: { sedeId_date_turn: { sedeId: body.sedeId, date: body.date, turn: body.turn } },
+    });
+    if (existing && existing.professionalAlias !== body.professionalAlias) {
+      // Ya hay un turno de otro profesional en esa sede/fecha/turno.
+      // Buscar el nombre de la sede para el mensaje.
+      const sede = await db.sede.findUnique({ where: { id: body.sedeId }, select: { name: true, task: true } });
+      return NextResponse.json({
+        error: `Ya existe un turno de ${existing.professionalAlias} en ${sede?.name || ''} / ${sede?.task || ''} el ${body.date} (${body.turn === 'MANANA' ? 'Mañana' : 'Tarde'}). No se puede sobrescribir.`,
+        conflict: true,
+        existingId: existing.id,
+        existingPro: existing.professionalAlias,
+      }, { status: 409 });
+    }
+    if (existing) {
+      // Mismo profesional: sobrescribir (actualizar nota si viene)
+      const plan = await db.plan.update({
+        where: { id: existing.id },
+        data: { professionalAlias: body.professionalAlias },
+      });
+      return NextResponse.json(plan);
+    }
     const plan = await db.plan.create({
       data: {
         companyId,
@@ -49,14 +75,6 @@ export async function POST(req: Request) {
     });
     return NextResponse.json(plan, { status: 201 });
   } catch (e: any) {
-    if (e.code === "P2002") {
-      // Unique constraint - upsert instead
-      const plan = await db.plan.update({
-        where: { sedeId_date_turn: { sedeId: body.sedeId, date: body.date, turn: body.turn } },
-        data: { professionalAlias: body.professionalAlias },
-      });
-      return NextResponse.json(plan);
-    }
-    throw e;
+    return NextResponse.json({ error: "No se pudo crear el turno: " + (e?.message || String(e)) }, { status: 500 });
   }
 }
